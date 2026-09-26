@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { mockUsers, mockVideos, mockProducts, formatNumber } from '@/lib/mock-data'
 import type { User } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { APP_NAME } from '@/lib/brand'
 
 interface ProfileScreenProps {
   userId?: string
@@ -25,7 +26,7 @@ export function ProfileScreen({ userId, isOwnProfile = true, onSettingsClick, on
     const shareUrl = typeof window !== 'undefined' ? window.location.href : ''
     try {
       if (navigator.share) {
-        await navigator.share({ title: user.displayName, text: `@${user.username} على SpakTail`, url: shareUrl })
+        await navigator.share({ title: user.displayName, text: `@${user.username} على ${APP_NAME}`, url: shareUrl })
       } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(shareUrl)
       }

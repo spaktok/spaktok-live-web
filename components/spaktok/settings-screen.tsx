@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { APP_NAME } from "@/lib/brand";
 
 interface SettingsScreenProps {
   onBack?: () => void;
@@ -282,7 +283,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
 
         {/* App Version */}
         <div className="text-center py-6 text-muted-foreground">
-          <p className="text-sm">SpakTail</p>
+          <p className="text-sm">{APP_NAME}</p>
           <p className="text-xs">الإصدار 1.0.0</p>
         </div>
       </div>

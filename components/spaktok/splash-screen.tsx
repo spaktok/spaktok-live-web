@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { APP_LOGO_URL } from "@/lib/brand";
+import { APP_LOGO_URL, APP_NAME } from "@/lib/brand";
 
 interface SplashScreenProps {
   onComplete?: () => void;
@@ -62,7 +62,7 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
               >
                 <img
                   src={APP_LOGO_URL}
-                  alt="SpakTail logo"
+                  alt={`${APP_NAME} شعار`}
                   className="h-[112%] w-[112%] -translate-x-[6%] -translate-y-[6%] object-cover"
                 />
               </motion.div>
@@ -79,7 +79,7 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
             >
               <h1 className="text-4xl font-bold">
 <span className="bg-gradient-to-r from-white via-white to-[#3155ff] bg-clip-text text-transparent">
-                SpakTail
+                {APP_NAME}
               </span>
               </h1>
               <motion.p
@@ -88,7 +88,7 @@ export function SplashScreen({ onComplete, duration = 2500 }: SplashScreenProps)
                 transition={{ delay: 1 }}
                 className="text-muted-foreground mt-2"
               >
-                Create. Share. Connect.
+                أنشئ. شارك. تواصل.
               </motion.p>
             </motion.div>
 

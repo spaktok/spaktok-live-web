@@ -10,11 +10,11 @@ interface BottomNavigationProps {
 }
 
 const tabs = [
-  { id: 'home' as TabType, icon: Home, label: 'Startseite' },
-  { id: 'discover' as TabType, icon: Compass, label: 'Entdecken' },
-  { id: 'create' as TabType, icon: Plus, label: 'Erstellen', isCreate: true },
-  { id: 'chat' as TabType, icon: MessageCircle, label: 'Chats' },
-  { id: 'profile' as TabType, icon: User, label: 'Profil' },
+  { id: 'home' as TabType, icon: Home, label: 'الرئيسية' },
+  { id: 'discover' as TabType, icon: Compass, label: 'اكتشف' },
+  { id: 'create' as TabType, icon: Plus, label: 'إنشاء', isCreate: true },
+  { id: 'chat' as TabType, icon: MessageCircle, label: 'المحادثات' },
+  { id: 'profile' as TabType, icon: User, label: 'الملف الشخصي' },
 ]
 
 export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationProps) {
