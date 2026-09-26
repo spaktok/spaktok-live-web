@@ -21,8 +21,9 @@ import { cn } from '@/lib/utils'
 import { Bell, ShoppingBag, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
+import { APP_NAME } from '@/lib/brand'
 
-export default function SpakTailElite() {
+export default function SpakTok() {
   const [isLoading, setIsLoading] = useState(true)
   const { session, isLoading: isAuthLoading } = useAuth()
   const isAuthenticated = !!session
@@ -144,7 +145,7 @@ export default function SpakTailElite() {
                 {/* Top Actions */}
                 <div className="flex items-center justify-between px-4 pt-3">
                   <h1 className="text-xl font-black tracking-[-0.04em] text-[#3155ff]">
-                    SpakTail
+                    {APP_NAME}
                   </h1>
                   <div className="flex items-center gap-1">
                     <Button 

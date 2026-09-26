@@ -89,7 +89,7 @@ const mockNotifications: Notification[] = [
     id: "7",
     type: "purchase",
     user: { username: "shopper_123", avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100", isVerified: false },
-    content: "اشترى منتجك: قميص SpakTail الحصري",
+    content: "اشترى منتجك: قميص SpakTok الحصري",
     time: "منذ يوم",
     isRead: true,
   },

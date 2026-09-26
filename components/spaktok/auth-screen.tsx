@@ -10,18 +10,14 @@ import {
   Mail,
   Lock,
   User,
-  Phone,
   ArrowRight,
-  Check,
-  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { APP_LOGO_URL, APP_NAME } from "@/lib/brand";
 
-type AuthMode = "welcome" | "login" | "signup" | "phone";
+type AuthMode = "welcome" | "login" | "signup";
 
 interface AuthScreenProps {
   onComplete?: () => void;
@@ -34,24 +30,24 @@ interface AuthScreenProps {
 function mapAuthError(message: string): string {
   const m = message.toLowerCase();
   if (m.includes("invalid login credentials")) {
-    return "E-Mail-Adresse oder Passwort ist falsch.";
+    return "البريد الإلكتروني أو كلمة المرور غير صحيحة.";
   }
   if (m.includes("email not confirmed")) {
-    return "Deine E-Mail-Adresse wurde noch nicht bestätigt. Prüfe deinen Posteingang.";
+    return "لم يتم تأكيد بريدك الإلكتروني بعد. تحقق من بريدك الوارد.";
   }
   if (m.includes("already registered") || m.includes("already been registered")) {
-    return "Diese E-Mail-Adresse ist bereits registriert. Melde dich stattdessen an.";
+    return "تعذّر إكمال العملية. جرّب تسجيل الدخول أو طلب رابط تأكيد جديد.";
   }
   if (m.includes("rate limit") || m.includes("too many")) {
-    return "Zu viele Versuche. Warte kurz und versuche es erneut.";
+    return "محاولات كثيرة. انتظر قليلًا ثم حاول مرة أخرى.";
   }
   if (m.includes("password")) {
-    return "Das Passwort ist zu schwach. Verwende mindestens 6 Zeichen.";
+    return "كلمة المرور ضعيفة. استخدم 6 أحرف على الأقل.";
   }
   if (m.includes("invalid") && m.includes("email")) {
-    return "Das Format der E-Mail-Adresse ist ungültig.";
+    return "صيغة البريد الإلكتروني غير صحيحة.";
   }
-  return "Die Aktion konnte nicht abgeschlossen werden. Versuche es erneut.";
+  return "تعذّر إكمال العملية. حاول مرة أخرى.";
 }
 
 export function AuthScreen({ onComplete }: AuthScreenProps) {
@@ -64,8 +60,6 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
     email: "",
     password: "",
     username: "",
-    phone: "",
-    otp: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -73,20 +67,15 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
     setError(null);
     setInfoMessage(null);
 
-    if (mode === "phone") {
-      setError("Die Anmeldung per Telefonnummer ist derzeit nicht verfügbar. Verwende deine E-Mail-Adresse.");
-      return;
-    }
-
     const email = formData.email.trim();
     const password = formData.password;
 
     if (!email || !password) {
-      setError("Bitte gib deine E-Mail-Adresse und dein Passwort ein.");
+      setError("أدخل بريدك الإلكتروني وكلمة المرور.");
       return;
     }
     if (mode === "signup" && password.length < 6) {
-      setError("Das Passwort muss mindestens 6 Zeichen enthalten.");
+      setError("يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.");
       return;
     }
 
@@ -111,7 +100,7 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
         if (signUpError) {
           const message = signUpError.message.toLowerCase();
           if (message.includes("already") || message.includes("registered") || message.includes("user exists")) {
-            setInfoMessage("Wenn eine Registrierung mit dieser Adresse möglich ist, senden wir einen Bestätigungslink. Prüfe dein Postfach oder melde dich an.");
+            setInfoMessage("إذا أمكن إنشاء حساب بهذا البريد، فسنرسل رابط تأكيد. تحقق من بريدك أو جرّب تسجيل الدخول.");
             setMode("login");
             return;
           }
@@ -120,7 +109,7 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
         }
 
         if (!data.session) {
-          setInfoMessage("Wenn eine Registrierung mit dieser Adresse möglich ist, senden wir einen Bestätigungslink. Prüfe dein Postfach.");
+          setInfoMessage("إذا أمكن إنشاء حساب بهذا البريد، فسنرسل رابط تأكيد. تحقق من بريدك الوارد.");
           setMode("login");
           return;
         }
@@ -140,27 +129,21 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
         onComplete?.();
       }
     } catch {
-      setError("Ein unerwarteter Fehler ist aufgetreten. Versuche es erneut.");
+      setError("حدث خطأ غير متوقع. حاول مرة أخرى.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const socialButtons = [
-    { name: "Google", icon: "G", color: "bg-white text-black border border-border" },
-    { name: "Apple", icon: "", color: "bg-black text-white" },
-    { name: "X", icon: "X", color: "bg-black text-white" },
-  ];
-
   return (
-    <div className="h-full bg-background flex flex-col relative overflow-hidden">
+    <div className="min-h-dvh w-full bg-background flex flex-col items-center relative overflow-hidden">
       {/* Animated Background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-gradient-to-br from-primary/30 via-transparent to-transparent rounded-full blur-3xl animate-pulse" />
         <div className="absolute -bottom-1/2 -left-1/2 w-full h-full bg-gradient-to-tr from-[#3155ff]/20 via-transparent to-transparent rounded-full blur-3xl animate-pulse delay-1000" />
       </div>
 
-      <div className="relative z-10 flex-1 flex flex-col">
+      <div className="relative z-10 w-full max-w-md min-h-dvh flex flex-col">
         <AnimatePresence mode="wait">
           {mode === "welcome" && (
             <motion.div
@@ -186,7 +169,7 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
                 transition={{ delay: 0.3 }}
                 className="text-4xl font-bold bg-gradient-to-r from-primary via-purple-500 to-[#3155ff] bg-clip-text text-transparent"
               >
-                SpakTail
+                {APP_NAME}
               </motion.h1>
               <motion.p
                 initial={{ opacity: 0, y: 20 }}
@@ -194,7 +177,7 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
                 transition={{ delay: 0.4 }}
                 className="text-muted-foreground text-center mt-3 max-w-xs"
               >
-                Schließe dich Millionen von Creators an und entdecke eine Welt voller inspirierender Inhalte
+                اكتشف مقاطع وأفكارًا جديدة، وشارك لحظاتك مع مجتمع SpakTok.
               </motion.p>
 
               {/* Features */}
@@ -205,10 +188,10 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
                 className="flex justify-center gap-8 mt-10"
               >
                 {[
-                  { icon: "🎬", label: "Reels" },
-                  { icon: "📡", label: "Live" },
-                  { icon: "💬", label: "Chats" },
-                  { icon: "🛍️", label: "Shop" },
+                  { icon: "🎬", label: "مقاطع" },
+                  { icon: "📡", label: "بث مباشر" },
+                  { icon: "💬", label: "محادثات" },
+                  { icon: "🛍️", label: "المتجر" },
                 ].map((feature) => (
                   <div key={feature.label} className="flex flex-col items-center gap-1">
                     <span className="text-2xl">{feature.icon}</span>
@@ -228,14 +211,14 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
                   onClick={() => setMode("signup")}
                   className="w-full h-14 rounded-2xl text-lg font-semibold bg-gradient-to-r from-primary to-[#3155ff] hover:opacity-90"
                 >
-                  Neues Konto erstellen
+                  إنشاء حساب جديد
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setMode("login")}
                   className="w-full h-14 rounded-2xl text-lg font-semibold bg-transparent border-2"
                 >
-                  Anmelden
+                  تسجيل الدخول
                 </Button>
               </motion.div>
 
@@ -245,9 +228,7 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
                 transition={{ delay: 0.7 }}
                 className="text-xs text-muted-foreground text-center mt-6 max-w-xs"
               >
-                Mit der Fortsetzung stimmst du{" "}
-                <span className="text-primary">Nutzungsbedingungen</span> und{" "}
-                <span className="text-primary">Datenschutzrichtlinie</span>
+                مجتمع SpakTok يبدأ بلحظتك القادمة.
               </motion.p>
             </motion.div>
           )}
@@ -258,7 +239,7 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
               initial={{ opacity: 0, x: 50 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -50 }}
-              className="flex-1 flex flex-col p-6"
+              className="flex-1 flex flex-col justify-center p-6"
             >
               {/* Header */}
               <div className="flex items-center gap-4 mb-8">
@@ -272,23 +253,23 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
                 </Button>
                 <div>
                   <h1 className="text-2xl font-bold">
-                    {mode === "login" ? "Willkommen zurück" : "Konto erstellen"}
+                    {mode === "login" ? "مرحبًا بعودتك" : "إنشاء حساب"}
                   </h1>
                   <p className="text-sm text-muted-foreground">
                     {mode === "login"
-                      ? "Melde dich an, um fortzufahren"
-                      : "Werde Teil der SpakTail-Community"}
+                      ? "سجّل الدخول للمتابعة"
+                      : "انضم إلى مجتمع SpakTok"}
                   </p>
                 </div>
               </div>
 
               {/* Form */}
-              <form onSubmit={handleSubmit} className="space-y-4 flex-1">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 {mode === "signup" && (
                   <div className="relative">
                     <User className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <Input
-                      placeholder="Benutzername"
+                      placeholder="اسم المستخدم"
                       value={formData.username}
                       onChange={(e) =>
                         setFormData({ ...formData, username: e.target.value })
@@ -300,9 +281,11 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
 
                 <div className="relative">
                   <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    type="email"
-                    placeholder="E-Mail-Adresse"
+                    <Input
+                      type="email"
+                      autoComplete="email"
+                      dir="ltr"
+                      placeholder="البريد الإلكتروني"
                     value={formData.email}
                     onChange={(e) =>
                       setFormData({ ...formData, email: e.target.value })
@@ -313,9 +296,11 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
 
                 <div className="relative">
                   <Lock className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Passwort"
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      autoComplete={mode === "login" ? "current-password" : "new-password"}
+                      dir="ltr"
+                      placeholder="كلمة المرور"
                     value={formData.password}
                     onChange={(e) =>
                       setFormData({ ...formData, password: e.target.value })
@@ -336,14 +321,6 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
                     )}
                   </Button>
                 </div>
-
-                {mode === "login" && (
-                  <div className="text-left">
-                    <Button variant="link" className="text-primary p-0 h-auto">
-                      Passwort vergessen?
-                    </Button>
-                  </div>
-                )}
 
                 {error && (
                   <p
@@ -370,50 +347,18 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
                   {isLoading ? (
                     <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : mode === "login" ? (
-                    "Anmelden"
+                    "تسجيل الدخول"
                   ) : (
-                    "Konto erstellen"
+                    "إنشاء حساب"
                   )}
                 </Button>
 
-                {/* Divider */}
-                <div className="flex items-center gap-4 my-6">
-                  <div className="flex-1 h-px bg-border" />
-                  <span className="text-sm text-muted-foreground">oder</span>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-
-                {/* Social buttons */}
-                <div className="flex justify-center gap-4">
-                  {socialButtons.map((social) => (
-                    <Button
-                      key={social.name}
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className={cn("w-14 h-14 rounded-2xl text-lg font-bold", social.color)}
-                    >
-                      {social.icon}
-                    </Button>
-                  ))}
-                </div>
-
-                {/* Phone login */}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => setMode("phone")}
-                  className="w-full h-12 rounded-2xl"
-                >
-                  <Phone className="w-4 h-4 ml-2" />
-                  Mit Telefonnummer fortfahren
-                </Button>
               </form>
 
               {/* Switch mode */}
               <div className="text-center mt-6">
                 <span className="text-muted-foreground">
-                  {mode === "login" ? "Noch kein Konto?" : "Du hast bereits ein Konto?"}
+                  {mode === "login" ? "ليس لديك حساب؟" : "لديك حساب بالفعل؟"}
                 </span>{" "}
                 <Button
                   variant="link"
@@ -424,67 +369,12 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
                     setMode(mode === "login" ? "signup" : "login");
                   }}
                 >
-                  {mode === "login" ? "Konto erstellen" : "Anmelden"}
+                  {mode === "login" ? "إنشاء حساب" : "تسجيل الدخول"}
                 </Button>
               </div>
             </motion.div>
           )}
 
-          {mode === "phone" && (
-            <motion.div
-              key="phone"
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -50 }}
-              className="flex-1 flex flex-col p-6"
-            >
-              {/* Header */}
-              <div className="flex items-center gap-4 mb-8">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setMode("welcome")}
-                  className="rounded-full"
-                >
-                  <ArrowRight className="w-5 h-5" />
-                </Button>
-                <div>
-                  <h1 className="text-2xl font-bold">Telefonnummer</h1>
-                  <p className="text-sm text-muted-foreground">
-                    Wir senden dir einen Bestätigungscode
-                  </p>
-                </div>
-              </div>
-
-              <form onSubmit={handleSubmit} className="space-y-4 flex-1">
-                <div className="relative">
-                  <Phone className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-                  <Input
-                    type="tel"
-                    placeholder="+966 5XX XXX XXXX"
-                    value={formData.phone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
-                    }
-                    className="h-14 pr-12 rounded-2xl bg-muted/50 border-0 text-right"
-                    dir="ltr"
-                  />
-                </div>
-
-                <Button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full h-14 rounded-2xl text-lg font-semibold bg-gradient-to-r from-primary to-[#3155ff] hover:opacity-90"
-                >
-                  {isLoading ? (
-                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    "Code senden"
-                  )}
-                </Button>
-              </form>
-            </motion.div>
-          )}
         </AnimatePresence>
       </div>
     </div>
