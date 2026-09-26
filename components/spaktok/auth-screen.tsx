@@ -96,26 +96,31 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
     try {
       if (mode === "signup") {
         const username = formData.username.trim();
-        const res = await fetch("/api/auth/signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password, username }),
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            data: {
+              username: username || undefined,
+              display_name: username || undefined,
+            },
+          },
         });
 
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          setError(data.error ?? "Die Kontoerstellung ist fehlgeschlagen. Versuche es erneut.");
+        if (signUpError) {
+          const message = signUpError.message.toLowerCase();
+          if (message.includes("already") || message.includes("registered") || message.includes("user exists")) {
+            setInfoMessage("Wenn eine Registrierung mit dieser Adresse möglich ist, senden wir einen Bestätigungslink. Prüfe dein Postfach oder melde dich an.");
+            setMode("login");
+            return;
+          }
+          setError(mapAuthError(signUpError.message));
           return;
         }
 
-        // Account is created pre-confirmed on the server — sign in right away.
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (signInError) {
-          setInfoMessage("Konto erfolgreich erstellt! Melde dich an, um fortzufahren.");
+        if (!data.session) {
+          setInfoMessage("Wenn eine Registrierung mit dieser Adresse möglich ist, senden wir einen Bestätigungslink. Prüfe dein Postfach.");
           setMode("login");
           return;
         }
