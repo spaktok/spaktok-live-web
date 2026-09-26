@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCloudflareBindings } from '@/lib/cloudflare/env'
 import { listD1Conversations } from '@/lib/cloudflare/d1-repository'
+import { getAuthenticatedUserId } from '@/lib/supabase/get-authenticated-user-id'
 
 export const runtime = 'edge'
 
-function getUserId(request: NextRequest) {
-  return request.headers.get('x-spaktok-user-id')?.trim() || null
-}
-
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   const bindings = getCloudflareBindings()
-  const userId = getUserId(request)
   if (!bindings) return NextResponse.json({ error: 'Cloudflare data layer is not configured' }, { status: 503 })
+
+  const userId = await getAuthenticatedUserId()
   if (!userId) return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
 
   try {
@@ -21,4 +19,3 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unable to load conversations' }, { status: 500 })
   }
 }
-
