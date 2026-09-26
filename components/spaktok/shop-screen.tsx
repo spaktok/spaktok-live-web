@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { APP_NAME } from "@/lib/brand";
 
 interface Product {
   id: string;
@@ -192,7 +193,7 @@ export function ShopScreen({ onBack }: ShopScreenProps) {
               </Button>
             )}
             <h1 className="text-xl font-bold bg-gradient-to-r from-primary to-[#3155ff] bg-clip-text text-transparent">
-              SpakTail Shop
+              متجر {APP_NAME}
             </h1>
           </div>
           <Button variant="ghost" size="icon" className="rounded-full relative">
