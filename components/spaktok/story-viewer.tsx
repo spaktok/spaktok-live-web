@@ -1,0 +1,268 @@
+'use client'
+
+import React from "react"
+
+import { useState, useEffect } from 'react'
+import { X, Heart, Send, MoreHorizontal, ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Play } from 'lucide-react'
+import { mockStories, timeAgo } from '@/lib/mock-data'
+import type { Story } from '@/lib/types'
+import { cn } from '@/lib/utils'
+
+interface StoryViewerProps {
+  initialStoryId: string
+  onClose: () => void
+}
+
+export function StoryViewer({ initialStoryId, onClose }: StoryViewerProps) {
+  const [currentIndex, setCurrentIndex] = useState(() => 
+    mockStories.findIndex(s => s.id === initialStoryId) || 0
+  )
+  const [progress, setProgress] = useState(0)
+  const [isPaused, setIsPaused] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
+  const [replyText, setReplyText] = useState('')
+  const [showReactions, setShowReactions] = useState(false)
+  const [uiHidden, setUiHidden] = useState(false)
+  const holdTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const holdTriggeredRef = React.useRef(false)
+
+  const story = mockStories[currentIndex]
+  const storyDuration = (story.duration || 5) * 1000
+
+  useEffect(() => {
+    if (isPaused) return
+
+    const interval = setInterval(() => {
+      setProgress(prev => {
+        if (prev >= 100) {
+          goToNext()
+          return 0
+        }
+        return prev + (100 / (storyDuration / 100))
+      })
+    }, 100)
+
+    return () => clearInterval(interval)
+  }, [currentIndex, isPaused, storyDuration])
+
+  const goToNext = () => {
+    if (currentIndex < mockStories.length - 1) {
+      setCurrentIndex(prev => prev + 1)
+      setProgress(0)
+    } else {
+      onClose()
+    }
+  }
+
+  const goToPrev = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1)
+      setProgress(0)
+    }
+  }
+
+  // Distinguish a short tap (navigation) from a sustained press
+  // (pause + hide UI for pure viewing) as described in the spec.
+  const handlePressStart = () => {
+    holdTriggeredRef.current = false
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+    holdTimerRef.current = setTimeout(() => {
+      holdTriggeredRef.current = true
+      setIsPaused(true)
+      setUiHidden(true)
+    }, 250)
+  }
+
+  const handlePressEnd = (e: React.MouseEvent | React.TouchEvent) => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current)
+      holdTimerRef.current = null
+    }
+    if (holdTriggeredRef.current) {
+      // Release from a long press: resume playback and restore the UI.
+      holdTriggeredRef.current = false
+      setIsPaused(false)
+      setUiHidden(false)
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    const clientX = 'changedTouches' in e ? e.changedTouches[0]?.clientX ?? 0 : e.clientX
+    const x = clientX - rect.left
+    const width = rect.width
+    if (x < width * 0.3) {
+      goToPrev()
+    } else if (x > width * 0.7) {
+      goToNext()
+    } else {
+      setIsPaused((prev) => !prev)
+    }
+  }
+
+  useEffect(() => () => {
+    if (holdTimerRef.current) clearTimeout(holdTimerRef.current)
+  }, [])
+
+  const reactions = ['❤️', '😂', '😮', '😢', '👏', '🔥']
+
+  const sendReaction = (emoji: string) => {
+    console.log('Sent reaction:', emoji)
+    setShowReactions(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black">
+      {/* Story Image/Video */}
+      <div 
+        className="absolute inset-0 select-none"
+        onMouseDown={handlePressStart}
+        onMouseUp={handlePressEnd}
+        onTouchStart={handlePressStart}
+        onTouchEnd={handlePressEnd}
+      >
+        <img
+          src={story.user.avatar.replace('w=150', 'w=800').replace('h=150', 'h=1200') || "/placeholder.svg"}
+          alt="Story"
+          className="w-full h-full object-cover"
+          crossOrigin="anonymous"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70" />
+      </div>
+
+      {/* Progress Bars + Header */}
+      <div className={cn('absolute top-0 left-0 right-0 p-3 safe-top z-10 transition-opacity duration-200', uiHidden && 'opacity-0 pointer-events-none')}>
+        <div className="flex gap-1 mb-4">
+          {mockStories.map((_, index) => (
+            <div key={index} className="flex-1 h-0.5 bg-white/30 rounded-full overflow-hidden">
+              <div 
+                className={cn(
+                  "h-full bg-white rounded-full transition-all",
+                  index < currentIndex ? "w-full" : index === currentIndex ? "" : "w-0"
+                )}
+                style={{ 
+                  width: index === currentIndex ? `${progress}%` : undefined 
+                }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="relative">
+              <img
+                src={story.user.avatar || "/placeholder.svg"}
+                alt={story.user.displayName}
+                className="w-10 h-10 rounded-full border-2 border-white object-cover"
+                crossOrigin="anonymous"
+              />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-white font-semibold text-sm">{story.user.displayName}</span>
+                {story.user.isVerified && (
+                  <div className="w-4 h-4 rounded-full bg-[#ffffff] flex items-center justify-center">
+                    <svg className="w-2.5 h-2.5 text-black" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" />
+                    </svg>
+                  </div>
+                )}
+              </div>
+              <span className="text-white/60 text-xs">{timeAgo(story.createdAt)}</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={(e) => { e.stopPropagation(); setIsPaused(!isPaused) }}
+              className="w-9 h-9 rounded-full glass flex items-center justify-center press-effect"
+            >
+              {isPaused ? (
+                <Play className="w-4 h-4 text-white" fill="white" />
+              ) : (
+                <Pause className="w-4 h-4 text-white" fill="white" />
+              )}
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); setIsMuted(!isMuted) }}
+              className="w-9 h-9 rounded-full glass flex items-center justify-center press-effect"
+            >
+              {isMuted ? (
+                <VolumeX className="w-4 h-4 text-white" />
+              ) : (
+                <Volume2 className="w-4 h-4 text-white" />
+              )}
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); onClose() }}
+              className="w-9 h-9 rounded-full glass flex items-center justify-center press-effect"
+            >
+              <X className="w-5 h-5 text-white" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation Arrows */}
+      {!uiHidden && currentIndex > 0 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); goToPrev() }}
+          className="absolute left-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full glass flex items-center justify-center press-effect z-10"
+        >
+          <ChevronRight className="w-5 h-5 text-white" />
+        </button>
+      )}
+      {!uiHidden && currentIndex < mockStories.length - 1 && (
+        <button
+          onClick={(e) => { e.stopPropagation(); goToNext() }}
+          className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full glass flex items-center justify-center press-effect z-10"
+        >
+          <ChevronLeft className="w-5 h-5 text-white" />
+        </button>
+      )}
+
+      {/* Reactions */}
+      {showReactions && (
+        <div className="absolute bottom-28 left-1/2 -translate-x-1/2 glass-card rounded-full px-4 py-2 flex items-center gap-3 animate-scale-in z-20">
+          {reactions.map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => sendReaction(emoji)}
+              className="text-2xl hover:scale-125 transition-transform press-effect"
+            >
+              {emoji}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Bottom Actions */}
+      <div className={cn('absolute bottom-0 left-0 right-0 p-4 safe-bottom z-10 transition-opacity duration-200', uiHidden && 'opacity-0 pointer-events-none')}>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 glass rounded-full flex items-center px-4 py-2.5">
+            <input
+              type="text"
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+              placeholder="أرسل رسالة..."
+              className="flex-1 bg-transparent text-white text-sm placeholder:text-white/40 outline-none"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <button 
+            onClick={(e) => { e.stopPropagation(); setShowReactions(!showReactions) }}
+            className="w-12 h-12 rounded-full glass flex items-center justify-center press-effect"
+          >
+            <Heart className="w-6 h-6 text-white" />
+          </button>
+          <button 
+            onClick={(e) => e.stopPropagation()}
+            className="w-12 h-12 rounded-full glass flex items-center justify-center press-effect"
+          >
+            <Send className="w-6 h-6 text-white" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
