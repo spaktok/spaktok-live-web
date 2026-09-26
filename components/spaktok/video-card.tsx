@@ -158,27 +158,17 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
         <div className="progress-gradient h-full transition-[width] duration-300" style={{ width: `${progress}%` }} />
       </div>
 
-      {/* Top Bar */}
-      <div className="absolute top-0 left-0 right-0 p-4 safe-top flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-white/90">لك</span>
-          <span className="text-white/30">|</span>
-          <span className="text-sm text-white/50">متابعين</span>
-        </div>
-        <button
-          onClick={() => setIsMuted(!isMuted)}
-          className="w-9 h-9 rounded-full glass flex items-center justify-center press-effect"
-        >
-          {isMuted ? (
-            <VolumeX className="w-4 h-4 text-white" />
-          ) : (
-            <Volume2 className="w-4 h-4 text-white" />
-          )}
-        </button>
-      </div>
-
       {/* Right Actions */}
       <div className="absolute right-3 bottom-32 flex flex-col items-center gap-5">
+        <button
+          type="button"
+          onClick={() => setIsMuted((muted) => !muted)}
+          aria-label={isMuted ? 'تشغيل صوت الفيديو' : 'كتم صوت الفيديو'}
+          className="flex h-12 w-12 items-center justify-center rounded-full glass press-effect"
+        >
+          {isMuted ? <VolumeX className="h-5 w-5 text-white" /> : <Volume2 className="h-5 w-5 text-white" />}
+        </button>
+
         {/* User Avatar */}
         <button
           onClick={() => onUserClick(video.user.id)}

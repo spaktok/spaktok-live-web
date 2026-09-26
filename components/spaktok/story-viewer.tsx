@@ -14,12 +14,12 @@ interface StoryViewerProps {
 }
 
 export function StoryViewer({ initialStoryId, onClose }: StoryViewerProps) {
-  const [currentIndex, setCurrentIndex] = useState(() => 
-    mockStories.findIndex(s => s.id === initialStoryId) || 0
+  const [currentIndex, setCurrentIndex] = useState(() =>
+    Math.max(0, mockStories.findIndex((item) => item.id === initialStoryId))
   )
   const [progress, setProgress] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
-  const [isMuted, setIsMuted] = useState(false)
+  const [isMuted, setIsMuted] = useState(true)
   const [replyText, setReplyText] = useState('')
   const [showReactions, setShowReactions] = useState(false)
   const [uiHidden, setUiHidden] = useState(false)
@@ -27,10 +27,12 @@ export function StoryViewer({ initialStoryId, onClose }: StoryViewerProps) {
   const holdTriggeredRef = React.useRef(false)
 
   const story = mockStories[currentIndex]
+  const storyIsVideo = story?.mediaType === 'video' && /\.(mp4|webm|mov)(?:$|\?)/i.test(story.mediaUrl)
   const storyDuration = (story.duration || 5) * 1000
+  const videoRef = React.useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
-    if (isPaused) return
+    if (isPaused || storyIsVideo) return
 
     const interval = setInterval(() => {
       setProgress(prev => {
@@ -43,7 +45,18 @@ export function StoryViewer({ initialStoryId, onClose }: StoryViewerProps) {
     }, 100)
 
     return () => clearInterval(interval)
-  }, [currentIndex, isPaused, storyDuration])
+  }, [currentIndex, isPaused, storyDuration, storyIsVideo])
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video || !storyIsVideo) return
+    video.muted = isMuted
+    if (isPaused) {
+      video.pause()
+    } else {
+      video.play().catch(() => {})
+    }
+  }, [currentIndex, isMuted, isPaused, storyIsVideo])
 
   const goToNext = () => {
     if (currentIndex < mockStories.length - 1) {
@@ -119,12 +132,29 @@ export function StoryViewer({ initialStoryId, onClose }: StoryViewerProps) {
         onTouchStart={handlePressStart}
         onTouchEnd={handlePressEnd}
       >
-        <img
-          src={story.user.avatar.replace('w=150', 'w=800').replace('h=150', 'h=1200') || "/placeholder.svg"}
-          alt="Story"
-          className="w-full h-full object-cover"
-          crossOrigin="anonymous"
-        />
+        {storyIsVideo ? (
+          <video
+            ref={videoRef}
+            src={story.mediaUrl}
+            poster={story.user.avatar}
+            autoPlay
+            playsInline
+            muted={isMuted}
+            onEnded={goToNext}
+            onTimeUpdate={(event) => {
+              const video = event.currentTarget
+              if (video.duration > 0) setProgress((video.currentTime / video.duration) * 100)
+            }}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <img
+            src={story.mediaUrl || story.user.avatar || '/placeholder.svg'}
+            alt={`قصة ${story.user.displayName}`}
+            className="h-full w-full object-cover"
+            crossOrigin="anonymous"
+          />
+        )}
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70" />
       </div>
 

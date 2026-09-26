@@ -574,7 +574,7 @@ export interface AchievementReward {
 }
 
 // Navigation Types
-export type TabType = 'home' | 'discover' | 'create' | 'chat' | 'profile'
+export type TabType = 'home' | 'discover' | 'stories' | 'create' | 'chat' | 'profile'
 export type FeedType = 'forYou' | 'following' | 'live' | 'friends'
 export type CreateType = 'video' | 'photo' | 'spak' | 'live' | 'story'
 export type DiscoverType = 'trending' | 'hashtags' | 'sounds' | 'effects' | 'live' | 'shop'

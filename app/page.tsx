@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react'
 import { BottomNavigation } from '@/components/spaktok/bottom-navigation'
 import { VideoFeed } from '@/components/spaktok/video-feed'
-import { StoryBar } from '@/components/spaktok/story-bar'
 import { StoryViewer } from '@/components/spaktok/story-viewer'
+import { StoriesScreen } from '@/components/spaktok/stories-screen'
 import { LiveGrid } from '@/components/spaktok/live-grid'
 import { LiveStream } from '@/components/spaktok/live-stream'
 import { ChatScreen } from '@/components/spaktok/chat-screen'
@@ -18,10 +18,7 @@ import { AuthScreen } from '@/components/spaktok/auth-screen'
 import { SplashScreen } from '@/components/spaktok/splash-screen'
 import type { TabType, FeedType } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import { Bell, ShoppingBag, Settings } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/use-auth'
-import { APP_NAME } from '@/lib/brand'
 
 export default function SpakTok() {
   const [isLoading, setIsLoading] = useState(true)
@@ -139,47 +136,11 @@ export default function SpakTok() {
       {/* Main Content */}
       <main className="relative spak-content-width">
         {activeTab === 'home' && (
-          <div className="h-dvh flex flex-col">
+          <div className="relative h-dvh overflow-hidden bg-black">
             {/* Feed Type Selector */}
             <div className="absolute top-0 left-0 right-0 z-20 safe-top">
-                {/* Top Actions */}
-                <div className="flex items-center justify-between px-4 pt-3">
-                  <h1 className="text-xl font-black tracking-[-0.04em] text-[#3155ff]">
-                    {APP_NAME}
-                  </h1>
-                  <div className="flex items-center gap-1">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="spak-control h-10 w-10 rounded-xl text-white/80 hover:text-white"
-                      onClick={() => setShowShop(true)}
-                      aria-label="فتح المتجر"
-                    >
-                      <ShoppingBag className="w-5 h-5" />
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="rounded-full text-white/80 hover:text-white relative"
-                      onClick={() => setShowNotifications(true)}
-                      aria-label="فتح التنبيهات"
-                    >
-                      <Bell className="w-5 h-5" />
-                      <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full" />
-                    </Button>
-                  </div>
-                </div>
-                
-                {/* Stories */}
-                <div className="glass border-b border-white/5">
-                  <StoryBar 
-                    onStoryClick={handleStoryClick}
-                    onAddStory={handleAddStory}
-                  />
-                </div>
-                
                 {/* Feed Tabs */}
-                <div className="flex items-center justify-center gap-6 py-2 glass-light">
+                <div className="flex items-center justify-center gap-6 py-2 bg-black/25 backdrop-blur-sm">
                   <button
                     onClick={() => setFeedType('forYou')}
                     className={cn(
@@ -189,7 +150,7 @@ export default function SpakTok() {
                         : "text-white/50"
                     )}
                   >
-                    Für dich
+                    لك
                   </button>
                   <button
                     onClick={() => setFeedType('following')}
@@ -201,7 +162,7 @@ export default function SpakTok() {
                         : "text-white/50"
                     )}
                   >
-                    Folge ich
+                    أتابعهم
                   </button>
                   <button
                     onClick={() => setFeedType('live')}
@@ -214,7 +175,7 @@ export default function SpakTok() {
                     )}
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-[#ff3b30] animate-live-pulse" />
-                    Live
+                    مباشر
                   </button>
                 </div>
               </div>
@@ -223,7 +184,7 @@ export default function SpakTok() {
             {feedType === 'live' ? (
               <LiveGrid onLiveClick={handleLiveClick} onBack={() => setFeedType('forYou')} />
             ) : (
-              <div className="flex-1 pt-36">
+              <div className="absolute inset-0">
                 <VideoFeed onUserClick={handleUserClick} />
               </div>
             )}
@@ -233,11 +194,17 @@ export default function SpakTok() {
         {activeTab === 'discover' && (
           <DiscoverScreen 
             onUserClick={handleUserClick}
+            onShopClick={() => setShowShop(true)}
+            onNotificationsClick={() => setShowNotifications(true)}
             onVideoClick={(videoId) => {
               setFeedType('forYou')
               setActiveTab('home')
             }}
           />
+        )}
+
+        {activeTab === 'stories' && (
+          <StoriesScreen onStoryClick={handleStoryClick} onAddStory={handleAddStory} />
         )}
 
         {activeTab === 'chat' && (

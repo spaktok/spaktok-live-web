@@ -1,18 +1,20 @@
 'use client'
 
 import { useState } from 'react'
-import { Search, TrendingUp, Sparkles, Music2, Hash, Users, Play, MapPin, ChevronLeft } from 'lucide-react'
+import { Search, TrendingUp, Sparkles, Music2, Hash, Users, Play, MapPin, ChevronLeft, Bell, ShoppingBag } from 'lucide-react'
 import { mockVideos, mockUsers, mockLiveStreams, formatNumber } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 
 interface DiscoverScreenProps {
   onUserClick: (userId: string) => void
   onVideoClick: (videoId: string) => void
+  onShopClick?: () => void
+  onNotificationsClick?: () => void
 }
 
 type CategoryType = 'all' | 'trending' | 'music' | 'gaming' | 'food' | 'sports' | 'fashion'
 
-export function DiscoverScreen({ onUserClick, onVideoClick }: DiscoverScreenProps) {
+export function DiscoverScreen({ onUserClick, onVideoClick, onShopClick, onNotificationsClick }: DiscoverScreenProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all')
   const [followedUsers, setFollowedUsers] = useState<string[]>([])
@@ -52,6 +54,23 @@ export function DiscoverScreen({ onUserClick, onVideoClick }: DiscoverScreenProp
       {/* Header */}
       <div className="sticky top-0 z-10 glass safe-top">
         <div className="px-4 py-3">
+          <div className="mb-3 flex items-center justify-between">
+            <h1 className="text-lg font-bold text-white">اكتشف</h1>
+            <div className="flex items-center gap-2">
+              {onNotificationsClick && (
+                <button type="button" onClick={onNotificationsClick} aria-label="فتح التنبيهات" className="relative rounded-xl p-2 text-white/80 hover:bg-white/10">
+                  <Bell className="h-5 w-5" />
+                  <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-rose-500" />
+                </button>
+              )}
+              {onShopClick && (
+                <button type="button" onClick={onShopClick} aria-label="فتح المتجر" className="rounded-xl p-2 text-white/80 hover:bg-white/10">
+                  <ShoppingBag className="h-5 w-5" />
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Search Bar */}
           <div className="glass-card rounded-2xl flex items-center px-4 py-3 mb-4">
             <Search className="w-5 h-5 text-white/40" />
