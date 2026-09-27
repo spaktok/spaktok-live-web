@@ -45,7 +45,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="ar" dir="rtl" className={`${cairo.variable} bg-background`}>
+    <html lang="en" dir="ltr" className={`${cairo.variable} bg-background`}>
       <body className="font-sans antialiased" style={{ fontFamily: 'var(--font-cairo), system-ui, sans-serif' }}>
         <LanguageProvider>{children}</LanguageProvider>
       </body>

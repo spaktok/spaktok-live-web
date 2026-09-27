@@ -65,7 +65,8 @@ interface SettingSection {
 
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const { user: authUser } = useAuth()
-  const { language, languageName, setLanguage } = useLanguage()
+  const { language, languageName, setLanguage, t } = useLanguage()
+  const languageLabel = t('language', 'اللغة')
   const [settings, setSettings] = useState(defaultSettings);
   const [account, setAccount] = useState<{ displayName: string; username: string; avatarUrl: string; followers: number; following: number; likes: number; isVerified: boolean } | null>(null)
 
@@ -114,7 +115,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       title: "المظهر والتفضيلات",
       items: [
         { icon: <Moon className="w-5 h-5" />, label: "الوضع الليلي", action: "toggle", settingKey: "darkMode", value: settings.darkMode },
-        { icon: <Globe className="w-5 h-5" />, label: "اللغة", action: "navigate", badge: languageName },
+        { icon: <Globe className="w-5 h-5" />, label: t('language', 'اللغة'), action: "navigate", badge: languageName },
         { icon: <Smartphone className="w-5 h-5" />, label: "توفير البيانات", description: "تقليل استهلاك الإنترنت", action: "toggle", settingKey: "dataSaver", value: settings.dataSaver },
       ],
     },
@@ -156,7 +157,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
               <ChevronLeft className="w-5 h-5" />
             </Button>
           )}
-          <h1 className="text-xl font-bold">الإعدادات</h1>
+              <h1 className="text-xl font-bold">{t('settings', 'الإعدادات')}</h1>
         </div>
       </div>
 
@@ -234,7 +235,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                       return;
                     }
   if (item.action === "navigate") {
-          if (item.label === 'اللغة') return
+          if (item.label === languageLabel) return
           showFeedback(`${item.label}: ستتوفر إعداداته التفصيلية هنا قريباً`);
           return;
         }
@@ -264,7 +265,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                       <p className="text-xs text-muted-foreground">{item.description}</p>
                     )}
                   </div>
-          {item.label === 'اللغة' ? (
+          {item.label === languageLabel ? (
             <select
               aria-label="اختيار اللغة"
               value={language}
