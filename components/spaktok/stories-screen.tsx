@@ -1,8 +1,10 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { Clock3, Eye } from 'lucide-react'
 import { StoryBar } from '@/components/spaktok/story-bar'
-import { mockStories } from '@/lib/mock-data'
+import { createClient } from '@/lib/supabase/client'
+import type { Story, User } from '@/lib/types'
 
 interface StoriesScreenProps {
   onStoryClick: (storyId: string) => void
@@ -10,6 +12,57 @@ interface StoriesScreenProps {
 }
 
 export function StoriesScreen({ onStoryClick, onAddStory }: StoriesScreenProps) {
+  const [stories, setStories] = useState<Story[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const loadStories = async () => {
+      const { data, error: loadError } = await createClient()
+        .from('stories')
+        .select('id, user_id, media_url, media_type, duration, views_count, created_at, expires_at, profiles(id, username, display_name, avatar_url, bio, is_verified, followers_count, following_count, likes_count, created_at)')
+        .gt('expires_at', new Date().toISOString())
+        .order('created_at', { ascending: false })
+      if (!active) return
+      if (loadError) {
+        setError(true)
+        setLoading(false)
+        return
+      }
+      setStories((data || []).map((row) => {
+        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+        const user: User = {
+          id: row.user_id,
+          username: profile?.username || 'user',
+          displayName: profile?.display_name || 'مستخدم',
+          avatar: profile?.avatar_url || '',
+          bio: profile?.bio || '',
+          isVerified: Boolean(profile?.is_verified),
+          followers: profile?.followers_count || 0,
+          following: profile?.following_count || 0,
+          likes: profile?.likes_count || 0,
+          createdAt: new Date(profile?.created_at || row.created_at),
+        }
+        return {
+          id: row.id,
+          user,
+          mediaUrl: row.media_url,
+          mediaType: row.media_type === 'video' ? 'video' : 'image',
+          duration: row.duration || 5,
+          views: row.views_count || 0,
+          isViewed: false,
+          reactions: [],
+          createdAt: new Date(row.created_at),
+          expiresAt: new Date(row.expires_at),
+        }
+      }))
+      setLoading(false)
+    }
+    void loadStories()
+    return () => { active = false }
+  }, [])
+
   return (
     <section className="min-h-dvh pb-28" aria-labelledby="stories-heading">
       <header className="sticky top-0 z-20 border-b border-white/5 bg-background/90 backdrop-blur-xl safe-top">
@@ -21,7 +74,7 @@ export function StoriesScreen({ onStoryClick, onAddStory }: StoriesScreenProps) 
 
       <div className="mx-auto max-w-5xl">
         <section aria-label="قصتك وقصص جديدة" className="border-b border-white/5 py-2">
-          <StoryBar onStoryClick={onStoryClick} onAddStory={onAddStory} />
+          <StoryBar stories={stories} onStoryClick={onStoryClick} onAddStory={onAddStory} />
         </section>
 
         <section className="px-4 py-5" aria-labelledby="stories-list-heading">
@@ -29,8 +82,15 @@ export function StoriesScreen({ onStoryClick, onAddStory }: StoriesScreenProps) 
             <Clock3 className="h-4 w-4 text-white/60" aria-hidden="true" />
             <h2 id="stories-list-heading" className="text-base font-semibold text-white">قصص حديثة</h2>
           </div>
+          {loading ? (
+            <div className="py-16 text-center text-sm text-white/60" role="status">جارٍ تحميل القصص...</div>
+          ) : error ? (
+            <div className="py-16 text-center text-sm text-white/60" role="status">تعذر تحميل القصص حالياً.</div>
+          ) : stories.length === 0 ? (
+            <div className="py-16 text-center text-sm text-white/60" role="status">لا توجد قصص نشطة بعد.</div>
+          ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-            {mockStories.map((story) => (
+            {stories.map((story) => (
               <button
                 key={story.id}
                 type="button"
@@ -63,6 +123,7 @@ export function StoriesScreen({ onStoryClick, onAddStory }: StoriesScreenProps) 
               </button>
             ))}
           </div>
+          )}
         </section>
       </div>
     </section>

@@ -4,8 +4,9 @@ import React from "react"
 
 import { useState, useEffect } from 'react'
 import { X, Heart, Send, MoreHorizontal, ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Play } from 'lucide-react'
-import { mockStories, timeAgo } from '@/lib/mock-data'
-import type { Story } from '@/lib/types'
+import { timeAgo } from '@/lib/mock-data'
+import { createClient } from '@/lib/supabase/client'
+import type { Story, User } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface StoryViewerProps {
@@ -14,9 +15,27 @@ interface StoryViewerProps {
 }
 
 export function StoryViewer({ initialStoryId, onClose }: StoryViewerProps) {
-  const [currentIndex, setCurrentIndex] = useState(() =>
-    Math.max(0, mockStories.findIndex((item) => item.id === initialStoryId))
-  )
+  const [stories, setStories] = useState<Story[]>([])
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    const loadStories = async () => {
+      const { data } = await createClient().from('stories').select('id, user_id, media_url, media_type, duration, views_count, created_at, expires_at, profiles(id, username, display_name, avatar_url, bio, is_verified, followers_count, following_count, likes_count, created_at)').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false })
+      if (!active) return
+      const nextStories = (data || []).map((row) => {
+        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+        const user: User = { id: row.user_id, username: profile?.username || 'user', displayName: profile?.display_name || 'مستخدم', avatar: profile?.avatar_url || '', bio: profile?.bio || '', isVerified: Boolean(profile?.is_verified), followers: profile?.followers_count || 0, following: profile?.following_count || 0, likes: profile?.likes_count || 0, createdAt: new Date(profile?.created_at || row.created_at) }
+        return { id: row.id, user, mediaUrl: row.media_url, mediaType: row.media_type === 'video' ? 'video' : 'image', duration: row.duration || 5, views: row.views_count || 0, isViewed: false, reactions: [], createdAt: new Date(row.created_at), expiresAt: new Date(row.expires_at) } as Story
+      })
+      setStories(nextStories)
+      setCurrentIndex(Math.max(0, nextStories.findIndex((item) => item.id === initialStoryId)))
+      setLoading(false)
+    }
+    void loadStories()
+    return () => { active = false }
+  }, [initialStoryId])
   const [progress, setProgress] = useState(0)
   const [isPaused, setIsPaused] = useState(false)
   const [isMuted, setIsMuted] = useState(true)
@@ -26,8 +45,10 @@ export function StoryViewer({ initialStoryId, onClose }: StoryViewerProps) {
   const holdTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const holdTriggeredRef = React.useRef(false)
 
-  const story = mockStories[currentIndex]
-  const storyIsVideo = story?.mediaType === 'video' && /\.(mp4|webm|mov)(?:$|\?)/i.test(story.mediaUrl)
+  const story = stories[currentIndex]
+  if (loading) return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black text-sm text-white/70">جارٍ تحميل القصة...</div>
+  if (!story) return <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black text-sm text-white/70"><span>القصة غير متاحة</span><button onClick={onClose} className="rounded-full bg-white/10 px-4 py-2 text-white">إغلاق</button></div>
+  const storyIsVideo = story.mediaType === 'video' && /\.(mp4|webm|mov)(?:$|\?)/i.test(story.mediaUrl)
   const storyDuration = (story.duration || 5) * 1000
   const videoRef = React.useRef<HTMLVideoElement>(null)
 
@@ -59,7 +80,7 @@ export function StoryViewer({ initialStoryId, onClose }: StoryViewerProps) {
   }, [currentIndex, isMuted, isPaused, storyIsVideo])
 
   const goToNext = () => {
-    if (currentIndex < mockStories.length - 1) {
+    if (currentIndex < stories.length - 1) {
       setCurrentIndex(prev => prev + 1)
       setProgress(0)
     } else {
@@ -161,7 +182,7 @@ export function StoryViewer({ initialStoryId, onClose }: StoryViewerProps) {
       {/* Progress Bars + Header */}
       <div className={cn('absolute top-0 left-0 right-0 p-3 safe-top z-10 transition-opacity duration-200', uiHidden && 'opacity-0 pointer-events-none')}>
         <div className="flex gap-1 mb-4">
-          {mockStories.map((_, index) => (
+          {stories.map((_, index) => (
             <div key={index} className="flex-1 h-0.5 bg-white/30 rounded-full overflow-hidden">
               <div 
                 className={cn(
@@ -242,7 +263,7 @@ export function StoryViewer({ initialStoryId, onClose }: StoryViewerProps) {
           <ChevronRight className="w-5 h-5 text-white" />
         </button>
       )}
-      {!uiHidden && currentIndex < mockStories.length - 1 && (
+      {!uiHidden && currentIndex < stories.length - 1 && (
         <button
           onClick={(e) => { e.stopPropagation(); goToNext() }}
           className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full glass flex items-center justify-center press-effect z-10"
