@@ -14,6 +14,7 @@ export interface User {
   level?: number
   xp?: number
   isVerified: boolean
+  isFollowing?: boolean
   isLive?: boolean
   isPremium?: boolean
   badges?: Badge[]

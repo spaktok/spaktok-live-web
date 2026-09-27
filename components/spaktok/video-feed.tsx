@@ -80,6 +80,32 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
       return false
     }
   }
+  const handleBookmark = async (videoId: string, bookmarked: boolean) => {
+    if (isDemoFeed) return true
+    try {
+      const response = await fetch('/api/bookmarks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId, bookmarked }),
+      })
+      return response.ok
+    } catch {
+      return false
+    }
+  }
+  const handleFollow = async (userId: string, following: boolean) => {
+    if (isDemoFeed) return true
+    try {
+      const response = await fetch('/api/follows', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ followingId: userId, following }),
+      })
+      return response.ok
+    } catch {
+      return false
+    }
+  }
   const handleComment = (videoId: string) => console.log('[v0] opened comments', videoId)
   const handleShare = (videoId: string) => console.log('[v0] shared video', videoId)
 
@@ -113,6 +139,8 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
                 onProgress={isActive ? handleActiveProgress : undefined}
                 onUserClick={onUserClick}
                 onLike={(videoId, liked) => handleLike(videoId, liked)}
+                onBookmark={(videoId, bookmarked) => handleBookmark(videoId, bookmarked)}
+                onFollow={(userId, following) => handleFollow(userId, following)}
                 onComment={handleComment}
                 onShare={handleShare}
               />

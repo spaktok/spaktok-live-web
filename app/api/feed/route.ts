@@ -61,6 +61,8 @@ export async function GET(request: NextRequest) {
     const rows = (data ?? []) as unknown as VideoRow[]
     const ids = rows.map((row) => row.id)
     const likedIds = new Set<string>()
+    const bookmarkedIds = new Set<string>()
+    const followedIds = new Set<string>()
 
     if (userId && ids.length > 0) {
       const { data: likes, error: likesError } = await supabase
@@ -73,6 +75,25 @@ export async function GET(request: NextRequest) {
         for (const like of likes ?? []) {
           if (like.video_id) likedIds.add(like.video_id)
         }
+      }
+
+      const { data: bookmarks, error: bookmarksError } = await supabase
+        .from('bookmarks')
+        .select('video_id')
+        .eq('user_id', userId)
+        .in('video_id', ids)
+      if (!bookmarksError) {
+        for (const bookmark of bookmarks ?? []) bookmarkedIds.add(bookmark.video_id)
+      }
+
+      const creatorIds = [...new Set(rows.map((row) => row.user_id))]
+      const { data: follows, error: followsError } = await supabase
+        .from('follows')
+        .select('following_id')
+        .eq('follower_id', userId)
+        .in('following_id', creatorIds)
+      if (!followsError) {
+        for (const follow of follows ?? []) followedIds.add(follow.following_id)
       }
     }
 
@@ -91,6 +112,7 @@ export async function GET(request: NextRequest) {
           likes: 0,
           isVerified: Boolean(profile.is_verified),
           createdAt: new Date(row.created_at),
+          isFollowing: followedIds.has(row.user_id),
         },
         videoUrl: row.video_url,
         thumbnailUrl: row.thumbnail_url || '',
@@ -105,6 +127,7 @@ export async function GET(request: NextRequest) {
         shares: Number(row.shares_count ?? 0),
         views: Number(row.views_count ?? 0),
         isLiked: likedIds.has(row.id),
+        isBookmarked: bookmarkedIds.has(row.id),
         tags: [],
         createdAt: new Date(row.created_at),
       }]
