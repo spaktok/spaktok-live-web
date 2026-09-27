@@ -14,7 +14,7 @@ interface VideoCardProps {
   shouldPrecache?: boolean
   onProgress?: (ratio: number) => void
   onUserClick: (userId: string) => void
-  onLike: (videoId: string) => void
+  onLike: (videoId: string, liked: boolean) => Promise<boolean> | boolean
   onComment: (videoId: string) => void
   onShare: (videoId: string) => void
 }
@@ -70,10 +70,16 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
     }, 220)
   }
 
+  const setLiked = async (nextLiked: boolean) => {
+    const previousLiked = isLiked
+    setIsLiked(nextLiked)
+    const saved = await onLike(video.id, nextLiked)
+    if (!saved) setIsLiked(previousLiked)
+  }
+
   const spawnHeart = (clientX: number, clientY: number, target: HTMLElement) => {
     if (!isLiked) {
-      setIsLiked(true)
-      onLike(video.id)
+      void setLiked(true)
     }
     const bounds = target.getBoundingClientRect()
     const heart = { id: Date.now(), x: clientX - bounds.left, y: clientY - bounds.top }
@@ -108,8 +114,7 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
   }
 
   const handleLike = () => {
-    setIsLiked(!isLiked)
-    onLike(video.id)
+    void setLiked(!isLiked)
   }
 
   return (
