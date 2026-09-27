@@ -88,8 +88,7 @@ export function StoriesScreen({ onStoryClick, onAddStory }: StoriesScreenProps) 
             <div className="py-16 text-center text-sm text-white/60" role="status">تعذر تحميل القصص حالياً.</div>
           ) : stories.length === 0 ? (
             <div className="py-16 text-center text-sm text-white/60" role="status">لا توجد قصص نشطة بعد.</div>
-          ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          ) : <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
             {stories.map((story) => (
               <button
                 key={story.id}
@@ -122,8 +121,7 @@ export function StoriesScreen({ onStoryClick, onAddStory }: StoriesScreenProps) 
                 </div>
               </button>
             ))}
-          </div>
-          )}
+          </div>}
         </section>
       </div>
     </section>
