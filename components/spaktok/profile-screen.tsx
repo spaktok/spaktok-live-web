@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Settings, Share2, Grid3X3, Bookmark, Heart, ShoppingBag, ChevronDown, ChevronLeft, MoreHorizontal, Play, Eye, Wallet, TrendingUp, Award, Star, Zap, Crown, Edit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { mockUsers, mockVideos, mockProducts, formatNumber } from '@/lib/mock-data'
+import { mockProducts, formatNumber } from '@/lib/mock-data'
+import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/hooks/use-auth'
 import type { User } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { APP_NAME } from '@/lib/brand'
@@ -18,15 +20,60 @@ interface ProfileScreenProps {
 type TabType = 'videos' | 'liked' | 'saved' | 'shop'
 
 export function ProfileScreen({ userId, isOwnProfile = true, onSettingsClick, onBack }: ProfileScreenProps) {
+  const { user: authUser } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('videos')
   const [isFollowing, setIsFollowing] = useState(false)
   const [isProfileShared, setIsProfileShared] = useState(false)
+  const [profile, setProfile] = useState<User | null>(null)
+  const [profileVideos, setProfileVideos] = useState<Array<{ id: string; thumbnailUrl: string; caption: string; views: number }>>([])
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true)
+  const [profileError, setProfileError] = useState<string | null>(null)
+
+  const profileId = userId || authUser?.id
+
+  useEffect(() => {
+    if (!profileId) return
+    const loadProfile = async () => {
+      setIsLoadingProfile(true)
+      setProfileError(null)
+      const supabase = createClient()
+      const [{ data: row, error: profileLoadError }, { data: videos }] = await Promise.all([
+        supabase.from('profiles').select('id, username, display_name, avatar_url, bio, is_verified, follower_count, following_count').eq('id', profileId).maybeSingle(),
+        supabase.from('videos').select('id, user_id, media_url, thumbnail_url, description, music, like_count, comment_count, share_count, view_count, created_at').eq('user_id', profileId).order('created_at', { ascending: false }),
+      ])
+      if (profileLoadError || !row) {
+        setProfileError('تعذر تحميل الملف الشخصي')
+        setIsLoadingProfile(false)
+        return
+      }
+      setProfile({
+        id: row.id,
+        username: row.username,
+        displayName: row.display_name,
+        avatar: row.avatar_url || '',
+        bio: row.bio || '',
+        isVerified: row.is_verified,
+        followers: row.follower_count,
+        following: row.following_count,
+        likes: (videos || []).reduce((sum, video) => sum + video.like_count, 0),
+        createdAt: new Date(),
+      })
+      setProfileVideos((videos || []).map((video) => ({
+        id: video.id,
+        thumbnailUrl: video.thumbnail_url || video.media_url,
+        caption: video.description || 'فيديو بدون وصف',
+        views: video.view_count,
+      })))
+      setIsLoadingProfile(false)
+    }
+    void loadProfile()
+  }, [profileId])
 
   const shareProfile = async () => {
     const shareUrl = typeof window !== 'undefined' ? window.location.href : ''
     try {
       if (navigator.share) {
-        await navigator.share({ title: user.displayName, text: `@${user.username} على ${APP_NAME}`, url: shareUrl })
+        await navigator.share({ title: profile?.displayName || APP_NAME, text: `@${profile?.username || ''} على ${APP_NAME}`, url: shareUrl })
       } else if (navigator.clipboard) {
         await navigator.clipboard.writeText(shareUrl)
       }
@@ -37,7 +84,7 @@ export function ProfileScreen({ userId, isOwnProfile = true, onSettingsClick, on
     }
   }
   
-  const user = userId ? mockUsers.find(u => u.id === userId) || mockUsers[0] : mockUsers[0]
+  const user = profile
 
   const tabs = [
     { id: 'videos' as TabType, icon: Grid3X3, label: 'فيديوهات' },
@@ -45,6 +92,14 @@ export function ProfileScreen({ userId, isOwnProfile = true, onSettingsClick, on
     { id: 'saved' as TabType, icon: Bookmark, label: 'محفوظات' },
     { id: 'shop' as TabType, icon: ShoppingBag, label: 'المتجر' },
   ]
+
+  if (isLoadingProfile) {
+    return <div className="flex min-h-screen items-center justify-center text-sm text-white/60">جارٍ تحميل الملف...</div>
+  }
+
+  if (!user || profileError) {
+    return <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-8 text-center text-sm text-white/60"><p>{profileError || 'الملف الشخصي غير متاح'}</p>{onBack && <Button variant="ghost" onClick={onBack}>العودة</Button>}</div>
+  }
 
   return (
     <div className="min-h-screen pb-24">
@@ -102,11 +157,6 @@ export function ProfileScreen({ userId, isOwnProfile = true, onSettingsClick, on
               <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-gradient-to-br from-[#0b1f66] to-[#3155ff] flex items-center justify-center border-2 border-[#0a0a14] shadow-[0_0_12px_rgba(49,85,255,0.45)]">
                 <Star className="w-4 h-4 text-black" fill="currentColor" />
               </div>
-            )}
-            {isOwnProfile && (
-              <button className="absolute bottom-0 left-0 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center border border-white/20 press-effect">
-                <Edit className="w-4 h-4 text-white" />
-              </button>
             )}
           </div>
 
@@ -268,8 +318,11 @@ export function ProfileScreen({ userId, isOwnProfile = true, onSettingsClick, on
             ))}
           </div>
         ) : (
+          profileVideos.length === 0 ? (
+            <div className="flex min-h-48 items-center justify-center px-8 text-center text-sm text-white/50">لا توجد فيديوهات منشورة بعد.</div>
+          ) : (
           <div className="grid grid-cols-3 gap-0.5">
-            {mockVideos.map((video, index) => (
+            {profileVideos.map((video, index) => (
               <button key={video.id} className="relative aspect-[3/4] press-effect group">
                 <img
                   src={video.thumbnailUrl || "/placeholder.svg"}
@@ -290,6 +343,7 @@ export function ProfileScreen({ userId, isOwnProfile = true, onSettingsClick, on
               </button>
             ))}
           </div>
+          )
         )}
       </div>
     </div>

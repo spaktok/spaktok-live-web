@@ -2,7 +2,7 @@
 
 import React from "react"
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ChevronLeft,
@@ -32,6 +32,7 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { APP_NAME } from "@/lib/brand";
+import { useAuth } from "@/hooks/use-auth";
 
 interface SettingsScreenProps {
   onBack?: () => void;
@@ -62,7 +63,18 @@ interface SettingSection {
 }
 
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
+  const { user: authUser } = useAuth()
   const [settings, setSettings] = useState(defaultSettings);
+  const [account, setAccount] = useState<{ displayName: string; username: string; avatarUrl: string; followers: number; following: number; likes: number; isVerified: boolean } | null>(null)
+
+  useEffect(() => {
+    if (!authUser) return
+    const loadAccount = async () => {
+      const { data } = await createClient().from('profiles').select('display_name, username, avatar_url, follower_count, following_count, is_verified').eq('id', authUser.id).maybeSingle()
+      if (data) setAccount({ displayName: data.display_name, username: data.username, avatarUrl: data.avatar_url || '', followers: data.follower_count, following: data.following_count, likes: 0, isVerified: data.is_verified })
+    }
+    void loadAccount()
+  }, [authUser])
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const showFeedback = (message: string) => {
@@ -156,28 +168,28 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
         >
           <div className="flex items-center gap-4">
             <Avatar className="w-16 h-16 ring-2 ring-primary/50">
-              <AvatarImage src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200" />
-              <AvatarFallback>U</AvatarFallback>
+              <AvatarImage src={account?.avatarUrl || undefined} />
+              <AvatarFallback>{(account?.displayName || authUser?.email || 'م').slice(0, 1)}</AvatarFallback>
             </Avatar>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h2 className="font-bold text-lg">أحمد محمد</h2>
-                <div className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center">
+                <h2 className="font-bold text-lg">{account?.displayName || 'حسابي'}</h2>
+                {account?.isVerified && <div className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center">
                   <Check className="w-3 h-3 text-white" />
-                </div>
+                </div>}
               </div>
-              <p className="text-sm text-muted-foreground">@ahmed_creator</p>
+              <p className="text-sm text-muted-foreground">@{account?.username || '...'}</p>
               <div className="flex items-center gap-4 mt-2">
                 <div className="text-center">
-                  <p className="font-bold text-sm">125K</p>
+                  <p className="font-bold text-sm">{account ? `${Math.round(account.followers / 1000)}K` : '—'}</p>
                   <p className="text-[10px] text-muted-foreground">متابع</p>
                 </div>
                 <div className="text-center">
-                  <p className="font-bold text-sm">890</p>
+                  <p className="font-bold text-sm">{account ? account.following.toLocaleString('ar') : '—'}</p>
                   <p className="text-[10px] text-muted-foreground">متابَع</p>
                 </div>
                 <div className="text-center">
-                  <p className="font-bold text-sm">2.5M</p>
+                  <p className="font-bold text-sm">{account ? account.likes.toLocaleString('ar') : '—'}</p>
                   <p className="text-[10px] text-muted-foreground">إعجاب</p>
                 </div>
               </div>
