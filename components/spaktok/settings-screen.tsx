@@ -33,6 +33,7 @@ import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { APP_NAME } from "@/lib/brand";
 import { useAuth } from "@/hooks/use-auth";
+import { supportedLanguages, useLanguage, type LanguageCode } from '@/components/language-provider'
 
 interface SettingsScreenProps {
   onBack?: () => void;
@@ -64,6 +65,7 @@ interface SettingSection {
 
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const { user: authUser } = useAuth()
+  const { language, languageName, setLanguage } = useLanguage()
   const [settings, setSettings] = useState(defaultSettings);
   const [account, setAccount] = useState<{ displayName: string; username: string; avatarUrl: string; followers: number; following: number; likes: number; isVerified: boolean } | null>(null)
 
@@ -112,7 +114,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       title: "المظهر والتفضيلات",
       items: [
         { icon: <Moon className="w-5 h-5" />, label: "الوضع الليلي", action: "toggle", settingKey: "darkMode", value: settings.darkMode },
-        { icon: <Globe className="w-5 h-5" />, label: "اللغة", action: "navigate", badge: "العربية" },
+        { icon: <Globe className="w-5 h-5" />, label: "اللغة", action: "navigate", badge: languageName },
         { icon: <Smartphone className="w-5 h-5" />, label: "توفير البيانات", description: "تقليل استهلاك الإنترنت", action: "toggle", settingKey: "dataSaver", value: settings.dataSaver },
       ],
     },
@@ -231,10 +233,11 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                       toggleSetting(item.settingKey);
                       return;
                     }
-                    if (item.action === "navigate") {
-                      showFeedback(`${item.label}: ستتوفر إعداداته التفصيلية هنا قريباً`);
-                      return;
-                    }
+  if (item.action === "navigate") {
+          if (item.label === 'اللغة') return
+          showFeedback(`${item.label}: ستتوفر إعداداته التفصيلية هنا قريباً`);
+          return;
+        }
                     if (item.action === "danger") {
                       if (item.label === "تسجيل الخروج") {
                         showFeedback("جارٍ تسجيل الخروج...");
@@ -261,10 +264,20 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                       <p className="text-xs text-muted-foreground">{item.description}</p>
                     )}
                   </div>
-                  {item.badge && (
-                    <span className="text-sm text-muted-foreground">{item.badge}</span>
-                  )}
-                  {item.action === "navigate" && (
+          {item.label === 'اللغة' ? (
+            <select
+              aria-label="اختيار اللغة"
+              value={language}
+              onChange={(event) => setLanguage(event.target.value as LanguageCode)}
+              onClick={(event) => event.stopPropagation()}
+              className="max-w-32 rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground"
+            >
+              {supportedLanguages.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+            </select>
+          ) : item.badge ? (
+            <span className="text-sm text-muted-foreground">{item.badge}</span>
+          ) : null}
+          {item.action === "navigate" && item.label !== 'اللغة' && (
                     <ChevronRight className="w-5 h-5 text-muted-foreground" />
                   )}
                   {item.action === "toggle" && (

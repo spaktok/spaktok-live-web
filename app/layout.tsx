@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import { Cairo } from 'next/font/google'
 import './globals.css'
 import { APP_LOGO_URL } from '@/lib/brand'
+import { LanguageProvider } from '@/components/language-provider'
 
 const cairo = Cairo({
   subsets: ['arabic', 'latin', 'latin-ext'],
@@ -46,7 +47,8 @@ export default function RootLayout({
   return (
     <html lang="ar" dir="rtl" className={`${cairo.variable} bg-background`}>
       <body className="font-sans antialiased" style={{ fontFamily: 'var(--font-cairo), system-ui, sans-serif' }}>
-        {children}</body>
+        <LanguageProvider>{children}</LanguageProvider>
+      </body>
     </html>
   )
 }
