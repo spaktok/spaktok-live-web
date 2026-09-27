@@ -10,15 +10,14 @@ const MAX_FEED_SIZE = 24
 interface VideoRow {
   id: string
   user_id: string
-  video_url: string
+  media_url: string
   thumbnail_url: string | null
-  caption: string | null
-  music_title: string | null
-  music_artist: string | null
-  views_count: number | null
-  likes_count: number | null
-  comments_count: number | null
-  shares_count: number | null
+  description: string | null
+  music: string | null
+  view_count: number | null
+  like_count: number | null
+  comment_count: number | null
+  share_count: number | null
   created_at: string
   profiles: {
     username: string
@@ -48,8 +47,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('videos')
-      .select('id,user_id,video_url,thumbnail_url,caption,music_title,music_artist,views_count,likes_count,comments_count,shares_count,created_at,profiles!videos_user_id_fkey(username,display_name,avatar_url,is_verified)')
-      .eq('is_live', false)
+      .select('id,user_id,media_url,thumbnail_url,description,music,view_count,like_count,comment_count,share_count,created_at,profiles(username,display_name,avatar_url,is_verified)')
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -114,18 +112,18 @@ export async function GET(request: NextRequest) {
           createdAt: new Date(row.created_at),
           isFollowing: followedIds.has(row.user_id),
         },
-        videoUrl: row.video_url,
-        thumbnailUrl: row.thumbnail_url || '',
-        caption: row.caption || '',
-        music: row.music_title ? {
-          name: row.music_title,
-          artist: row.music_artist || '',
+        videoUrl: row.media_url,
+        thumbnailUrl: row.thumbnail_url || row.media_url,
+        caption: row.description || '',
+        music: row.music ? {
+          name: row.music,
+          artist: '',
           coverUrl: '',
         } : undefined,
-        likes: Number(row.likes_count ?? 0),
-        comments: Number(row.comments_count ?? 0),
-        shares: Number(row.shares_count ?? 0),
-        views: Number(row.views_count ?? 0),
+        likes: Number(row.like_count ?? 0),
+        comments: Number(row.comment_count ?? 0),
+        shares: Number(row.share_count ?? 0),
+        views: Number(row.view_count ?? 0),
         isLiked: likedIds.has(row.id),
         isBookmarked: bookmarkedIds.has(row.id),
         tags: [],

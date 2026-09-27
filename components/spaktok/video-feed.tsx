@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { VideoCard } from './video-card'
-import { mockVideos } from '@/lib/mock-data'
 import type { Video } from '@/lib/types'
 
 interface VideoFeedProps {
@@ -13,8 +12,9 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
   const [activeIndex, setActiveIndex] = useState(0)
   const [preloadNext, setPreloadNext] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [videos, setVideos] = useState<Video[]>(mockVideos)
-  const [isDemoFeed, setIsDemoFeed] = useState(true)
+  const [videos, setVideos] = useState<Video[]>([])
+  const [isFeedLoading, setIsFeedLoading] = useState(true)
+  const [feedError, setFeedError] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -24,14 +24,16 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
         return response.json() as Promise<{ videos?: Video[] }>
       })
       .then((payload) => {
-        if (Array.isArray(payload.videos)) {
-          setVideos(payload.videos)
-          setActiveIndex(0)
-          setIsDemoFeed(false)
-        }
+        if (!Array.isArray(payload.videos)) throw new Error('invalid_feed')
+        setVideos(payload.videos)
+        setActiveIndex(0)
+        setFeedError(false)
       })
       .catch(() => {
-        if (!controller.signal.aborted) setIsDemoFeed(true)
+        if (!controller.signal.aborted) setFeedError(true)
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsFeedLoading(false)
       })
     return () => controller.abort()
   }, [])
@@ -68,7 +70,6 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
   }, [updateActiveIndex])
 
   const handleLike = async (videoId: string, liked: boolean) => {
-    if (isDemoFeed) return true
     try {
       const response = await fetch('/api/feed', {
         method: 'POST',
@@ -81,7 +82,6 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
     }
   }
   const handleBookmark = async (videoId: string, bookmarked: boolean) => {
-    if (isDemoFeed) return true
     try {
       const response = await fetch('/api/bookmarks', {
         method: 'POST',
@@ -94,7 +94,6 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
     }
   }
   const handleFollow = async (userId: string, following: boolean) => {
-    if (isDemoFeed) return true
     try {
       const response = await fetch('/api/follows', {
         method: 'POST',
@@ -115,14 +114,15 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
       className="h-full w-full overflow-y-scroll snap-y snap-mandatory overscroll-contain scrollbar-hide"
       aria-label="موجز الريلز"
     >
-      {isDemoFeed && (
-        <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-full bg-black/45 px-2.5 py-1 text-[10px] text-white/75 backdrop-blur-sm" role="status">
-          عرض تجريبي
+      {isFeedLoading && (
+        <div className="flex h-full items-center justify-center px-8 text-center text-sm text-white/70" dir="rtl" role="status">
+          جارٍ تحميل الخلاصة...
         </div>
       )}
-      {videos.length === 0 && (
-        <div className="flex h-full items-center justify-center px-8 text-center text-sm text-white/70" dir="rtl">
-          لا توجد ريلز منشورة بعد. كن أول من يشارك فيديو.
+      {!isFeedLoading && videos.length === 0 && (
+        <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center text-sm text-white/70" dir="rtl" role="status">
+          <span>{feedError ? 'تعذر تحميل الخلاصة حالياً.' : 'لا توجد ريلز منشورة بعد.'}</span>
+          <span className="text-xs text-white/45">{feedError ? 'تحقق من الاتصال وحاول مجدداً.' : 'كن أول من يشارك فيديو.'}</span>
         </div>
       )}
       {videos.map((video, index) => {
