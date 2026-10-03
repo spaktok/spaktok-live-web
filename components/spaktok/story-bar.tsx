@@ -1,15 +1,16 @@
 'use client'
 
 import { Plus } from 'lucide-react'
-import { mockStories } from '@/lib/mock-data'
+import type { Story } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface StoryBarProps {
+  stories: Story[]
   onStoryClick: (storyId: string) => void
   onAddStory: () => void
 }
 
-export function StoryBar({ onStoryClick, onAddStory }: StoryBarProps) {
+export function StoryBar({ stories, onStoryClick, onAddStory }: StoryBarProps) {
   return (
     <div className="flex gap-3 px-4 py-3 overflow-x-auto scrollbar-hide">
       {/* Add Story Button */}
@@ -29,7 +30,7 @@ export function StoryBar({ onStoryClick, onAddStory }: StoryBarProps) {
       </button>
 
       {/* Stories */}
-      {mockStories.map((story, index) => (
+      {stories.map((story, index) => (
         <button
           key={story.id}
           onClick={() => onStoryClick(story.id)}

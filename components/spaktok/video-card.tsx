@@ -14,26 +14,70 @@ interface VideoCardProps {
   shouldPrecache?: boolean
   onProgress?: (ratio: number) => void
   onUserClick: (userId: string) => void
-  onLike: (videoId: string) => void
+  onLike: (videoId: string, liked: boolean) => Promise<boolean> | boolean
+  onBookmark: (videoId: string, bookmarked: boolean) => Promise<boolean> | boolean
+  onFollow: (userId: string, following: boolean) => Promise<boolean> | boolean
   onComment: (videoId: string) => void
   onShare: (videoId: string) => void
 }
 
-export function VideoCard({ video, isActive, shouldPrecache = false, onProgress, onUserClick, onLike, onComment, onShare }: VideoCardProps) {
+interface VideoComment {
+  id: string
+  content: string
+  createdAt?: string
+  user: { displayName: string; avatarUrl?: string | null }
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+export function VideoCard({ video, isActive, shouldPrecache = false, onProgress, onUserClick, onLike, onBookmark, onFollow, onComment, onShare }: VideoCardProps) {
   const [isLiked, setIsLiked] = useState(video.isLiked)
   const [isBookmarked, setIsBookmarked] = useState(video.isBookmarked)
+  const [isFollowing, setIsFollowing] = useState(video.user.isFollowing)
   const [isMuted, setIsMuted] = useState(true)
   const [isPlaying, setIsPlaying] = useState(false)
   const [showHearts, setShowHearts] = useState<{ id: number; x: number; y: number }[]>([])
   const [showComments, setShowComments] = useState(false)
   const [commentText, setCommentText] = useState('')
-  const [comments, setComments] = useState(['محتوى رهيب!', 'أحببت الفكرة، استمر', 'أين تم تصوير هذا؟'])
+  const [comments, setComments] = useState<VideoComment[]>([])
+  const [commentsLoading, setCommentsLoading] = useState(false)
+  const [commentsError, setCommentsError] = useState<string | null>(null)
+  const [commentSubmitting, setCommentSubmitting] = useState(false)
   const [progress, setProgress] = useState(0)
   const [isDownloading, setIsDownloading] = useState(false)
   const [shareStatus, setShareStatus] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTapRef = useRef<number>(0)
+
+  useEffect(() => {
+    if (!showComments) return
+    if (!UUID.test(video.id)) {
+      setComments([
+        { id: 'demo-1', content: 'محتوى رهيب!', user: { displayName: video.user.displayName, avatarUrl: video.user.avatar } },
+        { id: 'demo-2', content: 'أحببت الفكرة، استمر', user: { displayName: video.user.displayName, avatarUrl: video.user.avatar } },
+        { id: 'demo-3', content: 'أين تم تصوير هذا؟', user: { displayName: video.user.displayName, avatarUrl: video.user.avatar } },
+      ])
+      return
+    }
+
+    const controller = new AbortController()
+    setCommentsLoading(true)
+    setCommentsError(null)
+    fetch(`/api/comments?videoId=${encodeURIComponent(video.id)}`, { cache: 'no-store', signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('comments_unavailable')
+        return response.json() as Promise<{ comments?: VideoComment[] }>
+      })
+      .then((payload) => setComments(Array.isArray(payload.comments) ? payload.comments : []))
+      .catch(() => {
+        if (!controller.signal.aborted) setCommentsError('تعذر تحميل التعليقات. حاول مجددًا.')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCommentsLoading(false)
+      })
+    return () => controller.abort()
+  }, [showComments, video.id, video.user.avatar, video.user.displayName])
 
   useEffect(() => {
     if (videoRef.current) {
@@ -70,10 +114,16 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
     }, 220)
   }
 
+  const setLiked = async (nextLiked: boolean) => {
+    const previousLiked = isLiked
+    setIsLiked(nextLiked)
+    const saved = await onLike(video.id, nextLiked)
+    if (!saved) setIsLiked(previousLiked)
+  }
+
   const spawnHeart = (clientX: number, clientY: number, target: HTMLElement) => {
     if (!isLiked) {
-      setIsLiked(true)
-      onLike(video.id)
+      void setLiked(true)
     }
     const bounds = target.getBoundingClientRect()
     const heart = { id: Date.now(), x: clientX - bounds.left, y: clientY - bounds.top }
@@ -108,8 +158,29 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
   }
 
   const handleLike = () => {
-    setIsLiked(!isLiked)
-    onLike(video.id)
+    void setLiked(!isLiked)
+  }
+
+  const toggleBookmark = async () => {
+    const previous = isBookmarked
+    const next = !previous
+    setIsBookmarked(next)
+    if (!(await onBookmark(video.id, next))) {
+      setIsBookmarked(previous)
+      setShareStatus('سجّل الدخول لحفظ الفيديو')
+      window.setTimeout(() => setShareStatus(null), 2200)
+    }
+  }
+
+  const toggleFollow = async () => {
+    const previous = Boolean(isFollowing)
+    const next = !previous
+    setIsFollowing(next)
+    if (!(await onFollow(video.user.id, next))) {
+      setIsFollowing(previous)
+      setShareStatus('سجّل الدخول لمتابعة الحساب')
+      window.setTimeout(() => setShareStatus(null), 2200)
+    }
   }
 
   return (
@@ -158,42 +229,26 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
         <div className="progress-gradient h-full transition-[width] duration-300" style={{ width: `${progress}%` }} />
       </div>
 
-      {/* Top Bar */}
-      <div className="absolute top-0 left-0 right-0 p-4 safe-top flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-white/90">لك</span>
-          <span className="text-white/30">|</span>
-          <span className="text-sm text-white/50">متابعين</span>
-        </div>
-        <button
-          onClick={() => setIsMuted(!isMuted)}
-          className="w-9 h-9 rounded-full glass flex items-center justify-center press-effect"
-        >
-          {isMuted ? (
-            <VolumeX className="w-4 h-4 text-white" />
-          ) : (
-            <Volume2 className="w-4 h-4 text-white" />
-          )}
-        </button>
-      </div>
-
       {/* Right Actions */}
       <div className="absolute right-3 bottom-32 flex flex-col items-center gap-5">
-        {/* User Avatar */}
         <button
-          onClick={() => onUserClick(video.user.id)}
-          className="relative press-effect"
+          type="button"
+          onClick={() => setIsMuted((muted) => !muted)}
+          aria-label={isMuted ? 'تشغيل صوت الفيديو' : 'كتم صوت الفيديو'}
+          className="flex h-12 w-12 items-center justify-center rounded-full glass press-effect"
         >
-          <img
-            src={video.user.avatar || "/placeholder.svg"}
-            alt={video.user.displayName}
-            className="w-12 h-12 rounded-full border-2 border-white object-cover"
-            crossOrigin="anonymous"
-          />
-          <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-[#3155ff] flex items-center justify-center border-2 border-black">
-            <span className="text-white text-xs font-bold">+</span>
-          </div>
+          {isMuted ? <VolumeX className="h-5 w-5 text-white" /> : <Volume2 className="h-5 w-5 text-white" />}
         </button>
+
+        {/* User Avatar */}
+        <div className="relative">
+          <button onClick={() => onUserClick(video.user.id)} className="relative press-effect" aria-label={`الملف الشخصي ${video.user.displayName}`}>
+            <img src={video.user.avatar || "/placeholder.svg"} alt={video.user.displayName} className="w-12 h-12 rounded-full border-2 border-white object-cover" crossOrigin="anonymous" />
+          </button>
+          <button type="button" onClick={() => void toggleFollow()} aria-label={isFollowing ? 'إلغاء المتابعة' : 'متابعة الحساب'} className="absolute -bottom-1.5 left-1/2 flex size-6 -translate-x-1/2 items-center justify-center rounded-full border-2 border-black bg-[#3155ff] text-xs font-bold text-white">
+            {isFollowing ? '✓' : '+'}
+          </button>
+        </div>
 
         {/* Like */}
         <button onClick={handleLike} className="flex flex-col items-center gap-1 press-effect">
@@ -246,8 +301,9 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
         {shareStatus && <span className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-black">{shareStatus}</span>}
 
         {/* Bookmark */}
-        <button 
-          onClick={() => setIsBookmarked(!isBookmarked)} 
+        <button
+          onClick={() => void toggleBookmark()}
+          aria-label={isBookmarked ? 'إزالة من المحفوظات' : 'حفظ الفيديو'}
           className="flex flex-col items-center gap-1 press-effect"
         >
           <div className={cn(
@@ -353,24 +409,56 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
               </button>
             </div>
             <div className="flex max-h-48 flex-col gap-3 overflow-y-auto">
+              {commentsLoading && <p className="text-center text-xs text-white/55">جارٍ تحميل التعليقات…</p>}
+              {commentsError && <p className="text-center text-xs text-red-200" role="alert">{commentsError}</p>}
+              {!commentsLoading && !commentsError && comments.length === 0 && <p className="text-center text-xs text-white/50">لا توجد تعليقات بعد.</p>}
               {comments.map((comment) => (
-                <div key={comment} className="flex items-center gap-3 text-right">
-                  <img src={video.user.avatar || '/placeholder-user.jpg'} alt="" className="size-8 rounded-full object-cover" />
-                  <p className="text-sm text-white/85">{comment}</p>
+                <div key={comment.id} className="flex items-center gap-3 text-right">
+                  <img src={comment.user.avatarUrl || '/placeholder-user.jpg'} alt="" className="size-8 rounded-full object-cover" />
+                  <div className="min-w-0">
+                    <p className="text-[10px] text-white/45">{comment.user.displayName}</p>
+                    <p className="text-sm text-white/85">{comment.content}</p>
+                  </div>
                 </div>
               ))}
             </div>
             <form
               className="glass-light mt-4 flex items-center gap-2 rounded-full px-4 py-2"
-              onSubmit={(event) => {
+              onSubmit={async (event) => {
                 event.preventDefault()
-                if (!commentText.trim()) return
-                setComments((current) => [...current, commentText.trim()])
-                setCommentText('')
+                const content = commentText.trim()
+                if (!content || commentSubmitting) return
+                if (content.length > 500) {
+                  setCommentsError('الحد الأقصى للتعليق 500 حرف.')
+                  return
+                }
+                if (!UUID.test(video.id)) {
+                  setComments((current) => [...current, { id: `demo-${Date.now()}`, content, user: { displayName: 'أنت' } }])
+                  setCommentText('')
+                  return
+                }
+                setCommentSubmitting(true)
+                setCommentsError(null)
+                try {
+                  const response = await fetch('/api/comments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ videoId: video.id, content }),
+                  })
+                  if (response.status === 401) throw new Error('سجّل الدخول لإضافة تعليق.')
+                  if (!response.ok) throw new Error('تعذر إرسال التعليق. حاول مجددًا.')
+                  const payload = await response.json() as { comment: VideoComment }
+                  setComments((current) => [...current, payload.comment])
+                  setCommentText('')
+                } catch (error) {
+                  setCommentsError(error instanceof Error ? error.message : 'تعذر إرسال التعليق.')
+                } finally {
+                  setCommentSubmitting(false)
+                }
               }}
             >
-              <input value={commentText} onChange={(event) => setCommentText(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/35" placeholder="أضف تعليقاً..." aria-label="أضف تعليقاً" />
-              <button type="submit" className="text-[#ffffff] press-effect" aria-label="إرسال التعليق"><Send className="size-4" /></button>
+              <input value={commentText} maxLength={500} onChange={(event) => setCommentText(event.target.value)} className="min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/35" placeholder="أضف تعليقاً..." aria-label="أضف تعليقاً" />
+              <button type="submit" disabled={commentSubmitting || !commentText.trim()} className="text-[#ffffff] press-effect disabled:opacity-40" aria-label="إرسال التعليق"><Send className="size-4" /></button>
             </form>
           </div>
         </div>

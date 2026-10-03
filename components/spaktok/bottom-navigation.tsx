@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, Compass, Plus, MessageCircle, User } from 'lucide-react'
+import { Home, Compass, BookOpen, Plus, MessageCircle, User } from 'lucide-react'
 import type { TabType } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -12,9 +12,10 @@ interface BottomNavigationProps {
 const tabs = [
   { id: 'home' as TabType, icon: Home, label: 'الرئيسية' },
   { id: 'discover' as TabType, icon: Compass, label: 'اكتشف' },
+  { id: 'stories' as TabType, icon: BookOpen, label: 'القصص' },
   { id: 'create' as TabType, icon: Plus, label: 'إنشاء', isCreate: true },
   { id: 'chat' as TabType, icon: MessageCircle, label: 'المحادثات' },
-  { id: 'profile' as TabType, icon: User, label: 'الملف الشخصي' },
+  { id: 'profile' as TabType, icon: User, label: 'حسابي' },
 ]
 
 export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationProps) {
@@ -49,7 +50,7 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
                 aria-label={tab.label}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
-                  "flex min-w-[3.5rem] flex-col items-center gap-1 px-2 py-2 rounded-xl transition-all press-effect",
+                  "flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2 rounded-xl transition-all press-effect",
                   isActive ? "bg-white/[0.08] text-white" : "text-white/50 hover:bg-white/[0.05] hover:text-white/80"
                 )}
               >
@@ -71,7 +72,7 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
                   )}
                 </div>
                 <span className={cn(
-                  "text-[10px] font-medium",
+                  "whitespace-nowrap text-[9px] font-medium",
                   isActive && "text-glow-cyan"
                 )}>
                   {tab.label}

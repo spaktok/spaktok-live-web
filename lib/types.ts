@@ -14,6 +14,7 @@ export interface User {
   level?: number
   xp?: number
   isVerified: boolean
+  isFollowing?: boolean
   isLive?: boolean
   isPremium?: boolean
   badges?: Badge[]
@@ -574,7 +575,7 @@ export interface AchievementReward {
 }
 
 // Navigation Types
-export type TabType = 'home' | 'discover' | 'create' | 'chat' | 'profile'
+export type TabType = 'home' | 'discover' | 'stories' | 'create' | 'chat' | 'profile'
 export type FeedType = 'forYou' | 'following' | 'live' | 'friends'
 export type CreateType = 'video' | 'photo' | 'spak' | 'live' | 'story'
 export type DiscoverType = 'trending' | 'hashtags' | 'sounds' | 'effects' | 'live' | 'shop'
