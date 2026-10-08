@@ -1,0 +1,240 @@
+'use client'
+
+import { useState } from 'react'
+import { Check, Loader2, RotateCcw, Sparkles, Wand2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import {
+  beautySliders,
+  colorSliders,
+  createStudioState,
+  filterPresets,
+  neutralBeauty,
+  neutralColor,
+  type PresetCategory,
+  type StudioState,
+} from '@/lib/filter-engine/params'
+import { useStudioStrings } from '@/lib/filter-engine/strings'
+
+export type StudioTab = 'filters' | 'adjust' | 'beauty' | 'effects' | 'ai'
+
+interface StudioPanelProps {
+  state: StudioState
+  onChange: (next: StudioState) => void
+  captureFrame: () => string | null
+  tabs?: StudioTab[]
+}
+
+const categories: PresetCategory[] = ['trending', 'portrait', 'film', 'vibe', 'mono']
+
+function Slider({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+  const display = Math.round(value * 100)
+  const bipolar = min < 0
+  const percent = ((value - min) / (max - min)) * 100
+  const origin = bipolar ? 50 : 0
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="flex items-center justify-between text-xs text-white/70">
+        <span>{label}</span>
+        <span className="tabular-nums text-white">{bipolar && display > 0 ? `+${display}` : display}</span>
+      </span>
+      <span className="relative flex h-6 items-center">
+        <span className="absolute inset-x-0 h-1 rounded-full bg-white/15" />
+        <span
+          className="absolute h-1 rounded-full bg-[#3155ff]"
+          style={{ left: `${Math.min(origin, percent)}%`, width: `${Math.abs(percent - origin)}%` }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={0.01}
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+          onDoubleClick={() => onChange(bipolar ? 0 : min)}
+          className="studio-range relative w-full"
+          aria-label={label}
+        />
+      </span>
+    </label>
+  )
+}
+
+export function StudioPanel({ state, onChange, captureFrame, tabs = ['filters', 'adjust', 'beauty', 'effects', 'ai'] }: StudioPanelProps) {
+  const { s, language } = useStudioStrings()
+  const [tab, setTab] = useState<StudioTab>(tabs[0])
+  const [category, setCategory] = useState<PresetCategory>('trending')
+  const [prompt, setPrompt] = useState('')
+  const [aiState, setAiState] = useState<'idle' | 'working' | 'error'>('idle')
+  const [aiSummary, setAiSummary] = useState<string | null>(null)
+
+  const runAi = async (request?: string) => {
+    const image = captureFrame()
+    if (!image) return
+    setAiState('working')
+    setAiSummary(null)
+    try {
+      const response = await fetch('/api/ai/filter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image, prompt: request || undefined, locale: language }),
+      })
+      if (!response.ok) throw new Error('ai-failed')
+      const grade = await response.json()
+      onChange({
+        presetId: grade.presetId,
+        intensity: grade.intensity,
+        color: { ...neutralColor, ...grade.color },
+        beauty: { ...neutralBeauty, ...grade.beauty },
+        effects: { backgroundBlur: grade.backgroundBlur },
+      })
+      setAiSummary(grade.summary)
+      setAiState('idle')
+    } catch {
+      setAiState('error')
+    }
+  }
+
+  const visiblePresets = filterPresets.filter((preset) => preset.id === 'original' || preset.category === category)
+
+  return (
+    <div className="flex flex-col gap-3 rounded-t-3xl bg-black/75 pb-3 pt-3 backdrop-blur-xl">
+      <div className="min-h-32 px-4">
+        {tab === 'filters' && (
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-4 overflow-x-auto scrollbar-hide">
+              {categories.map((value) => (
+                <button
+                  key={value}
+                  onClick={() => setCategory(value)}
+                  className={cn('shrink-0 text-xs font-semibold transition-colors', category === value ? 'text-white' : 'text-white/45')}
+                  aria-pressed={category === value}
+                >
+                  {s(value)}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+              {visiblePresets.map((preset) => {
+                const active = state.presetId === preset.id
+                return (
+                  <button
+                    key={preset.id}
+                    onClick={() => onChange({ ...state, presetId: preset.id, intensity: active ? state.intensity : 1 })}
+                    className="flex shrink-0 flex-col items-center gap-1.5"
+                    aria-pressed={active}
+                  >
+                    <span
+                      className={cn('relative flex h-14 w-14 items-center justify-center rounded-2xl border-2 transition-all', active ? 'border-white' : 'border-transparent')}
+                      style={{ backgroundColor: preset.swatch }}
+                    >
+                      {active && <Check className="h-5 w-5 text-white drop-shadow" />}
+                    </span>
+                    <span className={cn('text-[11px]', active ? 'text-white' : 'text-white/60')}>{preset.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+            {state.presetId !== 'original' && (
+              <Slider label={s('intensity')} value={state.intensity} min={0} max={1} onChange={(intensity) => onChange({ ...state, intensity })} />
+            )}
+          </div>
+        )}
+
+        {tab === 'adjust' && (
+          <div className="grid max-h-44 grid-cols-1 gap-3 overflow-y-auto pe-1 sm:grid-cols-2">
+            {colorSliders.map(({ key, min, max }) => (
+              <Slider
+                key={key}
+                label={s(key)}
+                value={state.color[key]}
+                min={min}
+                max={max}
+                onChange={(value) => onChange({ ...state, color: { ...state.color, [key]: value } })}
+              />
+            ))}
+          </div>
+        )}
+
+        {tab === 'beauty' && (
+          <div className="grid max-h-44 grid-cols-1 gap-3 overflow-y-auto pe-1 sm:grid-cols-2">
+            {beautySliders.map((key) => (
+              <Slider
+                key={key}
+                label={s(key)}
+                value={state.beauty[key]}
+                min={0}
+                max={1}
+                onChange={(value) => onChange({ ...state, beauty: { ...state.beauty, [key]: value } })}
+              />
+            ))}
+          </div>
+        )}
+
+        {tab === 'effects' && (
+          <div className="flex flex-col gap-3">
+            <Slider
+              label={s('backgroundBlur')}
+              value={state.effects.backgroundBlur}
+              min={0}
+              max={1}
+              onChange={(backgroundBlur) => onChange({ ...state, effects: { ...state.effects, backgroundBlur } })}
+            />
+          </div>
+        )}
+
+        {tab === 'ai' && (
+          <div className="flex flex-col gap-3">
+            <p className="text-pretty text-xs leading-relaxed text-white/60">{aiSummary || s('aiHint')}</p>
+            <button
+              onClick={() => runAi()}
+              disabled={aiState === 'working'}
+              className="flex items-center justify-center gap-2 rounded-full bg-[#3155ff] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {aiState === 'working' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+              {aiState === 'working' ? s('aiWorking') : s('autoEnhance')}
+            </button>
+            <form
+              className="flex items-center gap-2 rounded-full bg-white/10 ps-4"
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (prompt.trim()) runAi(prompt.trim())
+              }}
+            >
+              <input
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder={s('aiPlaceholder')}
+                className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-white outline-none placeholder:text-white/40"
+                aria-label={s('aiPlaceholder')}
+              />
+              <button type="submit" disabled={aiState === 'working' || !prompt.trim()} className="m-1 flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-black disabled:opacity-40">
+                <Sparkles className="h-3.5 w-3.5" />
+                {s('aiApply')}
+              </button>
+            </form>
+            {aiState === 'error' && <p className="text-xs text-[#ff6b6b]" role="alert">{s('aiFailed')}</p>}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1 border-t border-white/10 px-2 pt-2">
+        <div className="flex flex-1 justify-around">
+          {tabs.map((value) => (
+            <button
+              key={value}
+              onClick={() => setTab(value)}
+              className={cn('flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors', tab === value ? 'bg-white text-black' : 'text-white/60')}
+              aria-pressed={tab === value}
+            >
+              {value === 'ai' && <Sparkles className="h-3.5 w-3.5" />}
+              {s(value)}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => onChange(createStudioState())} className="flex h-8 w-8 items-center justify-center rounded-full text-white/60" aria-label={s('reset')}>
+          <RotateCcw className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
