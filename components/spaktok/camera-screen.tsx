@@ -1,355 +1,326 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { X, Zap, RotateCcw, Settings, Sparkles, Music2, Clock, Type, Sticker, Wand2, Camera, Layers, Check, Download, Send } from 'lucide-react'
-import { cameraFilters, getFilterById, captureFilteredFrame, type CameraFilterCategory } from '@/lib/camera-filters'
+import { useEffect, useRef, useState } from 'react'
+import { Camera, Download, Radio, RefreshCw, Send, SlidersHorizontal, Timer, X, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { createStudioState } from '@/lib/filter-engine/params'
+import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
+import { useStudioStrings } from '@/lib/filter-engine/strings'
+import { StudioPanel } from './studio/studio-panel'
 
 interface CameraScreenProps {
   onClose: () => void
+  initialMode?: CaptureMode
 }
 
-type RecordingMode = 'photo' | '15s' | '60s' | 'story'
+type CaptureMode = 'photo' | '15s' | '60s' | 'story' | 'live'
 
-export function CameraScreen({ onClose }: CameraScreenProps) {
-  const [isFlashOn, setIsFlashOn] = useState(false)
-  const [isFrontCamera, setIsFrontCamera] = useState(true)
-  const [selectedFilter, setSelectedFilter] = useState<string>('none')
-  const [recordingMode, setRecordingMode] = useState<RecordingMode>('photo')
-  const [isRecording, setIsRecording] = useState(false)
-  const [showFilters, setShowFilters] = useState(true)
-  const [recordingProgress, setRecordingProgress] = useState(0)
-  const [cameraReady, setCameraReady] = useState(false)
-  const [cameraError, setCameraError] = useState<string | null>(null)
-  const [capturedImage, setCapturedImage] = useState<string | null>(null)
-  const [activeTool, setActiveTool] = useState<string | null>(null)
-  const [filterCategory, setFilterCategory] = useState<CameraFilterCategory>('all')
+const durations: Partial<Record<CaptureMode, number>> = { '15s': 15, '60s': 60, story: 15 }
 
-  const selectTool = (tool: string) => {
-    setActiveTool((current) => (current === tool ? null : tool))
-  }
+type Captured = { kind: 'photo'; url: string } | { kind: 'video'; url: string; blob: Blob }
 
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenProps) {
+  const { s } = useStudioStrings()
+  const [studio, setStudio] = useState(() => createStudioState())
+  const [mode, setMode] = useState<CaptureMode>(initialMode)
+  const [showPanel, setShowPanel] = useState(true)
+  const [timerSeconds, setTimerSeconds] = useState<0 | 3 | 10>(0)
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const [progress, setProgress] = useState(0)
+  const [captured, setCaptured] = useState<Captured | null>(null)
+  const [isLive, setIsLive] = useState(false)
+  const [liveSeconds, setLiveSeconds] = useState(0)
+  const [liveTitle, setLiveTitle] = useState('')
 
-  const activeFilter = getFilterById(selectedFilter)
+  const camera = useCameraStudio({ state: studio, audio: mode !== 'photo' })
+  const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    const startCamera = async () => {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setCameraError('المتصفح لا يدعم الكاميرا')
-        return
-      }
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 1080 }, height: { ideal: 1920 } },
-          audio: false,
-        })
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop())
-          return
-        }
-        streamRef.current = stream
-        if (videoRef.current) videoRef.current.srcObject = stream
-        setCameraReady(true)
-      } catch {
-        setCameraError('اسمح بالوصول إلى الكاميرا لبدء التصوير')
-      }
-    }
-    startCamera()
-    return () => {
-      cancelled = true
-      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
-      streamRef.current?.getTracks().forEach((track) => track.stop())
-    }
+  useEffect(() => () => {
+    if (progressRef.current) clearInterval(progressRef.current)
   }, [])
 
-  const toggleCamera = async () => {
-    const track = streamRef.current?.getVideoTracks()[0]
-    if (!track) return
-    try {
-      await track.applyConstraints({ facingMode: isFrontCamera ? 'environment' : 'user' })
-      setIsFrontCamera((value) => !value)
-    } catch {
-      setCameraError('تعذر تبديل الكاميرا')
-    }
+  useEffect(() => {
+    if (!isLive) return
+    const id = setInterval(() => setLiveSeconds((value) => value + 1), 1000)
+    return () => clearInterval(id)
+  }, [isLive])
+
+  useEffect(() => () => {
+    if (captured) URL.revokeObjectURL(captured.url)
+  }, [captured])
+
+  const finishRecording = async () => {
+    if (progressRef.current) clearInterval(progressRef.current)
+    progressRef.current = null
+    setProgress(0)
+    const blob = await camera.stopRecording()
+    if (blob) setCaptured({ kind: 'video', url: URL.createObjectURL(blob), blob })
   }
 
-  const modes: { id: RecordingMode; label: string }[] = [
-    { id: 'photo', label: 'صورة' },
-    { id: '15s', label: '15 ثانية' },
-    { id: '60s', label: '60 ثانية' },
-    { id: 'story', label: 'ستوري' },
-  ]
-
-  const capturePhoto = () => {
-    if (!videoRef.current || !cameraReady) return
-    // Burn the selected GPU filter into the frame, fully client-side.
-    const dataUrl = captureFilteredFrame(videoRef.current, activeFilter, isFrontCamera)
-    if (dataUrl) setCapturedImage(dataUrl)
-  }
-
-  const handleRecord = () => {
-    if (recordingMode === 'photo') {
-      capturePhoto()
+  const beginCapture = () => {
+    if (mode === 'photo') {
+      const url = camera.capturePhoto()
+      if (url) setCaptured({ kind: 'photo', url })
       return
     }
-    setIsRecording((prev) => !prev)
-    if (!isRecording) {
-      const duration = recordingMode === '15s' ? 15 : recordingMode === '60s' ? 60 : 30
-      let progress = 0
-      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
-      recordingTimerRef.current = setInterval(() => {
-        progress += 100 / (duration * 10)
-        setRecordingProgress(Math.min(progress, 100))
-        if (progress >= 100) {
-          if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
-          recordingTimerRef.current = null
-          setIsRecording(false)
-          setRecordingProgress(0)
-          capturePhoto()
-        }
-      }, 100)
-    } else {
-      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current)
-      recordingTimerRef.current = null
-      setRecordingProgress(0)
+    if (mode === 'live') {
+      setIsLive(true)
+      setLiveSeconds(0)
+      setShowPanel(false)
+      return
     }
+    if (!camera.startRecording()) return
+    const total = (durations[mode] ?? 15) * 1000
+    const startedAt = performance.now()
+    progressRef.current = setInterval(() => {
+      const value = Math.min(1, (performance.now() - startedAt) / total)
+      setProgress(value)
+      if (value >= 1) finishRecording()
+    }, 50)
   }
 
-  // Captured-media review state: preview the flattened result and confirm.
-  if (capturedImage) {
-    return (
-      <div className="fixed inset-0 z-50 bg-black">
-        <img src={capturedImage || "/placeholder.svg"} alt="المعاينة الملتقطة" className="absolute inset-0 h-full w-full object-cover" />
-        <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/80 to-transparent" />
-        <div className="absolute top-0 left-0 right-0 p-4 safe-top">
-          <button onClick={() => setCapturedImage(null)} className="w-10 h-10 rounded-full glass flex items-center justify-center press-effect">
-            <X className="w-5 h-5 text-white" />
-          </button>
-        </div>
-        <div className="absolute bottom-0 left-0 right-0 p-6 safe-bottom flex items-center justify-between gap-4">
-          <a
-            href={capturedImage}
-            download={`nexa-${Date.now()}.jpg`}
-            className="flex items-center gap-2 rounded-full glass px-5 py-3 text-sm font-semibold text-white press-effect"
-          >
-            <Download className="w-5 h-5" />
-            حفظ
-          </a>
-          <button
-            onClick={onClose}
-            className="flex items-center gap-2 rounded-full bg-gradient-to-r from-[#ffffff] to-[#ffffff] px-6 py-3 text-sm font-bold text-white neon-cyan press-effect"
-          >
-            <Send className="w-5 h-5" />
-            نشر
-          </button>
-        </div>
-      </div>
-    )
+  const handleShutter = () => {
+    if (camera.status !== 'ready' || countdown !== null) return
+    if (camera.recording) {
+      finishRecording()
+      return
+    }
+    if (!timerSeconds || mode === 'live') {
+      beginCapture()
+      return
+    }
+    let remaining = timerSeconds
+    setCountdown(remaining)
+    const id = setInterval(() => {
+      remaining -= 1
+      if (remaining <= 0) {
+        clearInterval(id)
+        setCountdown(null)
+        beginCapture()
+      } else setCountdown(remaining)
+    }, 1000)
   }
+
+  const modes: CaptureMode[] = ['photo', '15s', '60s', 'story', 'live']
+  const modeLabel = (value: CaptureMode) =>
+    value === 'photo' ? s('photo') : value === '15s' ? s('video15') : value === '60s' ? s('video60') : value === 'story' ? s('story') : s('live')
+
+  const statusMessage =
+    camera.status === 'denied' ? s('denied') : camera.status === 'unsupported' ? s('unsupported') : camera.status === 'error' ? s('cameraError') : s('starting')
+
+  const visionMessage =
+    camera.vision === 'loading' ? s('loadingAi') : camera.vision === 'no-face' ? s('noFace') : camera.vision === 'unavailable' ? s('visionUnavailable') : null
+
+  const formatTime = (total: number) => `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 
   return (
-    <div className="fixed inset-0 z-50 bg-black">
-      {/* Live camera preview with GPU-accelerated filter */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#1a1a2e] to-[#0a0a14]">
-        <video
-          ref={videoRef}
-          autoPlay
-          muted
-          playsInline
-          className={cn('absolute inset-0 h-full w-full object-cover', isFrontCamera && 'scale-x-[-1]', !cameraReady && 'opacity-0')}
-          style={{ filter: activeFilter.css || undefined }}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
+      <video ref={camera.videoRef} playsInline muted className="pointer-events-none absolute h-px w-px opacity-0" aria-hidden="true" />
+
+      <div className="relative h-full w-full max-w-[min(100vw,calc(100dvh*9/16))] overflow-hidden bg-black">
+        <canvas
+          ref={camera.canvasRef}
+          className={cn('absolute inset-0 h-full w-full object-cover transition-opacity duration-300', camera.status === 'ready' ? 'opacity-100' : 'opacity-0')}
+          aria-label={s('photo')}
         />
-        {activeFilter.id === 'neon-frame' && (
-          <div className="pointer-events-none absolute inset-5 rounded-[2rem] border-2 border-[#f7f5ff] shadow-[0_0_12px_#fff,0_0_32px_#b026ff,0_0_70px_#3155ff]" aria-hidden="true" />
-        )}
-        {activeFilter.overlay && (
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              backgroundColor: activeFilter.overlay.color,
-              mixBlendMode: activeFilter.overlay.blend as React.CSSProperties['mixBlendMode'],
-              opacity: activeFilter.overlay.alpha,
-            }}
-          />
-        )}
-        {!cameraReady && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <Camera className="h-16 w-16 text-white/20" />
-              <p className="max-w-[220px] text-sm text-white/60">{cameraError || 'جارٍ تشغيل الكاميرا...'}</p>
-            </div>
+
+        {camera.status !== 'ready' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
+            <Camera className="h-12 w-12 text-white/30" />
+            <p className="text-sm text-white/70">{statusMessage}</p>
+            {(camera.status === 'denied' || camera.status === 'error') && (
+              <button onClick={camera.retry} className="rounded-full bg-white px-5 py-2 text-sm font-semibold text-black">
+                {s('retry')}
+              </button>
+            )}
           </div>
         )}
-      </div>
 
-      {/* Top Controls */}
-      <div className="absolute top-0 left-0 right-0 p-4 safe-top">
-        <div className="flex items-center justify-between">
-          <button onClick={onClose} className="w-10 h-10 rounded-full glass flex items-center justify-center press-effect">
-            <X className="w-5 h-5 text-white" />
+        {countdown !== null && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+            <span className="text-8xl font-bold tabular-nums text-white" aria-live="assertive">{countdown}</span>
+          </div>
+        )}
+
+        <div className="absolute inset-x-0 top-0 flex items-start justify-between gap-3 p-4 pt-[max(1rem,env(safe-area-inset-top))]">
+          <button onClick={isLive ? () => setIsLive(false) : onClose} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur" aria-label={s('close')}>
+            <X className="h-5 w-5" />
           </button>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsFlashOn(!isFlashOn)}
-              className={cn('w-10 h-10 rounded-full flex items-center justify-center press-effect', isFlashOn ? 'bg-[#FFB800] neon-cyan' : 'glass')}
-            >
-              <Zap className={cn('w-5 h-5', isFlashOn ? 'text-black' : 'text-white')} fill={isFlashOn ? 'currentColor' : 'none'} />
-            </button>
-            <button onClick={() => selectTool('المؤقت')} aria-label="المؤقت" className={cn('w-10 h-10 rounded-full flex items-center justify-center press-effect', activeTool === 'المؤقت' ? 'bg-white text-black' : 'glass')}>
-              <Clock className="w-5 h-5" />
-            </button>
-            <button onClick={() => selectTool('إعدادات الكاميرا')} aria-label="إعدادات الكاميرا" className={cn('w-10 h-10 rounded-full flex items-center justify-center press-effect', activeTool === 'إعدادات الكاميرا' ? 'bg-white text-black' : 'glass')}>
-              <Settings className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      </div>
 
-      {/* Right Side Tools */}
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-4">
-        <button onClick={toggleCamera} className="w-12 h-12 rounded-full glass flex items-center justify-center press-effect">
-          <RotateCcw className="w-6 h-6 text-white" />
-        </button>
-        <button
-          onClick={() => setShowFilters(!showFilters)}
-          className={cn('w-12 h-12 rounded-full flex items-center justify-center press-effect', showFilters ? 'bg-gradient-to-r from-[#ffffff] to-[#ffffff] neon-cyan' : 'glass')}
-        >
-          <Sparkles className="w-6 h-6 text-white" />
-        </button>
-        {[
-          ['الموسيقى', Music2],
-          ['النص', Type],
-          ['الملصقات', Sticker],
-          ['التحسين', Wand2],
-        ].map(([label, ToolIcon]) => {
-          const Icon = ToolIcon as typeof Music2
-          return (
-            <button key={label as string} onClick={() => selectTool(label as string)} aria-label={label as string} className={cn('w-12 h-12 rounded-full flex items-center justify-center press-effect', activeTool === label ? 'bg-white text-black' : 'glass')}>
-              <Icon className="w-6 h-6" />
-            </button>
-          )
-        })}
-      </div>
+          {isLive ? (
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 rounded-md bg-[#ff3b30] px-2 py-1 text-xs font-bold text-white">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+                {s('live')}
+              </span>
+              <span className="rounded-md bg-black/50 px-2 py-1 text-xs tabular-nums text-white">{formatTime(liveSeconds)}</span>
+            </div>
+          ) : camera.recording ? (
+            <span className="flex items-center gap-1.5 rounded-full bg-black/50 px-3 py-1 text-xs font-semibold text-white">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-[#ff3b30]" />
+              {s('recording')}
+            </span>
+          ) : (
+            visionMessage && <span className="rounded-full bg-black/50 px-3 py-1 text-[11px] text-white/80">{visionMessage}</span>
+          )}
 
-      {activeTool && (
-        <div className="absolute right-20 top-1/2 -translate-y-1/2 rounded-xl bg-black/80 px-3 py-2 text-xs text-white" role="status">
-          {activeTool} مفعّل
-        </div>
-      )}
-
-      {/* GPU Filter Carousel */}
-      {showFilters && (
-        <div className="absolute bottom-44 left-0 right-0 animate-slide-up">
-          <div className="px-4 mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-white text-sm font-semibold">فلاتر الكاميرا الذكية</h3>
-            <span className="text-[10px] text-white/50">{cameraFilters.filter((filter) => filterCategory === 'all' || filter.category === filterCategory).length} فلتر</span>
-          </div>
-          <div className="mb-3 flex gap-2 overflow-x-auto px-4 scrollbar-hide">
-            {([
-              ['all', 'الكل'],
-              ['face', 'وجوه'],
-              ['neon', 'نيون'],
-              ['mood', 'مزاج'],
-              ['classic', 'كلاسيك'],
-            ] as const).map(([category, label]) => (
-              <button key={category} onClick={() => setFilterCategory(category)} className={cn('rounded-full px-3 py-1.5 text-[11px] font-semibold press-effect', filterCategory === category ? 'bg-[#3155ff] text-white' : 'bg-white/10 text-white/60')} aria-pressed={filterCategory === category}>{label}</button>
-            ))}
-          </div>
-          <div className="flex gap-3 px-4 overflow-x-auto pb-4 scrollbar-hide">
-            {cameraFilters.filter((filter) => filterCategory === 'all' || filter.category === filterCategory).map((filter) => (
+          <div className="flex flex-col gap-3">
+            {camera.hasMultipleCameras && (
+              <button onClick={camera.flip} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur" aria-label={s('flip')}>
+                <RefreshCw className="h-5 w-5" />
+              </button>
+            )}
+            {camera.torchSupported && (
               <button
-                key={filter.id}
-                onClick={() => setSelectedFilter(filter.id)}
-                className="flex flex-col items-center gap-2 flex-shrink-0 press-effect"
-                aria-pressed={selectedFilter === filter.id}
+                onClick={() => camera.setTorch(!camera.torchOn)}
+                className={cn('flex h-10 w-10 items-center justify-center rounded-full backdrop-blur', camera.torchOn ? 'bg-white text-black' : 'bg-black/40 text-white')}
+                aria-label={s('flash')}
+                aria-pressed={camera.torchOn}
               >
-                <div
-                  className={cn(
-                    'relative w-16 h-16 rounded-xl overflow-hidden border-2',
-                    selectedFilter === filter.id ? 'border-[#ffffff] neon-cyan' : 'border-white/20',
-                  )}
-                >
-                  <div
-                    className="w-full h-full bg-gradient-to-br from-[#ffffff] via-[#ffffff] to-[#3155ff]"
-                    style={{ filter: filter.css || undefined }}
-                  />
-                  {filter.overlay && (
-                    <div
-                      className="absolute inset-0"
-                      style={{
-                        backgroundColor: filter.overlay.color,
-                        mixBlendMode: filter.overlay.blend as React.CSSProperties['mixBlendMode'],
-                        opacity: filter.overlay.alpha,
-                      }}
-                    />
-                  )}
-                  {selectedFilter === filter.id && (
-                    <div className="absolute inset-0 bg-[#ffffff]/20 flex items-center justify-center">
-                      <Check className="w-6 h-6 text-[#ffffff]" />
-                    </div>
-                  )}
-                </div>
-                <span className="text-[10px] text-white/70">{filter.nameAr}</span>
+                <Zap className="h-5 w-5" />
+              </button>
+            )}
+            {!isLive && mode !== 'live' && (
+              <button
+                onClick={() => setTimerSeconds((value) => (value === 0 ? 3 : value === 3 ? 10 : 0))}
+                className={cn('relative flex h-10 w-10 items-center justify-center rounded-full backdrop-blur', timerSeconds ? 'bg-white text-black' : 'bg-black/40 text-white')}
+                aria-label={`${s('timer')} ${timerSeconds || ''}`}
+              >
+                <Timer className="h-5 w-5" />
+                {timerSeconds > 0 && <span className="absolute -bottom-1 -end-1 rounded-full bg-[#3155ff] px-1 text-[9px] font-bold text-white">{timerSeconds}</span>}
+              </button>
+            )}
+            <button
+              onClick={() => setShowPanel((value) => !value)}
+              className={cn('flex h-10 w-10 items-center justify-center rounded-full backdrop-blur', showPanel ? 'bg-white text-black' : 'bg-black/40 text-white')}
+              aria-label={s('filters')}
+              aria-pressed={showPanel}
+            >
+              <SlidersHorizontal className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {camera.zoomRange && !showPanel && (
+          <div className="absolute inset-x-0 bottom-48 flex justify-center gap-2">
+            {[1, 2, 5].filter((value) => value <= (camera.zoomRange?.max ?? 1)).map((value) => (
+              <button
+                key={value}
+                onClick={() => camera.setZoom(value)}
+                className={cn('h-9 w-9 rounded-full text-xs font-semibold', camera.zoom === value ? 'bg-white text-black' : 'bg-black/50 text-white')}
+              >
+                {value}x
               </button>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Bottom Controls */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 safe-bottom">
-        <div className="flex justify-center gap-6 mb-6">
-          {modes.map((mode) => (
-            <button
-              key={mode.id}
-              onClick={() => setRecordingMode(mode.id)}
-              className={cn('text-sm transition-all press-effect', recordingMode === mode.id ? 'text-white font-bold text-glow-cyan' : 'text-white/50')}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex items-center justify-center gap-8">
-          <button className="w-12 h-12 rounded-xl glass overflow-hidden press-effect" aria-label="المعرض">
-            <div className="w-full h-full bg-gradient-to-br from-[#1428d4] to-[#3155ff]" />
-          </button>
-
-          <button onClick={handleRecord} className="relative press-effect" aria-label={recordingMode === 'photo' ? 'التقاط صورة' : 'تسجيل'}>
-            {isRecording && (
-              <svg className="absolute inset-0 w-24 h-24 -rotate-90">
-                <circle cx="48" cy="48" r="44" stroke="rgba(255,255,255,0.2)" strokeWidth="4" fill="none" />
-                <circle
-                  cx="48"
-                  cy="48"
-                  r="44"
-                  stroke="#3155ff"
-                  strokeWidth="4"
-                  fill="none"
-                  strokeDasharray={`${2 * Math.PI * 44}`}
-                  strokeDashoffset={`${2 * Math.PI * 44 * (1 - recordingProgress / 100)}`}
-                  className="transition-all duration-100"
-                />
-              </svg>
-            )}
-            <div className={cn('w-24 h-24 rounded-full border-4 flex items-center justify-center transition-all', isRecording ? 'border-[#3155ff]' : 'border-white')}>
-              <div
-                className={cn(
-                  'transition-all',
-                  recordingMode === 'photo' ? 'w-16 h-16 rounded-full bg-white' : isRecording ? 'w-8 h-8 rounded-lg bg-[#3155ff]' : 'w-16 h-16 rounded-full bg-[#3155ff]',
-                )}
-              />
+        <div className="absolute inset-x-0 bottom-0 flex flex-col pb-[env(safe-area-inset-bottom)]">
+          {isLive ? (
+            <div className="flex flex-col gap-3 bg-gradient-to-t from-black/80 to-transparent p-4">
+              <p className="text-xs text-white/60">{s('noComments')}</p>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setShowPanel((value) => !value)} className="flex-1 rounded-full bg-white/15 py-2.5 text-sm font-semibold text-white">
+                  {s('filters')}
+                </button>
+                <button onClick={() => setIsLive(false)} className="rounded-full bg-[#ff3b30] px-6 py-2.5 text-sm font-bold text-white">
+                  {s('endLive')}
+                </button>
+              </div>
+              {showPanel && <StudioPanel state={studio} onChange={setStudio} captureFrame={camera.captureAnalysisFrame} tabs={['filters', 'beauty', 'ai']} />}
             </div>
-          </button>
+          ) : (
+            <>
+              {showPanel && !camera.recording && <StudioPanel state={studio} onChange={setStudio} captureFrame={camera.captureAnalysisFrame} />}
 
-          <button className="w-12 h-12 rounded-xl glass flex items-center justify-center press-effect" aria-label="التأثيرات">
-            <Layers className="w-6 h-6 text-white" />
-          </button>
+              <div className="flex flex-col gap-4 bg-black/60 px-6 pb-5 pt-4 backdrop-blur-xl">
+                {mode === 'live' && (
+                  <input
+                    value={liveTitle}
+                    onChange={(event) => setLiveTitle(event.target.value)}
+                    placeholder={s('liveTitle')}
+                    maxLength={80}
+                    className="rounded-full bg-white/10 px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40"
+                  />
+                )}
+                <div className="flex items-center justify-between">
+                  <span className="w-12" />
+                  <button
+                    onClick={handleShutter}
+                    disabled={camera.status !== 'ready'}
+                    className="relative flex h-20 w-20 items-center justify-center disabled:opacity-50"
+                    aria-label={mode === 'live' ? s('goLive') : modeLabel(mode)}
+                  >
+                    <svg className="absolute inset-0 -rotate-90" viewBox="0 0 80 80" aria-hidden="true">
+                      <circle cx="40" cy="40" r="37" fill="none" stroke="currentColor" strokeWidth="4" className="text-white/90" />
+                      {camera.recording && (
+                        <circle cx="40" cy="40" r="37" fill="none" stroke="#ff3b30" strokeWidth="4" strokeDasharray={232.5} strokeDashoffset={232.5 * (1 - progress)} />
+                      )}
+                    </svg>
+                    {mode === 'live' ? (
+                      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#ff3b30] text-white">
+                        <Radio className="h-7 w-7" />
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          'transition-all',
+                          mode === 'photo' ? 'h-16 w-16 rounded-full bg-white' : camera.recording ? 'h-7 w-7 rounded-md bg-[#ff3b30]' : 'h-16 w-16 rounded-full bg-[#ff3b30]',
+                        )}
+                      />
+                    )}
+                  </button>
+                  <span className="w-12 text-center text-[10px] text-white/50">
+                    {camera.resolution ? `${Math.max(camera.resolution.width, camera.resolution.height)}p` : ''}
+                  </span>
+                </div>
+                <div className="flex justify-center gap-5 overflow-x-auto scrollbar-hide" role="tablist">
+                  {modes.map((value) => (
+                    <button
+                      key={value}
+                      role="tab"
+                      aria-selected={mode === value}
+                      disabled={camera.recording}
+                      onClick={() => setMode(value)}
+                      className={cn('shrink-0 text-sm font-semibold transition-colors', mode === value ? 'text-white' : 'text-white/45')}
+                    >
+                      {modeLabel(value)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
+
+        {captured && (
+          <div className="absolute inset-0 z-10 bg-black">
+            {captured.kind === 'photo' ? (
+              <img src={captured.url || "/placeholder.svg"} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            ) : (
+              <video src={captured.url} autoPlay loop playsInline controls={false} className="absolute inset-0 h-full w-full object-cover" />
+            )}
+            <div className="absolute inset-x-0 top-0 p-4 pt-[max(1rem,env(safe-area-inset-top))]">
+              <button onClick={() => setCaptured(null)} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white" aria-label={s('retake')}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-4 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+              <a
+                href={captured.url}
+                download={`spaktok-${Date.now()}.${captured.kind === 'photo' ? 'jpg' : captured.blob.type.includes('mp4') ? 'mp4' : 'webm'}`}
+                className="flex items-center gap-2 rounded-full bg-white/15 px-5 py-3 text-sm font-semibold text-white backdrop-blur"
+              >
+                <Download className="h-5 w-5" />
+                {s('save')}
+              </a>
+              <button onClick={onClose} className="flex items-center gap-2 rounded-full bg-[#3155ff] px-6 py-3 text-sm font-bold text-white">
+                <Send className="h-5 w-5" />
+                {s('post')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
