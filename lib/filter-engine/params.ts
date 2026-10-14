@@ -10,6 +10,7 @@ export interface ColorParams {
   hue: number
   fade: number
   sharpen: number
+  clarity: number
   vignette: number
   grain: number
   glow: number
@@ -25,10 +26,32 @@ export interface BeautyParams {
   eyes: number
   jaw: number
   nose: number
+  lipstick: number
+  blush: number
 }
 
+/** Shader codes follow array order — append only, never reorder. */
+export const fxList = ['none', 'rgb-split', 'glitch', 'vhs', 'shake', 'zoom-blur', 'light-leak', 'duotone', 'mirror', 'kaleido', 'fisheye', 'pixel'] as const
+export type FxId = (typeof fxList)[number]
+
+export const backgroundModes = ['none', 'blur', 'splash', 'studio'] as const
+export type BackgroundMode = (typeof backgroundModes)[number]
+
 export interface EffectParams {
+  background: BackgroundMode
+  /** Strength of the background effect (0..1). Named for backwards compatibility. */
   backgroundBlur: number
+  fx: FxId
+  fxAmount: number
+}
+
+export const neutralEffects: EffectParams = { background: 'none', backgroundBlur: 0, fx: 'none', fxAmount: 0.6 }
+
+export const fxCode = (fx: FxId) => Math.max(0, fxList.indexOf(fx))
+export const backgroundCode = (mode: BackgroundMode) => Math.max(0, backgroundModes.indexOf(mode))
+
+export function needsSegmentation(effects: EffectParams) {
+  return effects.background !== 'none' && effects.backgroundBlur > 0
 }
 
 export interface StudioState {
@@ -51,6 +74,7 @@ export const neutralColor: ColorParams = {
   hue: 0,
   fade: 0,
   sharpen: 0,
+  clarity: 0,
   vignette: 0,
   grain: 0,
   glow: 0,
@@ -59,10 +83,11 @@ export const neutralColor: ColorParams = {
   splitAmount: 0,
 }
 
-export const neutralBeauty: BeautyParams = { smooth: 0, whiten: 0, slim: 0, eyes: 0, jaw: 0, nose: 0 }
-export const naturalBeauty: BeautyParams = { smooth: 0.35, whiten: 0.15, slim: 0.15, eyes: 0.15, jaw: 0.1, nose: 0.05 }
+export const neutralBeauty: BeautyParams = { smooth: 0, whiten: 0, slim: 0, eyes: 0, jaw: 0, nose: 0, lipstick: 0, blush: 0 }
+export const naturalBeauty: BeautyParams = { smooth: 0.35, whiten: 0.15, slim: 0.15, eyes: 0.15, jaw: 0.1, nose: 0.05, lipstick: 0, blush: 0 }
 
-export type PresetCategory = 'trending' | 'portrait' | 'film' | 'vibe' | 'mono'
+export type PresetCategory = 'trending' | 'portrait' | 'film' | 'vibe' | 'scene' | 'mono'
+export const presetCategories: PresetCategory[] = ['trending', 'portrait', 'film', 'vibe', 'scene', 'mono']
 
 export interface FilterPreset {
   id: string
@@ -95,6 +120,11 @@ export const filterPresets: FilterPreset[] = [
   { id: 'cyber', name: 'Cyber', category: 'vibe', color: { contrast: 0.3, saturation: 0.2, temperature: -0.35, tint: 0.2, glow: 0.3, vignette: 0.25 }, swatch: '#00d4ff' },
   { id: 'sunset', name: 'Sunset', category: 'vibe', color: { temperature: 0.3, tint: 0.12, saturation: 0.2, highlightTint: rgb('#ff7a59'), splitAmount: 0.3, glow: 0.2 }, swatch: '#ff7a59' },
   { id: 'dream', name: 'Dream', category: 'vibe', color: { exposure: 0.12, contrast: -0.12, fade: 0.15, glow: 0.5, tint: 0.1, highlightTint: rgb('#d9c2ff'), splitAmount: 0.3 }, swatch: '#c9b8ff' },
+  { id: 'food', name: 'Food', category: 'scene', color: { exposure: 0.06, contrast: 0.12, vibrance: 0.35, temperature: 0.12, clarity: 0.3, sharpen: 0.25 }, swatch: '#ff9f43' },
+  { id: 'landscape', name: 'Landscape', category: 'scene', color: { contrast: 0.15, vibrance: 0.4, highlights: -0.3, shadows: 0.2, clarity: 0.45, temperature: -0.04 }, swatch: '#2ecc71' },
+  { id: 'golden-hour', name: 'Golden Hour', category: 'scene', color: { exposure: 0.05, temperature: 0.35, tint: 0.06, vibrance: 0.2, glow: 0.3, highlightTint: rgb('#ffcc70'), splitAmount: 0.3 }, swatch: '#ffc048' },
+  { id: 'night-boost', name: 'Night', category: 'scene', color: { exposure: 0.3, shadows: 0.4, highlights: -0.25, contrast: 0.08, clarity: 0.2, temperature: -0.1, sharpen: 0.2 }, swatch: '#34495e' },
+  { id: 'sky', name: 'Blue Sky', category: 'scene', color: { contrast: 0.1, vibrance: 0.3, temperature: -0.15, highlights: -0.35, clarity: 0.25 }, swatch: '#48dbfb' },
   { id: 'mono', name: 'Mono', category: 'mono', color: { saturation: -1, contrast: 0.12 }, swatch: '#8a8a8a' },
   { id: 'noir', name: 'Noir', category: 'mono', color: { saturation: -1, contrast: 0.45, exposure: -0.05, vignette: 0.5, grain: 0.2 }, swatch: '#2b2b2b' },
   { id: 'silver', name: 'Silver', category: 'mono', color: { saturation: -1, contrast: -0.05, exposure: 0.1, fade: 0.15, glow: 0.2 }, swatch: '#c9c9c9' },
@@ -105,7 +135,7 @@ export function getPreset(id: string): FilterPreset {
 }
 
 export function createStudioState(presetId = 'original'): StudioState {
-  return { presetId, intensity: 1, color: { ...neutralColor }, beauty: { ...naturalBeauty }, effects: { backgroundBlur: 0 } }
+  return { presetId, intensity: 1, color: { ...neutralColor }, beauty: { ...naturalBeauty }, effects: { ...neutralEffects } }
 }
 
 /** Preset is applied at `intensity`, then user adjustments are added on top. */
@@ -138,10 +168,16 @@ export const colorSliders: { key: Exclude<keyof ColorParams, 'shadowTint' | 'hig
   { key: 'shadows', min: -1, max: 1 },
   { key: 'hue', min: -0.5, max: 0.5 },
   { key: 'fade', min: 0, max: 1 },
+  { key: 'clarity', min: -1, max: 1 },
   { key: 'sharpen', min: 0, max: 1 },
   { key: 'glow', min: 0, max: 1 },
   { key: 'vignette', min: 0, max: 1 },
   { key: 'grain', min: 0, max: 1 },
 ]
 
-export const beautySliders: (keyof BeautyParams)[] = ['smooth', 'whiten', 'slim', 'eyes', 'jaw', 'nose']
+export const beautySliders: (keyof BeautyParams)[] = ['smooth', 'whiten', 'slim', 'eyes', 'jaw', 'nose', 'lipstick', 'blush']
+
+/** Face geometry is only needed for warps and makeup; skin smoothing works without tracking. */
+export function needsFaceTracking(beauty: BeautyParams) {
+  return beauty.slim > 0 || beauty.eyes > 0 || beauty.jaw > 0 || beauty.nose > 0 || beauty.lipstick > 0 || beauty.blush > 0 || beauty.smooth > 0
+}
