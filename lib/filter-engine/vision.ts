@@ -90,6 +90,10 @@ export function toFaceGeometry(landmarks: Landmark[], aspect: number): FaceGeome
     rightJaw: pt(landmarks[397]),
     chin: pt(landmarks[152]),
     nose: pt(landmarks[4]),
+    mouth: avg(landmarks[13], landmarks[14]),
+    leftBlush: pt(landmarks[205]),
+    rightBlush: pt(landmarks[425]),
+    mouthWidth: Math.hypot((landmarks[291].x - landmarks[61].x) * aspect, landmarks[291].y - landmarks[61].y),
     width: Math.hypot(dx, dy),
   }
 }
@@ -101,7 +105,7 @@ export function smoothFace(previous: FaceGeometry | null, next: FaceGeometry, t 
   if (!previous) return next
   const out = { ...next }
   for (const key of Object.keys(next) as (keyof FaceGeometry)[]) {
-    if (key === 'width') out.width = previous.width + (next.width - previous.width) * t
+    if (key === 'width' || key === 'mouthWidth') out[key] = previous[key] + (next[key] - previous[key]) * t
     else out[key] = lerpPoint(previous[key] as Point, next[key] as Point, t) as never
   }
   return out

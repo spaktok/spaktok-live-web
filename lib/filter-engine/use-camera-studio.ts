@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FilterRenderer, type FaceGeometry } from './renderer'
-import { resolveColor, type StudioState } from './params'
+import { needsFaceTracking, needsSegmentation, neutralBeauty, neutralColor, neutralEffects, resolveColor, type StudioState } from './params'
 import { loadFaceLandmarker, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
 
 export type Facing = 'user' | 'environment'
@@ -39,6 +39,7 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
   const lastVisionRef = useRef(0)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
+  const compareRef = useRef(false)
 
   const [facing, setFacing] = useState<Facing>('user')
   const [status, setStatus] = useState<CameraStatus>('idle')
@@ -53,8 +54,8 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
 
   stateRef.current = state
 
-  const needsFace = Object.values(state.beauty).some((value) => value > 0)
-  const needsMask = state.effects.backgroundBlur > 0
+  const needsFace = needsFaceTracking(state.beauty)
+  const needsMask = needsSegmentation(state.effects)
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -170,8 +171,8 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
       if (now - lastVisionRef.current < 33) return
       lastVisionRef.current = now
       const current = stateRef.current
-      const wantsFace = Object.values(current.beauty).some((value) => value > 0)
-      const wantsMask = current.effects.backgroundBlur > 0
+      const wantsFace = needsFaceTracking(current.beauty)
+      const wantsMask = needsSegmentation(current.effects)
       const aspectRatio = video.videoWidth / video.videoHeight
       if (wantsFace) {
         const landmarker = await loadFaceLandmarker().catch(() => null)
@@ -205,11 +206,12 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
       if (video.readyState >= 2 && video.videoWidth) {
         runVision(now).catch(() => undefined)
         const current = stateRef.current
+        const original = compareRef.current
         rendererRef.current?.render({
           source: video,
-          color: resolveColor(current),
-          beauty: current.beauty,
-          backgroundBlur: current.effects.backgroundBlur,
+          color: original ? neutralColor : resolveColor(current),
+          beauty: original ? neutralBeauty : current.beauty,
+          effects: original ? neutralEffects : current.effects,
           mirror: facing === 'user',
           face: faceRef.current,
           mask: maskRef.current,
@@ -252,6 +254,11 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
     if (!track) return
     setZoomState(value)
     await track.applyConstraints({ advanced: [{ zoom: value } as MediaTrackConstraintSet] }).catch(() => undefined)
+  }, [])
+
+  /** Hold-to-compare: renders the untouched camera feed while true. */
+  const setCompare = useCallback((value: boolean) => {
+    compareRef.current = value
   }, [])
 
   const capturePhoto = useCallback((quality = 0.95) => canvasRef.current?.toDataURL('image/jpeg', quality) ?? null, [])
@@ -326,6 +333,7 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
     flip,
     setTorch,
     setZoom,
+    setCompare,
     capturePhoto,
     captureAnalysisFrame,
     getOutputStream,

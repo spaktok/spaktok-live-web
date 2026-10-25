@@ -4,16 +4,48 @@ import { useState } from 'react'
 import { Check, Loader2, RotateCcw, Sparkles, Wand2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
+  backgroundModes,
   beautySliders,
   colorSliders,
   createStudioState,
   filterPresets,
-  neutralBeauty,
-  neutralColor,
+  fxList,
+  presetCategories,
+  type BackgroundMode,
+  type FxId,
   type PresetCategory,
   type StudioState,
 } from '@/lib/filter-engine/params'
+import { gradeToState, type Grade } from '@/lib/filter-engine/ai-grade'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
+
+const backgroundLabel: Record<BackgroundMode, string> = { none: 'bgNone', blur: 'bgBlur', splash: 'bgSplash', studio: 'bgStudio' }
+const fxLabel: Record<FxId, string> = {
+  none: 'fxNone',
+  'rgb-split': 'fxRgbSplit',
+  glitch: 'fxGlitch',
+  vhs: 'fxVhs',
+  shake: 'fxShake',
+  'zoom-blur': 'fxZoomBlur',
+  'light-leak': 'fxLightLeak',
+  duotone: 'fxDuotone',
+  mirror: 'fxMirror',
+  kaleido: 'fxKaleido',
+  fisheye: 'fxFisheye',
+  pixel: 'fxPixel',
+}
+
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn('shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors', active ? 'bg-white text-black' : 'bg-white/10 text-white/75')}
+    >
+      {children}
+    </button>
+  )
+}
 
 export type StudioTab = 'filters' | 'adjust' | 'beauty' | 'effects' | 'ai'
 
@@ -24,7 +56,7 @@ interface StudioPanelProps {
   tabs?: StudioTab[]
 }
 
-const categories: PresetCategory[] = ['trending', 'portrait', 'film', 'vibe', 'mono']
+const categories = presetCategories
 
 function Slider({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
   const display = Math.round(value * 100)
@@ -79,14 +111,8 @@ export function StudioPanel({ state, onChange, captureFrame, tabs = ['filters', 
         body: JSON.stringify({ image, prompt: request || undefined, locale: language }),
       })
       if (!response.ok) throw new Error('ai-failed')
-      const grade = await response.json()
-      onChange({
-        presetId: grade.presetId,
-        intensity: grade.intensity,
-        color: { ...neutralColor, ...grade.color },
-        beauty: { ...neutralBeauty, ...grade.beauty },
-        effects: { backgroundBlur: grade.backgroundBlur },
-      })
+      const grade: Grade = await response.json()
+      onChange(gradeToState(grade))
       setAiSummary(grade.summary)
       setAiState('idle')
     } catch {
@@ -171,14 +197,50 @@ export function StudioPanel({ state, onChange, captureFrame, tabs = ['filters', 
         )}
 
         {tab === 'effects' && (
-          <div className="flex flex-col gap-3">
-            <Slider
-              label={s('backgroundBlur')}
-              value={state.effects.backgroundBlur}
-              min={0}
-              max={1}
-              onChange={(backgroundBlur) => onChange({ ...state, effects: { ...state.effects, backgroundBlur } })}
-            />
+          <div className="flex max-h-48 flex-col gap-3 overflow-y-auto pe-1">
+            <span className="text-xs font-semibold text-white/60">{s('background')}</span>
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+              {backgroundModes.map((mode) => (
+                <Chip
+                  key={mode}
+                  active={state.effects.background === mode}
+                  onClick={() =>
+                    onChange({
+                      ...state,
+                      effects: { ...state.effects, background: mode, backgroundBlur: mode === 'none' ? 0 : state.effects.backgroundBlur || 0.7 },
+                    })
+                  }
+                >
+                  {s(backgroundLabel[mode] as never)}
+                </Chip>
+              ))}
+            </div>
+            {state.effects.background !== 'none' && (
+              <Slider
+                label={s('strength')}
+                value={state.effects.backgroundBlur}
+                min={0}
+                max={1}
+                onChange={(backgroundBlur) => onChange({ ...state, effects: { ...state.effects, backgroundBlur } })}
+              />
+            )}
+            <span className="text-xs font-semibold text-white/60">{s('cameraFx')}</span>
+            <div className="grid grid-cols-4 gap-2">
+              {fxList.map((fx) => (
+                <Chip key={fx} active={state.effects.fx === fx} onClick={() => onChange({ ...state, effects: { ...state.effects, fx } })}>
+                  {s(fxLabel[fx] as never)}
+                </Chip>
+              ))}
+            </div>
+            {state.effects.fx !== 'none' && (
+              <Slider
+                label={s('fxAmount')}
+                value={state.effects.fxAmount}
+                min={0}
+                max={1}
+                onChange={(fxAmount) => onChange({ ...state, effects: { ...state.effects, fxAmount } })}
+              />
+            )}
           </div>
         )}
 

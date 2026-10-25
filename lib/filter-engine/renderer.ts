@@ -1,4 +1,4 @@
-import type { BeautyParams, ColorParams } from './params'
+import { backgroundCode, fxCode, type BeautyParams, type ColorParams, type EffectParams } from './params'
 
 export interface Point {
   x: number
@@ -16,6 +16,10 @@ export interface FaceGeometry {
   rightJaw: Point
   chin: Point
   nose: Point
+  mouth: Point
+  leftBlush: Point
+  rightBlush: Point
+  mouthWidth: number
   width: number
 }
 
@@ -23,7 +27,7 @@ export interface RenderInput {
   source: TexImageSource & { videoWidth?: number; videoHeight?: number; width?: number; height?: number }
   color: ColorParams
   beauty: BeautyParams
-  backgroundBlur: number
+  effects: EffectParams
   mirror: boolean
   face: FaceGeometry | null
   mask: { data: Uint8Array; width: number; height: number } | null
@@ -62,6 +66,16 @@ uniform vec2 uRightJaw;
 uniform vec2 uChin;
 uniform vec2 uNose;
 uniform float uFaceWidth;
+uniform vec2 uMouth;
+uniform vec2 uLeftBlush;
+uniform vec2 uRightBlush;
+uniform float uMouthWidth;
+uniform float uLipstick;
+uniform float uBlush;
+uniform float uBgMode;
+uniform float uFx;
+uniform float uFxAmount;
+uniform float uClarity;
 
 uniform float uSmooth;
 uniform float uWhiten;
@@ -134,10 +148,53 @@ vec3 hueRotate(vec3 c, float a) {
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 
+bool isFx(float code) { return abs(uFx - code) < 0.5; }
+
+vec2 toSrc(vec2 uv) {
+  vec2 s = uCropOffset + uv * uCropScale;
+  if (uMirror > 0.5) s.x = 1.0 - s.x;
+  return s;
+}
+
+vec2 geometryFx(vec2 uv) {
+  float k = uFxAmount;
+  float outAspect = uResolution.x / uResolution.y;
+  vec2 asp = vec2(outAspect, 1.0);
+  if (isFx(8.0)) {
+    uv.x = uv.x < 0.5 ? uv.x : 1.0 - uv.x;
+  } else if (isFx(9.0)) {
+    vec2 p = (uv - 0.5) * asp;
+    float r = length(p);
+    float seg = 6.2831853 / floor(4.0 + k * 6.0);
+    float a = mod(atan(p.y, p.x) + uTime * 0.25, seg);
+    a = abs(a - seg * 0.5);
+    uv = vec2(cos(a), sin(a)) * r / asp + 0.5;
+  } else if (isFx(10.0)) {
+    vec2 p = (uv - 0.5) * asp;
+    float r = length(p);
+    float s = 1.0 - k * 0.55 + k * 0.55 * r * r * 2.2;
+    uv = p * s / asp + 0.5;
+  } else if (isFx(11.0)) {
+    vec2 cells = vec2(outAspect, 1.0) * mix(160.0, 22.0, k);
+    uv = (floor(uv * cells) + 0.5) / cells;
+  } else if (isFx(4.0)) {
+    float t = floor(uTime * 14.0);
+    vec2 jitter = (vec2(hash(vec2(t, 1.0)), hash(vec2(t, 2.0))) - 0.5) * 0.035 * k;
+    uv = 0.5 + (uv - 0.5) / (1.0 + 0.07 * k) + jitter;
+  } else if (isFx(2.0)) {
+    float t = floor(uTime * 9.0);
+    float slice = floor(uv.y * 28.0);
+    if (hash(vec2(slice, t)) > 1.0 - 0.3 * k) uv.x += (hash(vec2(t, slice)) - 0.5) * 0.16 * k;
+  }
+  return uv;
+}
+
 void main() {
-  vec2 src = uCropOffset + vUv * uCropScale;
-  if (uMirror > 0.5) src.x = 1.0 - src.x;
+  vec2 uv = geometryFx(vUv);
+  vec2 src = toSrc(uv);
   vec2 baseSrc = src;
+  float person = 1.0;
+  if (uHasMask > 0.5) person = smoothstep(0.35, 0.75, texture2D(uMask, baseSrc).r);
 
   float faceRegion = 1.0;
   if (uHasFace > 0.5) {
@@ -156,8 +213,23 @@ void main() {
 
   vec3 color = tex(src);
 
-  if (uHasMask > 0.5 && uBgBlur > 0.001) {
-    float person = smoothstep(0.35, 0.75, texture2D(uMask, baseSrc).r);
+  if (isFx(1.0) || isFx(2.0) || isFx(3.0)) {
+    float shift = isFx(1.0) ? 0.012 * uFxAmount : isFx(2.0) ? 0.02 * uFxAmount * step(0.6, hash(vec2(floor(uTime * 9.0), 7.0))) : 0.004 * uFxAmount;
+    vec2 off = vec2(shift * uCropScale.x * (uMirror > 0.5 ? -1.0 : 1.0), 0.0);
+    color.r = tex(src + off).r;
+    color.b = tex(src - off).b;
+  }
+
+  if (isFx(5.0)) {
+    vec3 sum = color;
+    for (int i = 1; i < 12; i++) {
+      float f = 1.0 - uFxAmount * 0.14 * float(i) / 11.0;
+      sum += tex(toSrc(0.5 + (uv - 0.5) * f));
+    }
+    color = sum / 12.0;
+  }
+
+  if (uHasMask > 0.5 && uBgBlur > 0.001 && abs(uBgMode - 1.0) < 0.5) {
     vec3 blurred = vec3(0.0);
     float radius = 3.0 + 14.0 * uBgBlur;
     for (int i = 0; i < 16; i++) {
@@ -194,18 +266,37 @@ void main() {
     color = mix(color, 1.0 - (1.0 - color) * (1.0 - color * 0.45), uWhiten * skin * 0.6);
   }
 
+  if (uHasFace > 0.5 && uLipstick > 0.001) {
+    float cr = 0.5 + (0.5 * color.r - 0.418688 * color.g - 0.081312 * color.b);
+    vec2 d = (src - uMouth) * aspectVec() / vec2(uMouthWidth * 0.62, uMouthWidth * 0.32);
+    float lips = (1.0 - smoothstep(0.7, 1.05, length(d))) * smoothstep(0.52, 0.57, cr);
+    vec3 lipColor = vec3(0.78, 0.1, 0.24);
+    vec3 tinted = color * lipColor * 1.7;
+    color = mix(color, tinted, clamp(lips * uLipstick * 0.75, 0.0, 1.0));
+  }
+
+  if (uHasFace > 0.5 && uBlush > 0.001) {
+    float r = uFaceWidth * 0.17;
+    float bl = 1.0 - smoothstep(0.0, r, length((src - uLeftBlush) * aspectVec()));
+    float br = 1.0 - smoothstep(0.0, r, length((src - uRightBlush) * aspectVec()));
+    float blushMask = max(bl, br) * skinMask(color);
+    color = mix(color, color * vec3(1.0, 0.8, 0.82) + vec3(0.07, 0.0, 0.03), blushMask * uBlush * 0.65);
+  }
+
   if (uSharpen > 0.001) {
     vec3 n = tex(src + vec2(uTexel.x, 0.0)) + tex(src - vec2(uTexel.x, 0.0)) + tex(src + vec2(0.0, uTexel.y)) + tex(src - vec2(0.0, uTexel.y));
     color += (color - n * 0.25) * uSharpen * 1.4;
   }
 
-  if (uGlow > 0.001) {
+  if (uGlow > 0.001 || abs(uClarity) > 0.001) {
     vec3 soft = vec3(0.0);
     for (int i = 0; i < 8; i++) {
       float a = float(i) * 0.785398;
       soft += tex(src + vec2(cos(a), sin(a)) * 9.0 * uTexel);
     }
     soft /= 8.0;
+    float localLuma = luma(color) - luma(soft);
+    color += localLuma * uClarity * 1.6 * (1.0 - smoothstep(0.75, 1.0, luma(color)));
     vec3 bright = max(soft - 0.55, 0.0) * 2.2;
     color = 1.0 - (1.0 - color) * (1.0 - bright * uGlow);
   }
@@ -233,6 +324,36 @@ void main() {
   float vd = distance(vUv, vec2(0.5)) * 1.414;
   color *= 1.0 - uVignette * smoothstep(0.35, 1.1, vd);
   color += (hash(vUv * uResolution + uTime) - 0.5) * uGrain * 0.14;
+
+  if (isFx(3.0)) {
+    float lv = luma(color);
+    color = mix(color, vec3(lv), 0.25 * uFxAmount);
+    color *= 0.88 + 0.12 * sin(vUv.y * uResolution.y * 1.6);
+    float band = smoothstep(0.0, 0.02, abs(fract(vUv.y - uTime * 0.08) - 0.5) - 0.47);
+    color = mix(color + 0.12, color, mix(1.0, band, uFxAmount));
+    color += (hash(vec2(floor(vUv.y * 240.0), uTime)) - 0.5) * 0.08 * uFxAmount;
+  } else if (isFx(6.0)) {
+    vec2 c1 = vec2(0.05 + 0.25 * sin(uTime * 0.6), 0.15);
+    vec2 c2 = vec2(0.95, 0.85 + 0.15 * cos(uTime * 0.45));
+    vec3 leak = vec3(1.0, 0.42, 0.18) * (1.0 - smoothstep(0.0, 0.75, distance(vUv, c1)));
+    leak += vec3(1.0, 0.25, 0.5) * (1.0 - smoothstep(0.0, 0.6, distance(vUv, c2))) * 0.7;
+    color = 1.0 - (1.0 - color) * (1.0 - leak * uFxAmount);
+  } else if (isFx(7.0)) {
+    float lv = clamp(luma(color), 0.0, 1.0);
+    vec3 duo = mix(vec3(0.09, 0.11, 0.42), vec3(1.0, 0.56, 0.68), smoothstep(0.05, 0.95, lv));
+    color = mix(color, duo, uFxAmount);
+  }
+
+  if (uHasMask > 0.5 && uBgBlur > 0.001) {
+    float bg = (1.0 - person) * min(1.0, uBgBlur * 1.4);
+    if (abs(uBgMode - 2.0) < 0.5) {
+      color = mix(color, vec3(luma(color)), bg);
+    } else if (abs(uBgMode - 3.0) < 0.5) {
+      vec3 backdrop = mix(vec3(0.93, 0.92, 0.95), vec3(0.62, 0.66, 0.78), smoothstep(0.0, 1.0, vUv.y));
+      backdrop *= 1.0 - 0.18 * smoothstep(0.3, 0.9, distance(vUv, vec2(0.5, 0.45)));
+      color = mix(color, backdrop, bg);
+    }
+  }
 
   gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }`
@@ -323,7 +444,7 @@ export class FilterRenderer {
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4)
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, input.source)
 
-    const hasMask = Boolean(input.mask && input.backgroundBlur > 0)
+    const hasMask = Boolean(input.mask && input.effects.background !== 'none' && input.effects.backgroundBlur > 0)
     if (hasMask && input.mask) {
       gl.activeTexture(gl.TEXTURE1)
       gl.bindTexture(gl.TEXTURE_2D, this.maskTexture)
@@ -358,6 +479,10 @@ export class FilterRenderer {
       this.set2('uChin', face.chin.x, face.chin.y)
       this.set2('uNose', face.nose.x, face.nose.y)
       this.set1('uFaceWidth', face.width)
+      this.set2('uMouth', face.mouth.x, face.mouth.y)
+      this.set2('uLeftBlush', face.leftBlush.x, face.leftBlush.y)
+      this.set2('uRightBlush', face.rightBlush.x, face.rightBlush.y)
+      this.set1('uMouthWidth', face.mouthWidth)
     }
 
     const { beauty, color } = input
@@ -368,7 +493,13 @@ export class FilterRenderer {
     this.set1('uJaw', face ? beauty.jaw : 0)
     this.set1('uNoseSlim', face ? beauty.nose : 0)
     this.set1('uHasMask', hasMask ? 1 : 0)
-    this.set1('uBgBlur', input.backgroundBlur)
+    this.set1('uBgBlur', input.effects.backgroundBlur)
+    this.set1('uBgMode', backgroundCode(input.effects.background))
+    this.set1('uFx', fxCode(input.effects.fx))
+    this.set1('uFxAmount', input.effects.fxAmount)
+    this.set1('uLipstick', face ? beauty.lipstick : 0)
+    this.set1('uBlush', face ? beauty.blush : 0)
+    this.set1('uClarity', color.clarity)
 
     this.set1('uExposure', color.exposure)
     this.set1('uContrast', color.contrast)
