@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Settings, Share2, Grid3X3, Bookmark, Heart, ShoppingBag, ChevronDown, ChevronLeft, MoreHorizontal, Play, Eye, Wallet, TrendingUp, Award, Star, Zap, Crown, Edit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { mockProducts, formatNumber } from '@/lib/mock-data'
-import { createClient } from '@/lib/supabase/client'
+
 import { useAuth } from '@/hooks/use-auth'
 import type { User } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -36,35 +36,20 @@ export function ProfileScreen({ userId, isOwnProfile = true, onSettingsClick, on
     const loadProfile = async () => {
       setIsLoadingProfile(true)
       setProfileError(null)
-      const supabase = createClient()
-      const [{ data: row, error: profileLoadError }, { data: videos }] = await Promise.all([
-        supabase.from('profiles').select('id, username, display_name, avatar_url, bio, is_verified, follower_count, following_count').eq('id', profileId).maybeSingle(),
-        supabase.from('videos').select('id, user_id, media_url, thumbnail_url, description, music, like_count, comment_count, share_count, view_count, created_at').eq('user_id', profileId).order('created_at', { ascending: false }),
-      ])
-      if (profileLoadError || !row) {
-        setProfileError('تعذر تحميل الملف الشخصي')
-        setIsLoadingProfile(false)
+      try {
+        const response = await fetch(`/api/native/profile?id=${encodeURIComponent(profileId)}`, { cache:'no-store' })
+        if (!response.ok) throw new Error('profile_unavailable')
+        const result = await response.json() as {
+          profile?: Omit<User,'createdAt'> & { createdAt:string }
+          videos?: Array<{id:string;thumbnailUrl:string;caption:string;views:number}>
+        }
+        if (!result.profile) throw new Error('profile_unavailable')
+        setProfile({ ...result.profile, createdAt: new Date(result.profile.createdAt) })
+        setProfileVideos(result.videos || [])
+      } catch { setProfileError('تعذر تحميل الملف الشخصي') }
+      setIsLoadingProfile(false)
         return
       }
-      setProfile({
-        id: row.id,
-        username: row.username,
-        displayName: row.display_name,
-        avatar: row.avatar_url || '',
-        bio: row.bio || '',
-        isVerified: row.is_verified,
-        followers: row.follower_count,
-        following: row.following_count,
-        likes: (videos || []).reduce((sum, video) => sum + video.like_count, 0),
-        createdAt: new Date(),
-      })
-      setProfileVideos((videos || []).map((video) => ({
-        id: video.id,
-        thumbnailUrl: video.thumbnail_url || video.media_url,
-        caption: video.description || 'فيديو بدون وصف',
-        views: video.view_count,
-      })))
-      setIsLoadingProfile(false)
     }
     void loadProfile()
   }, [profileId])

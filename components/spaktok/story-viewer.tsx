@@ -5,8 +5,8 @@ import React from "react"
 import { useState, useEffect } from 'react'
 import { X, Heart, Send, MoreHorizontal, ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Play } from 'lucide-react'
 import { timeAgo } from '@/lib/mock-data'
-import { createClient } from '@/lib/supabase/client'
-import type { Story, User } from '@/lib/types'
+
+import type { Story } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 interface StoryViewerProps {
@@ -22,15 +22,19 @@ export function StoryViewer({ initialStoryId, onClose }: StoryViewerProps) {
   useEffect(() => {
     let active = true
     const loadStories = async () => {
-      const { data } = await createClient().from('stories').select('id, user_id, media_url, media_type, duration, views_count, created_at, expires_at, profiles(id, username, display_name, avatar_url, bio, is_verified, followers_count, following_count, likes_count, created_at)').gt('expires_at', new Date().toISOString()).order('created_at', { ascending: false })
-      if (!active) return
-      const nextStories = (data || []).map((row) => {
-        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
-        const user: User = { id: row.user_id, username: profile?.username || 'user', displayName: profile?.display_name || 'مستخدم', avatar: profile?.avatar_url || '', bio: profile?.bio || '', isVerified: Boolean(profile?.is_verified), followers: profile?.followers_count || 0, following: profile?.following_count || 0, likes: profile?.likes_count || 0, createdAt: new Date(profile?.created_at || row.created_at) }
-        return { id: row.id, user, mediaUrl: row.media_url, mediaType: row.media_type === 'video' ? 'video' : 'image', duration: row.duration || 5, views: row.views_count || 0, isViewed: false, reactions: [], createdAt: new Date(row.created_at), expiresAt: new Date(row.expires_at) } as Story
-      })
-      setStories(nextStories)
-      setCurrentIndex(Math.max(0, nextStories.findIndex((item) => item.id === initialStoryId)))
+      try {
+        const response=await fetch('/api/native/stories',{cache:'no-store'})
+        if(!response.ok)throw new Error('stories_unavailable')
+        const result=await response.json() as {stories?:Array<Story & {createdAt:string;expiresAt:string}>}
+        if(!active)return
+        const nextStories=(result.stories||[]).map(row=>({
+          ...row,
+          user: {...row.user,createdAt:new Date(row.user.createdAt)},
+          createdAt:new Date(row.createdAt),expiresAt:new Date(row.expiresAt),
+        }))
+        setStories(nextStories)
+        setCurrentIndex(Math.max(0,nextStories.findIndex(item=>item.id===initialStoryId)))
+      } catch {if(active)setStories([])}
       setLoading(false)
     }
     void loadStories()

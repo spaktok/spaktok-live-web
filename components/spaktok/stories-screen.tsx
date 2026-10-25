@@ -3,8 +3,8 @@
 import { useEffect, useState } from 'react'
 import { Clock3, Eye } from 'lucide-react'
 import { StoryBar } from '@/components/spaktok/story-bar'
-import { createClient } from '@/lib/supabase/client'
-import type { Story, User } from '@/lib/types'
+
+import type { Story } from '@/lib/types'
 
 interface StoriesScreenProps {
   onStoryClick: (storyId: string) => void
@@ -19,44 +19,17 @@ export function StoriesScreen({ onStoryClick, onAddStory }: StoriesScreenProps) 
   useEffect(() => {
     let active = true
     const loadStories = async () => {
-      const { data, error: loadError } = await createClient()
-        .from('stories')
-        .select('id, user_id, media_url, media_type, duration, views_count, created_at, expires_at, profiles(id, username, display_name, avatar_url, bio, is_verified, followers_count, following_count, likes_count, created_at)')
-        .gt('expires_at', new Date().toISOString())
-        .order('created_at', { ascending: false })
-      if (!active) return
-      if (loadError) {
-        setError(true)
-        setLoading(false)
-        return
-      }
-      setStories((data || []).map((row) => {
-        const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
-        const user: User = {
-          id: row.user_id,
-          username: profile?.username || 'user',
-          displayName: profile?.display_name || 'مستخدم',
-          avatar: profile?.avatar_url || '',
-          bio: profile?.bio || '',
-          isVerified: Boolean(profile?.is_verified),
-          followers: profile?.followers_count || 0,
-          following: profile?.following_count || 0,
-          likes: profile?.likes_count || 0,
-          createdAt: new Date(profile?.created_at || row.created_at),
-        }
-        return {
-          id: row.id,
-          user,
-          mediaUrl: row.media_url,
-          mediaType: row.media_type === 'video' ? 'video' : 'image',
-          duration: row.duration || 5,
-          views: row.views_count || 0,
-          isViewed: false,
-          reactions: [],
-          createdAt: new Date(row.created_at),
-          expiresAt: new Date(row.expires_at),
-        }
-      }))
+      try {
+        const response = await fetch('/api/native/stories', { cache: 'no-store' })
+        if (!response.ok) throw new Error('stories_unavailable')
+        const data = await response.json() as { stories?: Array<Story & {createdAt:string;expiresAt:string}> }
+        if (!active) return
+        setStories((data.stories || []).map(row => ({
+          ...row,
+          user: { ...row.user, createdAt: new Date(row.user.createdAt) },
+          createdAt: new Date(row.createdAt), expiresAt: new Date(row.expiresAt),
+        })))
+      } catch { if (active) setError(true) }
       setLoading(false)
     }
     void loadStories()

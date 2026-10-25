@@ -30,7 +30,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+
 import { APP_NAME } from "@/lib/brand";
 import { useAuth } from "@/hooks/use-auth";
 import { supportedLanguages, useLanguage, type LanguageCode } from '@/components/language-provider'
@@ -73,8 +73,11 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
   useEffect(() => {
     if (!authUser) return
     const loadAccount = async () => {
-      const { data } = await createClient().from('profiles').select('display_name, username, avatar_url, follower_count, following_count, is_verified').eq('id', authUser.id).maybeSingle()
-      if (data) setAccount({ displayName: data.display_name, username: data.username, avatarUrl: data.avatar_url || '', followers: data.follower_count, following: data.following_count, likes: 0, isVerified: data.is_verified })
+      const response = await fetch(`/api/native/profile?id=${encodeURIComponent(authUser.id)}`, { cache: 'no-store' })
+      if (!response.ok) return
+      const data = await response.json() as { profile?: { displayName:string;username:string;avatar:string;followers:number;following:number;likes:number;isVerified:boolean } }
+      const p=data.profile
+      if (p) setAccount({ displayName:p.displayName,username:p.username,avatarUrl:p.avatar,followers:p.followers,following:p.following,likes:p.likes,isVerified:p.isVerified })
     }
     void loadAccount()
   }, [authUser])
