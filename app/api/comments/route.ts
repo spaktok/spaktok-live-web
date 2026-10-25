@@ -1,109 +1,36 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-
-export const runtime = 'nodejs'
-export const dynamic = 'force-dynamic'
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-const MAX_COMMENT_LENGTH = 500
-
-function json(body: unknown, status = 200) {
-  return NextResponse.json(body, {
-    status,
-    headers: { 'Cache-Control': 'private, no-store, max-age=0' },
-  })
+import { NextRequest,NextResponse } from 'next/server'
+import { getNativeUser } from '@/lib/native/auth'
+import { queryD1, validId } from '@/lib/native/d1'
+export const runtime='nodejs'
+export const dynamic='force-dynamic'
+const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}})
+type Row={id:string;user_id:string;username:string;display_name:string;avatar_url:string|null;content:string;created_at:string}
+const display=(r:Row)=>({id:r.id,content:r.content,createdAt:r.created_at,
+  user:{id:r.user_id,username:r.username,displayName:r.display_name,avatarUrl:r.avatar_url}})
+const select=`SELECT c.id,c.user_id,c.content,c.created_at,p.username,p.display_name,p.avatar_url
+  FROM comments c JOIN profiles p ON p.id=c.user_id`
+export async function GET(req:NextRequest){
+  const id=req.nextUrl.searchParams.get('videoId')
+  if(!validId(id))return json({error:'invalid_video_id'},400)
+  try{
+    const {rows}=await queryD1<Row>(select+' WHERE c.video_id=? ORDER BY c.created_at DESC LIMIT 100',[id])
+    return json({comments:rows.reverse().map(display)})
+  }catch{return json({error:'comments_unavailable'},503)}
 }
-
-export async function GET(request: NextRequest) {
-  const videoId = request.nextUrl.searchParams.get('videoId')
-  if (!videoId || !UUID.test(videoId)) return json({ error: 'invalid_video_id' }, 400)
-
-  try {
-    const supabase = await createClient()
-    const { data, error } = await supabase
-      .from('comments')
-      .select('id,content,created_at,user_id,profiles!comments_user_id_fkey(username,display_name,avatar_url)')
-      .eq('video_id', videoId)
-      .order('created_at', { ascending: true })
-      .limit(100)
-
-    if (error) {
-      console.error('[comments] Query failed:', error.code)
-      return json({ error: 'comments_unavailable' }, 503)
-    }
-
-    const comments = (data ?? []).map((row) => {
-      const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
-      return {
-        id: row.id,
-        content: row.content,
-        createdAt: row.created_at,
-        user: {
-          id: row.user_id,
-          username: profile?.username ?? 'user',
-          displayName: profile?.display_name || profile?.username || 'مستخدم',
-          avatarUrl: profile?.avatar_url ?? null,
-        },
-      }
-    })
-    return json({ comments })
-  } catch {
-    return json({ error: 'comments_unavailable' }, 503)
-  }
-}
-
-export async function POST(request: NextRequest) {
-  const origin = request.headers.get('origin')
-  if (origin && origin !== request.nextUrl.origin) return json({ error: 'invalid_origin' }, 403)
-
-  let body: unknown
-  try {
-    body = await request.json()
-  } catch {
-    return json({ error: 'invalid_json' }, 400)
-  }
-  if (!body || typeof body !== 'object') return json({ error: 'invalid_request' }, 400)
-  const { videoId, content } = body as Record<string, unknown>
-  if (typeof videoId !== 'string' || !UUID.test(videoId) || typeof content !== 'string') {
-    return json({ error: 'invalid_request' }, 400)
-  }
-  const normalized = content.trim()
-  if (normalized.length < 1 || normalized.length > MAX_COMMENT_LENGTH) {
-    return json({ error: 'invalid_comment_length' }, 400)
-  }
-
-  try {
-    const supabase = await createClient()
-    const { data: authData, error: authError } = await supabase.auth.getUser()
-    const userId = authData.user?.id
-    if (authError || !userId) return json({ error: 'unauthorized' }, 401)
-
-    const { data, error } = await supabase
-      .from('comments')
-      .insert({ user_id: userId, video_id: videoId, content: normalized })
-      .select('id,content,created_at,user_id,profiles!comments_user_id_fkey(username,display_name,avatar_url)')
-      .single()
-
-    if (error) {
-      console.error('[comments] Insert failed:', error.code)
-      return json({ error: 'comment_unavailable' }, 503)
-    }
-
-    const profile = Array.isArray(data.profiles) ? data.profiles[0] : data.profiles
-    return json({
-      comment: {
-        id: data.id,
-        content: data.content,
-        createdAt: data.created_at,
-        user: {
-          id: data.user_id,
-          username: profile?.username ?? 'user',
-          displayName: profile?.display_name || profile?.username || 'مستخدم',
-          avatarUrl: profile?.avatar_url ?? null,
-        },
-      },
-    }, 201)
-  } catch {
-    return json({ error: 'comment_unavailable' }, 503)
-  }
+export async function POST(req:NextRequest){
+  if(req.headers.get('origin')!==req.nextUrl.origin)return json({error:'invalid_origin'},403)
+  let body:unknown;try{body=await req.json()}catch{return json({error:'invalid_json'},400)}
+  const b=body as {videoId?:unknown;content?:unknown}|null
+  if(!b||!validId(b.videoId)||typeof b.content!=='string'||!b.content.trim()||b.content.trim().length>500)
+    return json({error:'invalid_request'},400)
+  try{
+    const user=await getNativeUser()
+    if(!user)return json({error:'unauthorized'},401)
+    const id=crypto.randomUUID()
+    await queryD1('INSERT INTO comments(id,user_id,video_id,content) VALUES (?,?,?,?)',
+      [id,user.id,b.videoId,b.content.trim()])
+    await queryD1('UPDATE videos SET comment_count=(SELECT count(*) FROM comments WHERE video_id=?) WHERE id=?',[b.videoId,b.videoId])
+    const {rows}=await queryD1<Row>(select+' WHERE c.id=?',[id])
+    return json({comment:display(rows[0])},201)
+  }catch{return json({error:'comment_unavailable'},503)}
 }
