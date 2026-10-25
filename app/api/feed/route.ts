@@ -1,3 +1,4 @@
+import { decodeFeedKey, encodeFeedKey, feedKeyFilter } from '@/lib/feed/cursor'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import type { Video } from '@/lib/types'
@@ -40,23 +41,38 @@ export async function GET(request: NextRequest) {
     ? Math.max(1, Math.min(MAX_FEED_SIZE, Math.trunc(requestedSize)))
     : 12
 
+  let cursor
+  try {
+    const cursorValue = request.nextUrl.searchParams.get('cursor')
+    cursor = cursorValue === null ? undefined : decodeFeedKey(cursorValue)
+  } catch {
+    return json({ error: 'invalid_cursor' }, 400)
+  }
+
   try {
     const supabase = await createClient()
     const { data: authData } = await supabase.auth.getUser()
     const userId = authData.user?.id ?? null
 
-    const { data, error } = await supabase
+    // Stable keyset pagination avoids increasingly expensive database offsets.
+    let query = supabase
       .from('videos')
       .select('id,user_id,media_url,thumbnail_url,description,music,view_count,like_count,comment_count,share_count,created_at,profiles(username,display_name,avatar_url,is_verified)')
       .order('created_at', { ascending: false })
-      .limit(limit)
+      .order('id', { ascending: false })
+      .limit(limit + 1)
+    if (cursor) query = query.or(feedKeyFilter(cursor))
+    const { data, error } = await query
 
     if (error) {
       console.error('[feed] Supabase query failed:', error.code)
       return json({ error: 'feed_unavailable' }, 503)
     }
 
-    const rows = (data ?? []) as unknown as VideoRow[]
+    const rows = ((data ?? []) as unknown as VideoRow[]).slice(0, limit)
+    const hasMore = (data?.length ?? 0) > limit
+    const last = rows.at(-1)
+    const nextCursor = hasMore && last ? encodeFeedKey({ createdAt: last.created_at, id: last.id }) : null
     const ids = rows.map((row) => row.id)
     const likedIds = new Set<string>()
     const bookmarkedIds = new Set<string>()
@@ -131,7 +147,7 @@ export async function GET(request: NextRequest) {
       }]
     })
 
-    return json({ videos })
+    return json({ videos, nextCursor })
   } catch {
     return json({ error: 'feed_unavailable' }, 503)
   }
