@@ -1,8 +1,0 @@
-[
-  "@supabase/ssr",
-  "class-variance-authority",
-  "clsx",
-  "tailwind-merge",
-  "stripe",
-  "@supabase/supabase-js"
-]

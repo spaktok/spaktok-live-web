@@ -25,3 +25,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Cloudflare / Vinext and frontend build outputs (generated, not source)
+/.vinext/
+/.wrangler/
+/dist/
+/.open-next/
+/.turbo/
+/.cache/
+/coverage/
+
+# Editor / operating-system files
+.DS_Store
+Thumbs.db
