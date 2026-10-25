@@ -64,7 +64,7 @@ interface SettingSection {
 }
 
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
-  const { user: authUser } = useAuth()
+  const { user: authUser, signOut } = useAuth()
   const { language, languageName, setLanguage, t } = useLanguage()
   const languageLabel = t('language', 'اللغة')
   const [settings, setSettings] = useState(defaultSettings);
@@ -242,7 +242,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                     if (item.action === "danger") {
                       if (item.label === "تسجيل الخروج") {
                         showFeedback("جارٍ تسجيل الخروج...");
-                        void createClient().auth.signOut();
+                        void signOut().catch(() => showFeedback('تعذر تسجيل الخروج. حاول مرة أخرى.'));
                         return;
                       }
                       showFeedback("يمكنك تأكيد حذف الحساب من هذه الخطوة");

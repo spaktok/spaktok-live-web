@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createClient } from "@/lib/supabase/client";
+
 import { APP_LOGO_URL, APP_NAME } from "@/lib/brand";
 
 type AuthMode = "welcome" | "login" | "signup";
@@ -55,124 +55,62 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>("welcome");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(initialError === 'auth_unavailable' ? 'خدمة تسجيل الدخول لا تستجيب حاليًا. تحقق من الاتصال أو أعد المحاولة.' : null);
+  const [error, setError] = useState<string | null>(initialError === 'native_auth_not_configured'
+    ? 'قاعدة بيانات Cloudflare لم تُربط بعد. التسجيل والدخول سيتاحان بعد إكمال إعداد D1.'
+    : initialError === 'auth_unavailable' ? 'تعذر الوصول إلى خدمة الحسابات الجديدة.' : null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
-  const [serviceError, setServiceError] = useState<string | null>(null);
-  const [isActionLoading, setIsActionLoading] = useState(false);
+
+
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     username: "",
+    inviteCode: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setInfoMessage(null);
-
-    const email = formData.email.trim();
-    const password = formData.password;
-
-    if (!email || !password) {
-      setError("أدخل بريدك الإلكتروني وكلمة المرور.");
-      return;
+    e.preventDefault()
+    setError(null)
+    setInfoMessage(null)
+    const email=formData.email.trim().toLowerCase()
+    const password=formData.password
+    if (!email || password.length < 10) {
+      setError('أدخل بريدًا صحيحًا وكلمة مرور من 10 أحرف على الأقل.')
+      return
     }
-    if (mode === "signup" && password.length < 6) {
-      setError("يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.");
-      return;
-    }
-
-    setIsLoading(true);
+    setIsLoading(true)
     try {
-      // Constructor errors must be handled: a missing env used to crash the login form.
-      const supabase = createClient();
-      if (mode === "signup") {
-        const username = formData.username.trim();
-        const { data, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
-            data: {
-              username: username || undefined,
-              display_name: username || undefined,
-            },
-          },
-        });
-
-        if (signUpError) {
-          const message = signUpError.message.toLowerCase();
-          if (message.includes("already") || message.includes("registered") || message.includes("user exists")) {
-            setInfoMessage("إذا أمكن إنشاء حساب بهذا البريد، فسنرسل رابط تأكيد. تحقق من بريدك أو جرّب تسجيل الدخول.");
-            setMode("login");
-            return;
-          }
-          setError(mapAuthError(signUpError.message));
-          return;
+      const response=await fetch('/api/native/auth',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        credentials:'same-origin',
+        cache:'no-store',
+        body:JSON.stringify({
+          action:mode==='signup'?'register':'login',email,password,
+          username:formData.username.trim(), inviteCode:formData.inviteCode,
+        }),
+      })
+      const body=await response.json() as {success?:boolean;error?:string}
+      if (!response.ok || !body.success) {
+        const errors:Record<string,string>={
+          native_auth_not_configured:'قاعدة بيانات Cloudflare غير مُهيأة بعد. يلزم ربطها من إعدادات الإدارة.',
+          registration_not_configured:'التسجيل بدعوة غير مُفعّل حتى يكمل المدير إعداد Cloudflare.',
+          invalid_login:'البريد أو كلمة المرور غير صحيحة. إذا حذفت قاعدة الحسابات السابقة، عليك إنشاء حساب جديد.',
+          already_registered:'الحساب موجود بالفعل. جرّب تسجيل الدخول.',
+          invalid_invite:'رمز الدعوة غير صحيح.',
+          too_many_attempts:'محاولات كثيرة. أعد المحاولة بعد 15 دقيقة.',
+          invalid_credentials:'تحقق من البريد وكلمة المرور والاسم.',
+          invalid_username:'اسم المستخدم يجب أن يكون بالإنجليزية، من 3 إلى 24 حرفًا.',
         }
-
-        if (!data.session) {
-          setInfoMessage("إذا أمكن إنشاء حساب بهذا البريد، فسنرسل رابط تأكيد. تحقق من بريدك الوارد.");
-          setMode("login");
-          return;
-        }
-
-        onComplete?.();
-      } else {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (signInError) {
-          setError(mapAuthError(signInError.message));
-          return;
-        }
-
-        onComplete?.();
+        setError(errors[body.error||'']||'تعذر إتمام العملية. تحقق من إعدادات الخدمة.')
+        return
       }
+      onComplete?.()
+      window.location.assign('/')
     } catch {
-      setError("تعذّر الاتصال بخدمة تسجيل الدخول. تحقق من الاتصال أو إعدادات الخدمة.");
-      void fetch('/api/auth/health', { cache: 'no-store' })
-        .then((r) => r.ok ? setServiceError(null) : setServiceError('خدمة المصادقة غير متاحة حاليًا.'))
-        .catch(() => setServiceError('تعذر فحص اتصال المصادقة.'));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  
-  const sendAccountEmail = async (kind: 'reset' | 'verify') => {
-    const email = formData.email.trim();
-    setError(null);
-    setInfoMessage(null);
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError('أدخل بريدك الإلكتروني الصحيح أولًا.');
-      return;
-    }
-    setIsActionLoading(true);
-    try {
-      const supabase = createClient();
-      if (kind === 'reset') {
-        const { error: requestError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
-        });
-        if (requestError) throw requestError;
-      } else {
-        const { error: requestError } = await supabase.auth.resend({
-          type: 'signup', email,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-        });
-        if (requestError) throw requestError;
-      }
-      setInfoMessage('إذا كان البريد مرتبطًا بحساب قابل للاسترداد، ستصلك رسالة خلال دقائق. تحقق أيضًا من البريد غير المرغوب فيه.');
-    } catch {
-      setError('تعذر إرسال البريد الآن. تحقق من الاتصال وأعد المحاولة لاحقًا.');
-    } finally {
-      setIsActionLoading(false);
-    }
-  };
-
+      setError('تعذر الاتصال بخادم SpakTok. حاول مرة أخرى.')
+    } finally {setIsLoading(false)}
+  }
 
   return (
     <div className="min-h-dvh w-full bg-background flex flex-col items-center relative overflow-hidden">
@@ -318,6 +256,20 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
                   </div>
                 )}
 
+                {mode === 'signup' && (
+                  <div className="space-y-1">
+                    <Input
+                      type="password"
+                      autoComplete="off"
+                      placeholder="رمز دعوة التسجيل من إدارة SpakTok"
+                      value={formData.inviteCode}
+                      onChange={(e) => setFormData({ ...formData, inviteCode: e.target.value })}
+                      className="h-14 rounded-2xl border-0 bg-muted/50 text-right"
+                      required
+                    />
+                    <p className="text-right text-xs text-muted-foreground">التسجيل بدعوة مؤقتًا حتى نفعّل البريد الإلكتروني والتحقق ضد الحسابات الآلية.</p>
+                  </div>
+                )}
                 <div className="relative">
                   <Mail className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                     <Input
@@ -361,9 +313,6 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
                   </Button>
                 </div>
 
-                {serviceError && (
-                  <p className="rounded-xl bg-amber-500/10 px-4 py-3 text-right text-sm text-amber-200" role="alert">{serviceError}</p>
-                )}
                 {error && (
                   <p
                     role="alert"
@@ -382,18 +331,13 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
                 )}
 
                 {mode === 'login' && (
-                  <div className="flex flex-wrap justify-between gap-2 text-xs">
-                    <button type="button" disabled={isActionLoading || isLoading}
-                      className="text-white/75 underline disabled:opacity-50"
-                      onClick={() => void sendAccountEmail('reset')}>نسيت كلمة المرور؟</button>
-                    <button type="button" disabled={isActionLoading || isLoading}
-                      className="text-white/75 underline disabled:opacity-50"
-                      onClick={() => void sendAccountEmail('verify')}>إعادة إرسال تأكيد البريد</button>
-                  </div>
+                  <p className="text-right text-xs text-muted-foreground">
+                    إذا حذفت قاعدة Supabase القديمة، فلا يمكن استخدام كلمة مرور الحساب القديم. أنشئ حسابًا جديدًا برمز الدعوة.
+                  </p>
                 )}
                 <Button
                   type="submit"
-                  disabled={isLoading || isActionLoading}
+                  disabled={isLoading}
                   className="w-full h-14 rounded-2xl text-lg font-semibold bg-gradient-to-r from-primary to-[#3155ff] hover:opacity-90"
                 >
                   {isLoading ? (
