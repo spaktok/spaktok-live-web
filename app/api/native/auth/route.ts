@@ -4,7 +4,7 @@ import { queryD1 } from '@/lib/native/d1'
 import {
   COOKIE, createAuthUser, createSession, derivePassword, findAuthUser, getNativeUser,
   nativeAuthReady, parseCredentials, rateLimit, registrationReady, resolveSession,
-  revokeSession, recoverAuthUser, parseRecovery, safeEqual, sha256,
+  revokeSession, recoverAuthUser, parseRecovery, safeEqual, sha256, betaRegistrationOpen,
 } from '@/lib/native/auth'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,7 +23,7 @@ export async function GET() {
     await queryD1('SELECT auth_version,recovery_hash FROM auth_users LIMIT 1')
     await queryD1('SELECT auth_version FROM auth_sessions LIMIT 1')
     const user = await getNativeUser()
-    return reply({ configured:true,user,registration: registrationReady() ? 'invite_only' : 'disabled' })
+    return reply({ configured:true,user,registration: registrationReady() ? (betaRegistrationOpen() ? 'limited_beta' : 'invite_only') : 'disabled' })
   } catch {return reply({configured:false,user:null},503)}
 }
 export async function POST(req: NextRequest) {
@@ -69,7 +69,15 @@ export async function POST(req: NextRequest) {
       if (!registrationReady()) return reply({error:'registration_not_configured'},503)
       if (!username) return reply({error:'invalid_username'},400)
       const secret=process.env.SPAKTOK_REGISTRATION_CODE!
-      if (!safeEqual(sha256(inviteCode),sha256(secret))) return reply({error:'invalid_invite'},403)
+      const validInvite = inviteCode.length > 0 && safeEqual(sha256(inviteCode),sha256(secret))
+      if (!validInvite && !betaRegistrationOpen()) return reply({error:'invalid_invite'},403)
+      // Restricted pilot only: not a substitute for email verification.
+      if (!validInvite) {
+        const limit = await queryD1<{ count: number }>(
+          "SELECT COUNT(*) AS count FROM auth_users WHERE created_at >= datetime('now','-24 hours')",
+        )
+        if ((limit.rows[0]?.count ?? 0) >= 100) return reply({error:'registration_capacity_reached'},429)
+      }
       if (!await rateLimit('signup-ip:'+ip,3)) return reply({error:'too_many_attempts'},429)
       if (await findAuthUser(email)) return reply({error:'already_registered'},409)
       try {

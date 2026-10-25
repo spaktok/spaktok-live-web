@@ -56,3 +56,13 @@ it and increments `auth_version`, immediately invalidating old sessions.
 No email is sent or verified. Losing the password AND recovery code means an
 admin identity-verification process is needed (not yet implemented).
 Do not share or log recovery codes.
+
+## Limited public beta (October 2026)
+
+Use `SPAKTOK_OPEN_BETA_REGISTRATION=true` in Production only to allow new
+accounts without an invitation code. Per-IP rate limits still apply (three
+signups per 15-minute bucket), and signups after 100 completed accounts
+in the last 24 hours are rejected. The cap is not a transactional admission
+counter. No email address is verified or sent; identity ownership is unproven.
+For a trusted early pilot only; disable this flag once Turnstile/email
+verification are implemented.

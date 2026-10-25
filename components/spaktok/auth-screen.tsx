@@ -101,7 +101,8 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
           registration_not_configured:'التسجيل بدعوة غير مُفعّل حتى يكمل المدير إعداد Cloudflare.',
           invalid_login:'البريد أو كلمة المرور غير صحيحة. إذا حذفت قاعدة الحسابات السابقة، عليك إنشاء حساب جديد.',
           already_registered:'الحساب موجود بالفعل. جرّب تسجيل الدخول.',
-          invalid_invite:'رمز الدعوة غير صحيح.',
+          invalid_invite:'التسجيل يتطلب رمز دعوة عندما ينتهي الاختبار المفتوح.',
+          registration_capacity_reached:'امتلأت المقاعد التجريبية لهذا اليوم. أعد المحاولة لاحقًا.',
           too_many_attempts:'محاولات كثيرة. أعد المحاولة بعد 15 دقيقة.',
           invalid_credentials:'تحقق من البريد وكلمة المرور والاسم.',
           invalid_username:'اسم المستخدم يجب أن يكون بالإنجليزية، من 3 إلى 24 حرفًا.',
@@ -294,17 +295,20 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
                 )}
 
                 {mode === 'signup' && (
-                  <div className="space-y-1">
-                    <Input
-                      type="password"
-                      autoComplete="off"
-                      placeholder="رمز دعوة التسجيل من إدارة SpakTok"
-                      value={formData.inviteCode}
-                      onChange={(e) => setFormData({ ...formData, inviteCode: e.target.value })}
-                      className="h-14 rounded-2xl border-0 bg-muted/50 text-right"
-                      required
-                    />
-                    <p className="text-right text-xs text-muted-foreground">التسجيل بدعوة مؤقتًا حتى نفعّل البريد الإلكتروني والتحقق ضد الحسابات الآلية.</p>
+                  <div className="space-y-3">
+                    <p className="rounded-xl bg-muted/30 p-3 text-right text-xs text-muted-foreground">
+                      تسجيل تجريبي محدود. البريد الإلكتروني غير مؤكد بعد؛ احفظ رمز الاسترداد الذي سيظهر بعد التسجيل، فهو الطريقة الوحيدة لاسترداد كلمة المرور حاليًا.
+                    </p>
+                    <details className="text-right text-xs text-muted-foreground">
+                      <summary className="cursor-pointer">لدي رمز دعوة خاص</summary>
+                      <Input
+                        type="password" autoComplete="off"
+                        placeholder="رمز الدعوة (اختياري)"
+                        value={formData.inviteCode}
+                        onChange={(e) => setFormData({ ...formData, inviteCode: e.target.value })}
+                        className="mt-2 h-12 rounded-xl border-0 bg-muted/50 text-right"
+                      />
+                    </details>
                   </div>
                 )}
                 {mode === 'recover' && (

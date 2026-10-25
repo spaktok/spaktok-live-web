@@ -11,6 +11,7 @@ export function nativeAuthReady() {
   return hasNativeDatabase() && Boolean(process.env.SPAKTOK_AUTH_PEPPER) &&
     (process.env.SPAKTOK_AUTH_PEPPER?.length ?? 0) >= 32
 }
+export function betaRegistrationOpen() { return process.env.SPAKTOK_OPEN_BETA_REGISTRATION === 'true' }
 export function registrationReady() {
   return nativeAuthReady() && (process.env.SPAKTOK_REGISTRATION_CODE?.length ?? 0) >= 12
 }
