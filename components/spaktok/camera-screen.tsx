@@ -7,6 +7,7 @@ import { createStudioState } from '@/lib/filter-engine/params'
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
 import { StudioPanel } from './studio/studio-panel'
+import { uploadVideoDirect } from '@/lib/video/direct-upload-client'
 
 interface CameraScreenProps {
   onClose: () => void
@@ -28,6 +29,13 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const [countdown, setCountdown] = useState<number | null>(null)
   const [progress, setProgress] = useState(0)
   const [captured, setCaptured] = useState<Captured | null>(null)
+  const [uploadEnabled, setUploadEnabled] = useState(false)
+  const [uploadChecking, setUploadChecking] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadCompleted, setUploadCompleted] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null)
+  const uploadAbortRef = useRef<AbortController | null>(null)
   const [isLive, setIsLive] = useState(false)
   const [liveSeconds, setLiveSeconds] = useState(0)
   const [liveTitle, setLiveTitle] = useState('')
@@ -48,6 +56,75 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   useEffect(() => () => {
     if (captured) URL.revokeObjectURL(captured.url)
   }, [captured])
+
+  useEffect(() => () => uploadAbortRef.current?.abort(), [])
+
+  useEffect(() => {
+    if (captured?.kind !== 'video') return
+    const controller = new AbortController()
+    setUploadChecking(true)
+    setUploadMessage(null)
+    setUploadCompleted(false)
+    fetch('/api/videos/upload/initiate', { cache: 'no-store', signal: controller.signal })
+      .then(async (res) => res.ok ? res.json() as Promise<{ enabled?: boolean }> : { enabled: false })
+      .then((data) => { if (!controller.signal.aborted) setUploadEnabled(data.enabled === true) })
+      .catch(() => { if (!controller.signal.aborted) setUploadEnabled(false) })
+      .finally(() => { if (!controller.signal.aborted) setUploadChecking(false) })
+    return () => controller.abort()
+  }, [captured?.kind])
+
+  const submitCapturedVideo = async () => {
+    if (!captured || captured.kind !== 'video' || uploading || uploadCompleted) return
+    if (!uploadEnabled) {
+      setUploadMessage('رفع الفيديو غير مفعّل بعد. يمكنك حفظه على الجهاز.')
+      return
+    }
+    const blob = captured.blob
+    const mimeType = blob.type.split(';')[0] || 'video/webm'
+    if (!['video/mp4', 'video/webm', 'video/quicktime'].includes(mimeType) ||
+        blob.size < 1024 || blob.size > 100 * 1024 * 1024) {
+      setUploadMessage('الملف غير مدعوم أو أكبر من 100 ميغابايت.')
+      return
+    }
+    const controller = new AbortController()
+    uploadAbortRef.current = controller
+    setUploading(true)
+    setUploadProgress(0)
+    setUploadMessage(null)
+    try {
+      const res = await fetch('/api/videos/upload/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
+        signal: controller.signal,
+        body: JSON.stringify({
+          name: mimeType === 'video/mp4' ? 'spaktok.mp4' : 'spaktok.webm',
+          bytes: blob.size,
+          mimeType,
+        }),
+      })
+      if (!res.ok) {
+        const result = await res.json().catch(() => ({})) as { error?: string }
+        if (res.status === 429) throw new Error('daily_limit')
+        if (result.error === 'unauthorized') throw new Error('unauthorized')
+        throw new Error('upload_setup_error')
+      }
+      const data = await res.json() as { uploadURL: string; reservationId: string }
+      await uploadVideoDirect(data.uploadURL, blob, setUploadProgress, controller.signal)
+      setUploadCompleted(true)
+      setUploadMessage('اكتمل إرسال الفيديو للمعالجة الخاصة. لم يُنشر علنًا بعد.')
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        const msg = error instanceof Error ? error.message : ''
+        setUploadMessage(msg === 'daily_limit' ? 'وصلت إلى الحد اليومي: 5 محاولات رفع.'
+          : msg === 'unauthorized' ? 'يجب تسجيل الدخول لرفع الفيديو.'
+          : 'تعذر رفع الفيديو. احفظه وحاول مجددًا لاحقًا.')
+      }
+    } finally {
+      if (uploadAbortRef.current === controller) uploadAbortRef.current = null
+      setUploading(false)
+    }
+  }
 
   const finishRecording = async () => {
     if (progressRef.current) clearInterval(progressRef.current)
@@ -301,11 +378,21 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
               <video src={captured.url} autoPlay loop playsInline controls={false} className="absolute inset-0 h-full w-full object-cover" />
             )}
             <div className="absolute inset-x-0 top-0 p-4 pt-[max(1rem,env(safe-area-inset-top))]">
-              <button onClick={() => setCaptured(null)} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white" aria-label={s('retake')}>
+              <button onClick={() => { if (uploading) uploadAbortRef.current?.abort(); setCaptured(null) }} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white" aria-label={s('retake')}>
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-4 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+            <div className="absolute inset-x-0 bottom-0 flex flex-col gap-3 p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+              {uploadMessage && (
+                <p role="status" aria-live="polite" dir="rtl" className="rounded-xl bg-black/80 px-3 py-2 text-center text-sm text-white">{uploadMessage}</p>
+              )}
+              {uploading && (
+                <div className="flex flex-col gap-1" role="status" aria-label="رفع الفيديو" dir="rtl">
+                  <span className="text-xs text-white">جارٍ الرفع: {uploadProgress}%</span>
+                  <div className="h-2 w-full rounded-full bg-white/20"><div className="h-full rounded-full bg-[#3155ff]" style={{ width: `${uploadProgress}%` }} /></div>
+                </div>
+              )}
+              <div className="flex items-center justify-between gap-4">
               <a
                 href={captured.url}
                 download={`spaktok-${Date.now()}.${captured.kind === 'photo' ? 'jpg' : captured.blob.type.includes('mp4') ? 'mp4' : 'webm'}`}
@@ -314,10 +401,20 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                 <Download className="h-5 w-5" />
                 {s('save')}
               </a>
-              <button onClick={onClose} className="flex items-center gap-2 rounded-full bg-[#3155ff] px-6 py-3 text-sm font-bold text-white">
+              <button
+                type="button"
+                onClick={() => {
+                  if (uploadCompleted) onClose()
+                  else if (captured.kind === 'video') void submitCapturedVideo()
+                  else setUploadMessage('نشر الصور غير متاح حاليًا. يمكنك حفظ الصورة.')
+                }}
+                disabled={uploadChecking || uploading}
+                className="flex items-center gap-2 rounded-full bg-[#3155ff] px-5 py-3 text-sm font-bold text-white disabled:opacity-50"
+              >
                 <Send className="h-5 w-5" />
-                {s('post')}
+                {uploadCompleted ? 'إغلاق' : uploading ? `${uploadProgress}%` : uploadChecking ? 'تحقق...' : captured.kind === 'photo' ? 'نشر الصورة' : uploadEnabled ? 'رفع للمراجعة' : 'النشر قيد الإعداد'}
               </button>
+              </div>
             </div>
           </div>
         )}
