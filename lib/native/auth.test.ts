@@ -1,7 +1,14 @@
 import { describe,expect,it,vi } from 'vitest'
 vi.mock('server-only',()=>({}))
-import {parseCredentials,parseRecovery,newRecoveryCode,safeEqual} from './auth'
+import {parseCredentials,parseRecovery,newRecoveryCode,safeEqual,betaRegistrationOpen} from './auth'
 describe('native auth input validation',()=>{
+  it('requires an explicit opt-in for limited public registration',()=>{
+    vi.stubEnv('SPAKTOK_OPEN_BETA_REGISTRATION','false')
+    expect(betaRegistrationOpen()).toBe(false)
+    vi.stubEnv('SPAKTOK_OPEN_BETA_REGISTRATION','true')
+    expect(betaRegistrationOpen()).toBe(true)
+    vi.unstubAllEnvs()
+  })
   it('requires email and strong passwords',()=>{
     expect(parseCredentials({email:'broken',password:'012345678901',username:'valid_user'})).toBeNull()
     expect(parseCredentials({email:'test@example.org',password:'short',username:'valid_user'})).toBeNull()
