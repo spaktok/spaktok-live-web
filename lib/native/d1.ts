@@ -16,6 +16,18 @@ function config() {
 }
 export function hasNativeDatabase(): boolean { return Boolean(config()) }
 
+/** The D1 HTTP REST schema accepts scalar parameters; serialize integer
+ * bindings as decimal strings so it works with the API's string-array form.
+ * Preserve SQL NULL distinctly for existing optional keyset filters. */
+export function httpSqlParams(params: SqlParam[]): Array<string | null> {
+  return params.map(value => {
+    if (value === null) return null
+    if (typeof value === 'number' && !Number.isSafeInteger(value))
+      throw new Error('invalid_database_parameter')
+    return String(value)
+  })
+}
+
 /** Cloudflare's HTTP D1 API: parameterized statements only; never expose token to browser. */
 export async function queryD1<T extends Record<string, unknown>>(
   sql: string, params: SqlParam[] = [],
@@ -27,7 +39,7 @@ export async function queryD1<T extends Record<string, unknown>>(
     {
       method: 'POST',
       headers: { Authorization: `Bearer ${c.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sql, params }),
+      body: JSON.stringify({ sql, params: httpSqlParams(params) }),
       cache: 'no-store',
       signal: AbortSignal.timeout(9000),
     },
@@ -50,7 +62,7 @@ export async function batchD1(queries: Array<{ sql: string; params: SqlParam[] }
     {
       method:'POST',
       headers:{Authorization:`Bearer ${c.token}`,'Content-Type':'application/json'},
-      body:JSON.stringify({ batch:queries }),
+      body:JSON.stringify({ batch:queries.map(q => ({ sql:q.sql, params:httpSqlParams(q.params) })) }),
       cache:'no-store',
       signal:AbortSignal.timeout(9000),
     },

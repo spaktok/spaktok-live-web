@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
+import { queryD1 } from '@/lib/native/d1'
 import {
   COOKIE, createAuthUser, createSession, derivePassword, findAuthUser, getNativeUser,
   nativeAuthReady, parseCredentials, rateLimit, registrationReady, resolveSession,
@@ -18,8 +19,11 @@ function denyCookie(res: NextResponse) {
 export async function GET() {
   if (!nativeAuthReady()) return reply({configured:false,user:null},503)
   try {
+    // Configuration alone is not enough: a missing D1 migration must fail closed.
+    await queryD1('SELECT auth_version,recovery_hash FROM auth_users LIMIT 1')
+    await queryD1('SELECT auth_version FROM auth_sessions LIMIT 1')
     const user = await getNativeUser()
-    return reply({ configured:true,user })
+    return reply({ configured:true,user,registration: registrationReady() ? 'invite_only' : 'disabled' })
   } catch {return reply({configured:false,user:null},503)}
 }
 export async function POST(req: NextRequest) {
