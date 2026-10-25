@@ -185,7 +185,7 @@ export default function SpakTok() {
               <LiveGrid onLiveClick={handleLiveClick} onBack={() => setFeedType('forYou')} />
             ) : (
               <div className="absolute inset-0">
-                <VideoFeed onUserClick={handleUserClick} />
+                <VideoFeed key={feedType} feedType={feedType} onUserClick={handleUserClick} />
               </div>
             )}
           </div>

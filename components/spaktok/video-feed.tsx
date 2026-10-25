@@ -2,13 +2,14 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { VideoCard } from './video-card'
-import type { Video } from '@/lib/types'
+import type { Video, FeedType } from '@/lib/types'
 
 interface VideoFeedProps {
   onUserClick: (userId: string) => void
+  feedType: Extract<FeedType, 'forYou' | 'following'>
 }
 
-export function VideoFeed({ onUserClick }: VideoFeedProps) {
+export function VideoFeed({ onUserClick, feedType }: VideoFeedProps) {
   const [activeIndex, setActiveIndex] = useState(0)
   const [preloadNext, setPreloadNext] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -44,7 +45,7 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch('/api/feed?limit=12', { cache: 'no-store', signal: controller.signal })
+    fetch(`/api/feed?limit=12&source=${feedType}`, { cache: 'no-store', signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('Feed unavailable')
         return response.json() as Promise<{ videos?: Video[]; nextCursor?: string | null }>
@@ -63,7 +64,7 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
         if (!controller.signal.aborted) setIsFeedLoading(false)
       })
     return () => controller.abort()
-  }, [])
+  }, [feedType])
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || isLoadingMore || loadMoreError || isFeedLoading) return
@@ -71,7 +72,7 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
     loadMoreAbortRef.current = controller
     setIsLoadingMore(true)
     try {
-      const response = await fetch(`/api/feed?limit=12&cursor=${encodeURIComponent(nextCursor)}`, {
+      const response = await fetch(`/api/feed?limit=12&source=${feedType}&cursor=${encodeURIComponent(nextCursor)}`, {
         cache: 'no-store',
         signal: controller.signal,
       })
@@ -92,7 +93,7 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
       if (!controller.signal.aborted) setIsLoadingMore(false)
       if (loadMoreAbortRef.current === controller) loadMoreAbortRef.current = null
     }
-  }, [nextCursor, isLoadingMore, loadMoreError, isFeedLoading])
+  }, [feedType, nextCursor, isLoadingMore, loadMoreError, isFeedLoading])
 
   // Load the next page before reaching the end of the current one.
   useEffect(() => {
@@ -184,8 +185,8 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
       )}
       {!isFeedLoading && videos.length === 0 && (
         <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center text-sm text-white/70" dir="rtl" role="status">
-          <span>{feedError ? 'تعذر تحميل الخلاصة حالياً.' : 'لا توجد ريلز منشورة بعد.'}</span>
-          <span className="text-xs text-white/45">{feedError ? 'تحقق من الاتصال وحاول مجدداً.' : 'كن أول من يشارك فيديو.'}</span>
+          <span>{feedError ? 'تعذر تحميل الخلاصة حالياً.' : feedType === 'following' ? 'لا توجد فيديوهات من الحسابات التي تتابعها.' : 'لا توجد ريلز منشورة بعد.'}</span>
+          <span className="text-xs text-white/45">{feedError ? 'تحقق من الاتصال وحاول مجدداً.' : feedType === 'following' ? 'تابع بعض المبدعين لتظهر فيديوهاتهم هنا.' : 'كن أول من يشارك فيديو.'}</span>
         </div>
       )}
       {videos.map((video, index) => {

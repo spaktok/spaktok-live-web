@@ -36,6 +36,10 @@ function json(body: unknown, status = 200) {
 }
 
 export async function GET(request: NextRequest) {
+  const source = request.nextUrl.searchParams.get('source') ?? 'forYou'
+  if (source !== 'forYou' && source !== 'following') {
+    return json({ error: 'invalid_feed_source' }, 400)
+  }
   const requestedSize = Number(request.nextUrl.searchParams.get('limit') ?? 12)
   const limit = Number.isFinite(requestedSize)
     ? Math.max(1, Math.min(MAX_FEED_SIZE, Math.trunc(requestedSize)))
@@ -53,14 +57,24 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient()
     const { data: authData } = await supabase.auth.getUser()
     const userId = authData.user?.id ?? null
+    // A following feed must never silently fall back to the public feed.
+    if (source === 'following' && !userId) return json({ error: 'unauthorized' }, 401)
 
     // Stable keyset pagination avoids increasingly expensive database offsets.
+    // PostgREST !inner embeds filter parent videos on who the viewer follows.
+    // The explicit FK distinguishes follows.following_id from follower_id.
+    const baseFields = 'id,user_id,media_url,thumbnail_url,description,music,view_count,like_count,comment_count,share_count,created_at'
+    const profileFields = 'username,display_name,avatar_url,is_verified'
+    const relatedProfile = source === 'following'
+      ? `profiles!inner(${profileFields},following_link:follows!follows_following_id_fkey!inner(follower_id))`
+      : `profiles(${profileFields})`
     let query = supabase
       .from('videos')
-      .select('id,user_id,media_url,thumbnail_url,description,music,view_count,like_count,comment_count,share_count,created_at,profiles(username,display_name,avatar_url,is_verified)')
+      .select(`${baseFields},${relatedProfile}`)
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .limit(limit + 1)
+    if (source === 'following') query = query.eq('profiles.following_link.follower_id', userId!)
     if (cursor) query = query.or(feedKeyFilter(cursor))
     const { data, error } = await query
 
@@ -100,14 +114,18 @@ export async function GET(request: NextRequest) {
         for (const bookmark of bookmarks ?? []) bookmarkedIds.add(bookmark.video_id)
       }
 
-      const creatorIds = [...new Set(rows.map((row) => row.user_id))]
-      const { data: follows, error: followsError } = await supabase
-        .from('follows')
-        .select('following_id')
-        .eq('follower_id', userId)
-        .in('following_id', creatorIds)
-      if (!followsError) {
-        for (const follow of follows ?? []) followedIds.add(follow.following_id)
+      if (source === 'following') {
+        for (const row of rows) followedIds.add(row.user_id)
+      } else {
+        const creatorIds = [...new Set(rows.map((row) => row.user_id))]
+        const { data: follows, error: followsError } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', userId)
+          .in('following_id', creatorIds)
+        if (!followsError) {
+          for (const follow of follows ?? []) followedIds.add(follow.following_id)
+        }
       }
     }
 
