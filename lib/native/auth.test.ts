@@ -1,17 +1,18 @@
-import { describe, expect, it } from 'vitest'
-import { parseCredentials, safeEqual } from './auth'
-describe('native account validation',()=>{
-  it('rejects short passwords and invalid email',()=>{
-    expect(parseCredentials({email:'test@invalid',password:'1234567890',username:'alex'})).toBeNull()
-    expect(parseCredentials({email:'test@example.org',password:'123',username:'alex'})).toBeNull()
+import { describe,expect,it,vi } from 'vitest'
+vi.mock('server-only',()=>({}))
+import {parseCredentials,safeEqual} from './auth'
+describe('native auth input validation',()=>{
+  it('requires email and strong passwords',()=>{
+    expect(parseCredentials({email:'broken',password:'012345678901',username:'valid_user'})).toBeNull()
+    expect(parseCredentials({email:'test@example.org',password:'short',username:'valid_user'})).toBeNull()
   })
-  it('accepts a normalized new account',()=>{
-    expect(parseCredentials({email:' X@EXAMPLE.org ',password:'strong-phrase-2026',username:'Spak_User'}))
-      .toMatchObject({email:'x@example.org',username:'spak_user'})
+  it('normalizes username and email',()=>{
+    expect(parseCredentials({email:' USER@EXAMPLE.ORG ',password:'long-password-strong',username:'User_123'}))
+      .toMatchObject({email:'user@example.org',username:'user_123'})
   })
-  it('matches secrets without string equality shortcuts',()=>{
-    expect(safeEqual('secret','secret')).toBe(true)
-    expect(safeEqual('secret','SECREt')).toBe(false)
-    expect(safeEqual('s','ssss')).toBe(false)
+  it('compares fixed-length secrets safely',()=>{
+    expect(safeEqual('abcdef','abcdef')).toBe(true)
+    expect(safeEqual('abcdef','ABCDEF')).toBe(false)
+    expect(safeEqual('abcdef','abc')).toBe(false)
   })
 })

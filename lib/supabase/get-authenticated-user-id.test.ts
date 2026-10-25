@@ -1,35 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import { createClient } from "./server"
-import { getAuthenticatedUserId } from "./get-authenticated-user-id"
-
-vi.mock("./server", () => ({
-  createClient: vi.fn(),
-}))
-
-const getUser = vi.fn()
-
-describe("getAuthenticatedUserId", () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(createClient).mockResolvedValue({ auth: { getUser } } as never)
-  })
-
-  it("returns the user ID from Supabase's verified user lookup", async () => {
-    getUser.mockResolvedValue({ data: { user: { id: "verified-user" } }, error: null })
-
-    await expect(getAuthenticatedUserId()).resolves.toBe("verified-user")
-    expect(getUser).toHaveBeenCalledOnce()
-  })
-
-  it("returns null when Supabase cannot verify the current session", async () => {
-    getUser.mockResolvedValue({ data: { user: { id: "untrusted-user" } }, error: new Error("invalid token") })
-
-    await expect(getAuthenticatedUserId()).resolves.toBeNull()
-  })
-
-  it("returns null when the session has no user", async () => {
-    getUser.mockResolvedValue({ data: { user: null }, error: null })
-
-    await expect(getAuthenticatedUserId()).resolves.toBeNull()
-  })
+import {describe,expect,it,vi} from 'vitest'
+vi.mock('server-only',()=>({}))
+vi.mock('@/lib/native/auth',()=>({getNativeUser:vi.fn()}))
+import {getNativeUser} from '@/lib/native/auth'
+import {getAuthenticatedUserId} from './get-authenticated-user-id'
+describe('native authentication compatibility adapter',()=>{
+ it('rejects unverified identity headers or cookies without D1 session',async()=>{
+   vi.mocked(getNativeUser).mockResolvedValue(null)
+   expect(await getAuthenticatedUserId()).toBeNull()
+ })
+ it('returns only native validated id',async()=>{
+   vi.mocked(getNativeUser).mockResolvedValue({id:'native-user',email:'u@example.org',username:'new'})
+   expect(await getAuthenticatedUserId()).toBe('native-user')
+ })
 })
