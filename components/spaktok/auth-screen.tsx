@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 
 import { APP_LOGO_URL, APP_NAME } from "@/lib/brand";
 
-type AuthMode = "welcome" | "login" | "signup";
+type AuthMode = "welcome" | "login" | "signup" | "recover";
 
 interface AuthScreenProps {
   onComplete?: () => void;
@@ -59,6 +59,8 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
     ? 'قاعدة بيانات Cloudflare لم تُربط بعد. التسجيل والدخول سيتاحان بعد إكمال إعداد D1.'
     : initialError === 'auth_unavailable' ? 'تعذر الوصول إلى خدمة الحسابات الجديدة.' : null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState(false);
 
 
   const [formData, setFormData] = useState({
@@ -66,6 +68,7 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
     password: "",
     username: "",
     inviteCode: "",
+    recoveryCode: "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -86,11 +89,12 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
         credentials:'same-origin',
         cache:'no-store',
         body:JSON.stringify({
-          action:mode==='signup'?'register':'login',email,password,
+          action:mode==='signup'?'register':mode==='recover'?'recover':'login',email,password,
+          recoveryCode:formData.recoveryCode,
           username:formData.username.trim(), inviteCode:formData.inviteCode,
         }),
       })
-      const body=await response.json() as {success?:boolean;error?:string}
+      const body=await response.json() as {success?:boolean;error?:string;recoveryCode?:string}
       if (!response.ok || !body.success) {
         const errors:Record<string,string>={
           native_auth_not_configured:'قاعدة بيانات Cloudflare غير مُهيأة بعد. يلزم ربطها من إعدادات الإدارة.',
@@ -101,8 +105,15 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
           too_many_attempts:'محاولات كثيرة. أعد المحاولة بعد 15 دقيقة.',
           invalid_credentials:'تحقق من البريد وكلمة المرور والاسم.',
           invalid_username:'اسم المستخدم يجب أن يكون بالإنجليزية، من 3 إلى 24 حرفًا.',
+          invalid_recovery:'تعذر استعادة الحساب. تحقق من البريد ورمز الاسترداد.',
         }
         setError(errors[body.error||'']||'تعذر إتمام العملية. تحقق من إعدادات الخدمة.')
+        return
+      }
+      if ((mode==='signup' || mode==='recover') && body.recoveryCode) {
+        setRecoveryCode(body.recoveryCode)
+        setCopyState(false)
+        setFormData(current=>({...current,password:'',recoveryCode:''}))
         return
       }
       onComplete?.()
@@ -111,6 +122,31 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
       setError('تعذر الاتصال بخادم SpakTok. حاول مرة أخرى.')
     } finally {setIsLoading(false)}
   }
+
+  if (recoveryCode) return (
+    <main className="flex min-h-dvh items-center justify-center bg-background px-6 text-white" dir="rtl">
+      <section className="w-full max-w-md space-y-5 rounded-3xl border border-white/10 bg-white/5 p-6">
+        <h1 className="text-2xl font-bold">احفظ رمز استرداد حسابك</h1>
+        <p className="text-sm text-white/75">
+          هذا الرمز يظهر مرة واحدة فقط. احفظه في مدير كلمات مرور آمن؛ ستحتاج إليه
+          إذا نسيت كلمة المرور. لا ترسله لأحد ولا تحفظه في لقطة شاشة عامة.
+        </p>
+        <code dir="ltr" className="block select-all break-all rounded-xl border border-white/20 bg-black/70 p-4 text-sm text-white">{recoveryCode}</code>
+        <Button type="button" variant="outline" className="w-full" onClick={() => {
+          void navigator.clipboard?.writeText(recoveryCode).then(() => setCopyState(true)).catch(() => setCopyState(false))
+        }}>
+          {copyState?'تم النسخ':'نسخ رمز الاسترداد'}
+        </Button>
+        <Button className="w-full" onClick={() => {
+          setRecoveryCode(null)
+          if (mode==='recover') { setMode('login'); setInfoMessage('تم تغيير كلمة المرور. سجّل الدخول بكلمة المرور الجديدة.') }
+          else { onComplete?.(); window.location.assign('/') }
+        }}>
+          حفظت الرمز — متابعة
+        </Button>
+      </section>
+    </main>
+  )
 
   return (
     <div className="min-h-dvh w-full bg-background flex flex-col items-center relative overflow-hidden">
@@ -210,7 +246,7 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
             </motion.div>
           )}
 
-          {(mode === "login" || mode === "signup") && (
+          {(mode === "login" || mode === "signup" || mode === "recover") && (
             <motion.div
               key={mode}
               initial={{ opacity: 0, x: 50 }}
@@ -230,11 +266,12 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
                 </Button>
                 <div>
                   <h1 className="text-2xl font-bold">
-                    {mode === "login" ? "مرحبًا بعودتك" : "إنشاء حساب"}
+                    {mode === "login" ? "مرحبًا بعودتك" : mode === "recover" ? "استعادة الحساب" : "إنشاء حساب"}
                   </h1>
                   <p className="text-sm text-muted-foreground">
                     {mode === "login"
                       ? "سجّل الدخول للمتابعة"
+                      : mode === "recover" ? "أدخل رمز الاسترداد وكلمة المرور الجديدة"
                       : "انضم إلى مجتمع SpakTok"}
                   </p>
                 </div>
@@ -268,6 +305,18 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
                       required
                     />
                     <p className="text-right text-xs text-muted-foreground">التسجيل بدعوة مؤقتًا حتى نفعّل البريد الإلكتروني والتحقق ضد الحسابات الآلية.</p>
+                  </div>
+                )}
+                {mode === 'recover' && (
+                  <div className="space-y-1">
+                    <Input
+                      value={formData.recoveryCode}
+                      onChange={(e) => setFormData({ ...formData, recoveryCode: e.target.value })}
+                      placeholder="رمز الاسترداد الذي حفظته عند إنشاء الحساب"
+                      autoComplete="off" dir="ltr" required
+                      className="h-14 rounded-2xl border-0 bg-muted/50 text-left"
+                    />
+                    <p className="text-right text-xs text-muted-foreground">الاسترداد عبر الرمز، وليس البريد الإلكتروني، حتى يتم تفعيل نظام البريد.</p>
                   </div>
                 )}
                 <div className="relative">
@@ -344,6 +393,8 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
                     <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : mode === "login" ? (
                     "تسجيل الدخول"
+                  ) : mode === "recover" ? (
+                    "تغيير كلمة المرور"
                   ) : (
                     "إنشاء حساب"
                   )}
@@ -351,6 +402,12 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
 
               </form>
 
+              {mode === 'login' && (
+                <button type="button" className="mt-4 w-full text-center text-sm text-primary underline"
+                  onClick={() => {setError(null);setMode('recover')}}>
+                  نسيت كلمة المرور؟ استخدم رمز الاسترداد
+                </button>
+              )}
               {/* Switch mode */}
               <div className="text-center mt-6">
                 <span className="text-muted-foreground">
