@@ -15,17 +15,44 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
   const [videos, setVideos] = useState<Video[]>([])
   const [isFeedLoading, setIsFeedLoading] = useState(true)
   const [feedError, setFeedError] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [loadMoreError, setLoadMoreError] = useState(false)
+  const [canPrecache, setCanPrecache] = useState(true)
+  const [isVisible, setIsVisible] = useState(true)
+  const loadMoreAbortRef = useRef<AbortController | null>(null)
+
+  // Pause background playback and respect the viewer's data-saving preference.
+  useEffect(() => {
+    const connection = (navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string; addEventListener?: (type: string, callback: () => void) => void; removeEventListener?: (type: string, callback: () => void) => void }
+    }).connection
+    const updatePolicy = () => {
+      setCanPrecache(!connection?.saveData && !['slow-2g', '2g', '3g'].includes(connection?.effectiveType ?? ''))
+    }
+    const updateVisibility = () => setIsVisible(!document.hidden)
+    updatePolicy()
+    updateVisibility()
+    connection?.addEventListener?.('change', updatePolicy)
+    document.addEventListener('visibilitychange', updateVisibility)
+    return () => {
+      connection?.removeEventListener?.('change', updatePolicy)
+      document.removeEventListener('visibilitychange', updateVisibility)
+      loadMoreAbortRef.current?.abort()
+    }
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
     fetch('/api/feed?limit=12', { cache: 'no-store', signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('Feed unavailable')
-        return response.json() as Promise<{ videos?: Video[] }>
+        return response.json() as Promise<{ videos?: Video[]; nextCursor?: string | null }>
       })
       .then((payload) => {
         if (!Array.isArray(payload.videos)) throw new Error('invalid_feed')
         setVideos(payload.videos)
+        setNextCursor(payload.nextCursor ?? null)
         setActiveIndex(0)
         setFeedError(false)
       })
@@ -37,6 +64,42 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
       })
     return () => controller.abort()
   }, [])
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || isLoadingMore || loadMoreError || isFeedLoading) return
+    const controller = new AbortController()
+    loadMoreAbortRef.current = controller
+    setIsLoadingMore(true)
+    try {
+      const response = await fetch(`/api/feed?limit=12&cursor=${encodeURIComponent(nextCursor)}`, {
+        cache: 'no-store',
+        signal: controller.signal,
+      })
+      if (!response.ok) throw new Error('feed_page_unavailable')
+      const payload = await response.json() as { videos?: Video[]; nextCursor?: string | null }
+      if (!Array.isArray(payload.videos)) throw new Error('invalid_feed_page')
+      if (controller.signal.aborted) return
+      setVideos((current) => {
+        const known = new Set(current.map((video) => video.id))
+        return [...current, ...payload.videos!.filter((video) => !known.has(video.id))]
+      })
+      // If the upstream returns a repeated cursor, fail closed to avoid request loops.
+      setNextCursor(payload.nextCursor && payload.nextCursor !== nextCursor ? payload.nextCursor : null)
+      setLoadMoreError(false)
+    } catch {
+      if (!controller.signal.aborted) setLoadMoreError(true)
+    } finally {
+      if (!controller.signal.aborted) setIsLoadingMore(false)
+      if (loadMoreAbortRef.current === controller) loadMoreAbortRef.current = null
+    }
+  }, [nextCursor, isLoadingMore, loadMoreError, isFeedLoading])
+
+  // Load the next page before reaching the end of the current one.
+  useEffect(() => {
+    if (!isFeedLoading && nextCursor && activeIndex >= videos.length - 4) {
+      void loadMore()
+    }
+  }, [activeIndex, videos.length, nextCursor, isFeedLoading, loadMore])
 
   const updateActiveIndex = useCallback(() => {
     const container = containerRef.current
@@ -51,8 +114,8 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
 
   // Predictive pre-caching: once the active reel passes 40%, warm up the next one.
   const handleActiveProgress = useCallback((ratio: number) => {
-    if (ratio >= 0.4) setPreloadNext(true)
-  }, [])
+    if (ratio >= 0.4 && canPrecache) setPreloadNext(true)
+  }, [canPrecache])
 
   useEffect(() => {
     const container = containerRef.current
@@ -111,7 +174,7 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
   return (
     <div
       ref={containerRef}
-      className="h-full w-full overflow-y-scroll snap-y snap-mandatory overscroll-contain scrollbar-hide"
+      className="relative h-full w-full overflow-y-scroll snap-y snap-mandatory overscroll-contain scrollbar-hide"
       aria-label="موجز الريلز"
     >
       {isFeedLoading && (
@@ -128,13 +191,13 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
       {videos.map((video, index) => {
         const isWithinWindow = Math.abs(index - activeIndex) <= 1
         const isActive = index === activeIndex
-        const shouldPrecache = isActive || (index === activeIndex + 1 && preloadNext)
+        const shouldPrecache = canPrecache && index === activeIndex + 1 && preloadNext
         return (
           <div key={video.id} className="h-full w-full snap-start snap-always" style={{ scrollSnapAlign: 'start' }}>
             {isWithinWindow ? (
               <VideoCard
                 video={video}
-                isActive={isActive}
+                isActive={isActive && isVisible}
                 shouldPrecache={shouldPrecache}
                 onProgress={isActive ? handleActiveProgress : undefined}
                 onUserClick={onUserClick}
@@ -150,6 +213,17 @@ export function VideoFeed({ onUserClick }: VideoFeedProps) {
           </div>
         )
       })}
+      {isLoadingMore && (
+        <div className="pointer-events-none sticky bottom-24 mx-auto w-fit rounded-full bg-black/75 px-4 py-2 text-xs text-white/80" role="status" dir="rtl">
+          جارٍ تحميل المزيد...
+        </div>
+      )}
+      {loadMoreError && nextCursor && (
+        <button type="button" className="sticky bottom-24 mx-auto block rounded-full bg-white px-4 py-2 text-xs font-semibold text-black"
+          onClick={() => setLoadMoreError(false)} dir="rtl">
+          تعذر تحميل المزيد — إعادة المحاولة
+        </button>
+      )}
     </div>
   )
 }

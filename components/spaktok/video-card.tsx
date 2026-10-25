@@ -36,6 +36,7 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
   const [isFollowing, setIsFollowing] = useState(video.user.isFollowing)
   const [isMuted, setIsMuted] = useState(true)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [isBuffering, setIsBuffering] = useState(false)
   const [showHearts, setShowHearts] = useState<{ id: number; x: number; y: number }[]>([])
   const [showComments, setShowComments] = useState(false)
   const [commentText, setCommentText] = useState('')
@@ -80,15 +81,18 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
   }, [showComments, video.id, video.user.avatar, video.user.displayName])
 
   useEffect(() => {
-    if (videoRef.current) {
-      if (isActive) {
-        videoRef.current.play().catch(() => {})
-        setIsPlaying(true)
-      } else {
-        videoRef.current.pause()
-        videoRef.current.currentTime = 0
+    const media = videoRef.current
+    if (!media) return
+    if (isActive) {
+      setIsBuffering(true)
+      media.play().catch(() => {
         setIsPlaying(false)
-      }
+        setIsBuffering(false)
+      })
+    } else {
+      media.pause()
+      setIsPlaying(false)
+      setIsBuffering(false)
     }
   }, [isActive])
 
@@ -198,11 +202,21 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
         onTouchEnd={handleTouchEnd}
         onTimeUpdate={handleTimeUpdate}
         poster={video.thumbnailUrl}
-        preload={isActive || shouldPrecache ? 'auto' : 'metadata'}
+        preload={isActive ? 'auto' : shouldPrecache ? 'metadata' : 'none'}
+        onPlaying={() => { setIsPlaying(true); setIsBuffering(false) }}
+        onPause={() => setIsPlaying(false)}
+        onWaiting={() => setIsBuffering(true)}
+        onCanPlay={() => setIsBuffering(false)}
         crossOrigin="anonymous"
         aria-label={`فيديو ${video.user.displayName}`}
       />
       
+      {isActive && isBuffering && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none" role="status" aria-label="جارٍ تجهيز الفيديو">
+          <div className="size-9 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+        </div>
+      )}
+
       {/* Play/Pause Indicator */}
       {!isPlaying && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
