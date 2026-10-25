@@ -1,79 +1,71 @@
 import 'server-only'
+import { createPrivateKey, randomBytes, sign } from 'node:crypto'
 
 export type SqlParam = string | number | null
 export interface D1Result<T> { rows: T[]; changes: number }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-export const validId = (value: unknown): value is string =>
-  typeof value === 'string' && UUID.test(value)
+export const validId = (value: unknown): value is string => typeof value === 'string' && UUID.test(value)
 
 function config() {
-  const account = process.env.CLOUDFLARE_ACCOUNT_ID
-  const database = process.env.CLOUDFLARE_D1_DATABASE_ID
-  const token = process.env.CLOUDFLARE_D1_API_TOKEN
-  if (!account || !/^[a-f0-9]{32}$/i.test(account) ||
-      !database || !UUID.test(database) || !token) return null
-  return { account, database, token }
+  const address = process.env.SPAKTOK_D1_BRIDGE_URL
+  const privateKeyBase64 = process.env.SPAKTOK_D1_BRIDGE_SIGNING_KEY
+  if (!address || !privateKeyBase64) return null
+  // Prevent a typo or tampered environment from sending signed SQL to another host.
+  let url: URL
+  try { url = new URL(address) } catch { return null }
+  if (url.protocol !== 'https:' || url.hostname !== 'spaktok-d1-bridge.spaktok.workers.dev' ||
+      url.pathname !== '/' || url.username || url.password || url.search || url.hash) return null
+  return { endpoint: new URL('/query',url).toString(), privateKeyBase64 }
 }
 export function hasNativeDatabase(): boolean { return Boolean(config()) }
 
-/** The D1 HTTP REST schema accepts scalar parameters; serialize integer
- * bindings as decimal strings so it works with the API's string-array form.
- * Preserve SQL NULL distinctly for existing optional keyset filters. */
 export function httpSqlParams(params: SqlParam[]): Array<string | null> {
   return params.map(value => {
     if (value === null) return null
-    if (typeof value === 'number' && !Number.isSafeInteger(value))
-      throw new Error('invalid_database_parameter')
+    if (typeof value === 'number' && !Number.isSafeInteger(value)) throw new Error('invalid_database_parameter')
     return String(value)
   })
 }
-
-/** Cloudflare's HTTP D1 API: parameterized statements only; never expose token to browser. */
-export async function queryD1<T extends Record<string, unknown>>(
-  sql: string, params: SqlParam[] = [],
-): Promise<D1Result<T>> {
-  const c = config()
-  if (!c) throw new Error('native_database_not_configured')
-  const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${c.account}/d1/database/${c.database}/query`,
-    {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${c.token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sql, params: httpSqlParams(params) }),
-      cache: 'no-store',
-      signal: AbortSignal.timeout(9000),
+type Query={sql:string;params:Array<string|null>}
+interface ResultRow<T> { success: boolean; results?: T[]; meta?:{changes?:number} }
+async function send<T extends Record<string, unknown>>(queries: Query[]): Promise<ResultRow<T>[]> {
+  const cfg=config()
+  if(!cfg)throw new Error('native_database_not_configured')
+  if(!queries.length||queries.length>8)throw new Error('invalid_database_batch')
+  const payload=queries.length===1?queries[0]:{batch:queries}
+  const body=JSON.stringify(payload)
+  const ts=Math.floor(Date.now()/1000).toString()
+  const nonce=randomBytes(16).toString('hex')
+  const bytes=Buffer.from(ts+'\n'+nonce+'\n'+body,'utf8')
+  const key=createPrivateKey(Buffer.from(cfg.privateKeyBase64,'base64').toString('utf8'))
+  const signature=sign(null,bytes,key).toString('base64')
+  const response=await fetch(cfg.endpoint,{
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'X-SpakTok-Timestamp':ts,
+      'X-SpakTok-Nonce':nonce,
+      'X-SpakTok-Signature':signature,
     },
-  )
-  if (!response.ok) throw new Error('native_database_unavailable')
-  const payload = await response.json() as {
-    success?: boolean
-    result?: Array<{ success?: boolean; results?: T[]; meta?: { changes?: number } }>
-  }
-  if (!payload.success || !Array.isArray(payload.result) ||
-      !payload.result[0]?.success) throw new Error('native_database_query_failed')
-  return { rows: payload.result[0].results ?? [], changes: payload.result[0].meta?.changes ?? 0 }
-}
-/** Cloudflare D1 batch executes related statements transactionally. */
-export async function batchD1(queries: Array<{ sql: string; params: SqlParam[] }>): Promise<void> {
-  const c = config()
-  if (!c) throw new Error('native_database_not_configured')
-  const response = await fetch(
-    `https://api.cloudflare.com/client/v4/accounts/${c.account}/d1/database/${c.database}/query`,
-    {
-      method:'POST',
-      headers:{Authorization:`Bearer ${c.token}`,'Content-Type':'application/json'},
-      body:JSON.stringify({ batch:queries.map(q => ({ sql:q.sql, params:httpSqlParams(q.params) })) }),
-      cache:'no-store',
-      signal:AbortSignal.timeout(9000),
-    },
-  )
+    body,cache:'no-store',signal:AbortSignal.timeout(9000),
+  })
   if(!response.ok)throw new Error('native_database_unavailable')
-  const data=await response.json() as {success?:boolean;result?:Array<{success?:boolean}>}
-  if(!data.success||!Array.isArray(data.result)||
-     data.result.length!==queries.length||data.result.some(item=>!item.success))
-    throw new Error('native_database_query_failed')
+  const parsed=await response.json() as {success?:boolean;result?:ResultRow<T>[]}
+  if(!parsed.success||!Array.isArray(parsed.result)||parsed.result.length!==queries.length||
+     parsed.result.some(item=>!item.success))throw new Error('native_database_query_failed')
+  return parsed.result
 }
-
-export async function oneD1<T extends Record<string, unknown>>(
-  sql: string, params: SqlParam[] = [],
-): Promise<T | null> { return (await queryD1<T>(sql, params)).rows[0] ?? null }
+/** Authenticated bridge calls the Cloudflare D1 binding; no Cloudflare API token
+ * is present in Vercel, client bundles or source control. */
+export async function queryD1<T extends Record<string,unknown>>(
+  sql:string,params:SqlParam[]=[],
+):Promise<D1Result<T>>{
+  const [value]=await send<T>([{sql,params:httpSqlParams(params)}])
+  return {rows:value.results??[],changes:value.meta?.changes??0}
+}
+export async function batchD1(queries:Array<{sql:string;params:SqlParam[]}>):Promise<void>{
+  await send(queries.map(q=>({sql:q.sql,params:httpSqlParams(q.params)})))
+}
+export async function oneD1<T extends Record<string,unknown>>(
+  sql:string,params:SqlParam[]=[],
+):Promise<T|null>{return (await queryD1<T>(sql,params)).rows[0]??null}
