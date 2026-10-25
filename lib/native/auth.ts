@@ -46,17 +46,48 @@ export async function findAuthUser(email: string): Promise<DbUser | null> {
     [email],
   )
 }
-export async function createAuthUser(email: string, username: string, pass: string): Promise<string> {
+export function newRecoveryCode(): string {
+  return 'spak1_' + randomBytes(32).toString('base64url')
+}
+const RECOVERY_FORMAT = /^spak1_[A-Za-z0-9_-]{43}$/
+export function parseRecovery(value: unknown): { email: string; password: string; recoveryCode: string } | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const input = value as Record<string, unknown>
+  const email = typeof input.email === 'string' ? input.email.trim().toLowerCase() : ''
+  const password = typeof input.password === 'string' ? input.password : ''
+  const recoveryCode = typeof input.recoveryCode === 'string' ? input.recoveryCode.trim() : ''
+  if (email.length > 254 || !EMAIL.test(email) || password.length < 10 || password.length > 128 ||
+      !RECOVERY_FORMAT.test(recoveryCode)) return null
+  return { email, password, recoveryCode }
+}
+export async function createAuthUser(email: string, username: string, pass: string):
+  Promise<{ id: string; recoveryCode: string }> {
   const id = crypto.randomUUID(), salt = randomBytes(16).toString('hex')
+  const recoveryCode = newRecoveryCode()
   const hash = await derivePassword(pass, salt)
   // Database API batch is atomic: avoid orphan login/profile rows on conflict.
   await batchD1([
-    {sql:'INSERT INTO auth_users(id,email,password_hash,password_salt) VALUES (?,?,?,?)',
-     params:[id,email,hash,salt]},
+    {sql:'INSERT INTO auth_users(id,email,password_hash,password_salt,recovery_hash) VALUES (?,?,?,?,?)',
+     params:[id,email,hash,salt,sha256(recoveryCode)]},
     {sql:'INSERT INTO profiles(id,username,display_name) VALUES (?,?,?)',
      params:[id,username,username]},
   ])
-  return id
+  return { id, recoveryCode }
+}
+
+/** Recovery via one-time high-entropy secret. Not proof of verified email ownership. */
+export async function recoverAuthUser(email: string, oldCode: string, newPassword: string):
+  Promise<string | null> {
+  const salt = randomBytes(16).toString('hex')
+  const hash = await derivePassword(newPassword, salt)
+  const newCode = newRecoveryCode()
+  const result = await queryD1<{ id: string }>(
+    `UPDATE auth_users
+     SET password_hash=?,password_salt=?,recovery_hash=?,auth_version=auth_version+1
+     WHERE email=? AND recovery_hash=? RETURNING id`,
+    [hash,salt,sha256(newCode),email,sha256(oldCode)],
+  )
+  return result.rows.length === 1 ? newCode : null
 }
 export async function rateLimit(id: string, cap: number): Promise<boolean> {
   const bucket = Math.floor(Date.now() / (15 * 60 * 1000))
@@ -72,8 +103,9 @@ export async function rateLimit(id: string, cap: number): Promise<boolean> {
 export async function createSession(userId: string) {
   const token = randomBytes(32).toString('base64url')
   const expiresAt = Math.floor(Date.now()/1000) + SESSION_SECONDS
-  await queryD1('INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at) VALUES (?,?,?,?)',
-    [sha256(token),userId,expiresAt,Math.floor(Date.now()/1000)])
+  await queryD1(`INSERT INTO auth_sessions(token_hash,user_id,expires_at,created_at,auth_version)
+    SELECT ?,id,?,?,auth_version FROM auth_users WHERE id=?`,
+    [sha256(token),expiresAt,Math.floor(Date.now()/1000),userId])
   return { token, expiresAt }
 }
 export async function resolveSession(token?: string): Promise<{id:string;email:string;username:string}|null> {
@@ -81,7 +113,7 @@ export async function resolveSession(token?: string): Promise<{id:string;email:s
   return oneD1<{id:string;email:string;username:string}>(
     `SELECT a.id,a.email,p.username FROM auth_sessions s
       JOIN auth_users a ON a.id=s.user_id JOIN profiles p ON p.id=a.id
-      WHERE s.token_hash=? AND s.expires_at>? LIMIT 1`,
+      WHERE s.token_hash=? AND s.expires_at>? AND s.auth_version=a.auth_version LIMIT 1`,
     [sha256(token),Math.floor(Date.now()/1000)],
   )
 }

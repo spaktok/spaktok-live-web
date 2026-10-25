@@ -3,7 +3,7 @@ import { cookies } from 'next/headers'
 import {
   COOKIE, createAuthUser, createSession, derivePassword, findAuthUser, getNativeUser,
   nativeAuthReady, parseCredentials, rateLimit, registrationReady, resolveSession,
-  revokeSession, safeEqual, sha256,
+  revokeSession, recoverAuthUser, parseRecovery, safeEqual, sha256,
 } from '@/lib/native/auth'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -39,6 +39,19 @@ export async function POST(req: NextRequest) {
       await revokeSession(cookie)
       const res=reply({success:true});denyCookie(res);return res
     }
+    if (action==='recover') {
+      const parsed = parseRecovery(body)
+      if (!parsed) return reply({error:'invalid_recovery'},400)
+      const ip = req.headers.get('x-vercel-forwarded-for') || 'unknown'
+      if (!await rateLimit('recover-ip:'+ip,8) ||
+          !await rateLimit('recover-email:'+parsed.email,5))
+        return reply({error:'too_many_attempts'},429)
+      const rotated = await recoverAuthUser(parsed.email,parsed.recoveryCode,parsed.password)
+      if (!rotated) return reply({error:'invalid_recovery'},401)
+      const response = reply({success:true,recoveryCode:rotated})
+      denyCookie(response)
+      return response
+    }
     if (action!=='register' && action!=='login') return reply({error:'invalid_action'},400)
     const credentials=parseCredentials(body)
     if (!credentials) return reply({error:'invalid_credentials'},400)
@@ -47,6 +60,7 @@ export async function POST(req: NextRequest) {
     if (!await rateLimit('auth-ip:'+ip,24) || !await rateLimit('auth-email:'+email,12))
       return reply({error:'too_many_attempts'},429)
     let userId=''
+    let issuedRecoveryCode: string | null = null
     if (action==='register') {
       if (!registrationReady()) return reply({error:'registration_not_configured'},503)
       if (!username) return reply({error:'invalid_username'},400)
@@ -54,7 +68,11 @@ export async function POST(req: NextRequest) {
       if (!safeEqual(sha256(inviteCode),sha256(secret))) return reply({error:'invalid_invite'},403)
       if (!await rateLimit('signup-ip:'+ip,3)) return reply({error:'too_many_attempts'},429)
       if (await findAuthUser(email)) return reply({error:'already_registered'},409)
-      try {userId=await createAuthUser(email,username,password)}
+      try {
+        const created = await createAuthUser(email,username,password)
+        userId=created.id
+        issuedRecoveryCode=created.recoveryCode
+      }
       catch {return reply({error:'registration_unavailable_or_taken'},409)}
     } else {
       const user=await findAuthUser(email)
@@ -65,7 +83,7 @@ export async function POST(req: NextRequest) {
       userId=user.id
     }
     const created=await createSession(userId)
-    const res=reply({success:true},action==='register'?201:200)
+    const res=reply({success:true,...(issuedRecoveryCode ? {recoveryCode:issuedRecoveryCode} : {})},action==='register'?201:200)
     res.cookies.set(COOKIE,created.token,{
       httpOnly:true,secure:true,sameSite:'lax',path:'/',
       maxAge:60*60*24*14,

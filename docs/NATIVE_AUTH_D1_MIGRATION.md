@@ -45,3 +45,14 @@ Cloudflare Workers binding after credentials and staging are verified.
   old environments until all routes are free of Supabase references.
 - Do not enable open public registration before email verification, anti-abuse,
   account recovery, GDPR deletion/export and operational review.
+
+## Version 2: offline account recovery
+
+Run `migrations/native/0002_recovery.sql` after v1. Sign-up returns a high-entropy
+single-use recovery code **one time**; show it to the user before leaving the
+signup screen. Its SHA-256 hash, not the plaintext code, is stored in D1.
+The account can reset a password with email + recovery code; each use rotates
+it and increments `auth_version`, immediately invalidating old sessions.
+No email is sent or verified. Losing the password AND recovery code means an
+admin identity-verification process is needed (not yet implemented).
+Do not share or log recovery codes.
