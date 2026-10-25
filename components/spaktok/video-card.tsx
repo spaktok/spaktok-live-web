@@ -7,12 +7,14 @@ import type { Video } from '@/lib/types'
 import { formatNumber } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 import { downloadVideo, shareExternally } from '@/lib/share'
+import type { PlaybackMetric } from '@/lib/video/playback-qa'
 
 interface VideoCardProps {
   video: Video
   isActive: boolean
   shouldPrecache?: boolean
   onProgress?: (ratio: number) => void
+  onPlaybackMetric?: (metric: PlaybackMetric) => void
   onUserClick: (userId: string) => void
   onLike: (videoId: string, liked: boolean) => Promise<boolean> | boolean
   onBookmark: (videoId: string, bookmarked: boolean) => Promise<boolean> | boolean
@@ -30,7 +32,7 @@ interface VideoComment {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export function VideoCard({ video, isActive, shouldPrecache = false, onProgress, onUserClick, onLike, onBookmark, onFollow, onComment, onShare }: VideoCardProps) {
+export function VideoCard({ video, isActive, shouldPrecache = false, onProgress, onPlaybackMetric, onUserClick, onLike, onBookmark, onFollow, onComment, onShare }: VideoCardProps) {
   const [isLiked, setIsLiked] = useState(video.isLiked)
   const [isBookmarked, setIsBookmarked] = useState(video.isBookmarked)
   const [isFollowing, setIsFollowing] = useState(video.user.isFollowing)
@@ -48,6 +50,8 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
   const [isDownloading, setIsDownloading] = useState(false)
   const [shareStatus, setShareStatus] = useState<string | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const playRequestedAt = useRef<number | null>(null)
+  const stalledSince = useRef<number | null>(null)
   const tapTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastTapRef = useRef<number>(0)
 
@@ -84,12 +88,17 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
     const media = videoRef.current
     if (!media) return
     if (isActive) {
+      playRequestedAt.current = performance.now()
+      stalledSince.current = null
       setIsBuffering(true)
       media.play().catch(() => {
+        playRequestedAt.current = null
         setIsPlaying(false)
         setIsBuffering(false)
       })
     } else {
+      playRequestedAt.current = null
+      stalledSince.current = null
       media.pause()
       setIsPlaying(false)
       setIsBuffering(false)
@@ -152,6 +161,29 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
     }
   }
 
+  // QA-only timing: local to this page, no URLs, identities or remote collection.
+  const handlePlaying = () => {
+    setIsPlaying(true)
+    setIsBuffering(false)
+    if (!isActive || !onPlaybackMetric) return
+    const now = performance.now()
+    if (playRequestedAt.current !== null) {
+      onPlaybackMetric({ kind: 'startup', durationMs: Math.max(0, now - playRequestedAt.current) })
+      playRequestedAt.current = null
+    } else if (stalledSince.current !== null) {
+      onPlaybackMetric({ kind: 'rebuffer', durationMs: Math.max(0, now - stalledSince.current) })
+      stalledSince.current = null
+    }
+  }
+
+  const handleWaiting = () => {
+    if (!isActive) return
+    setIsBuffering(true)
+    if (onPlaybackMetric && playRequestedAt.current === null && stalledSince.current === null) {
+      stalledSince.current = performance.now()
+    }
+  }
+
   const handleTimeUpdate = () => {
     const current = videoRef.current
     if (current?.duration) {
@@ -203,9 +235,9 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
         onTimeUpdate={handleTimeUpdate}
         poster={video.thumbnailUrl}
         preload={isActive ? 'auto' : shouldPrecache ? 'metadata' : 'none'}
-        onPlaying={() => { setIsPlaying(true); setIsBuffering(false) }}
-        onPause={() => setIsPlaying(false)}
-        onWaiting={() => setIsBuffering(true)}
+        onPlaying={handlePlaying}
+        onPause={() => { setIsPlaying(false); stalledSince.current = null }}
+        onWaiting={handleWaiting}
         onCanPlay={() => setIsBuffering(false)}
         crossOrigin="anonymous"
         aria-label={`فيديو ${video.user.displayName}`}

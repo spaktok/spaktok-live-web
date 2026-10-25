@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { VideoCard } from './video-card'
 import type { Video, FeedType } from '@/lib/types'
+import { summarizePlayback, type PlaybackMetric } from '@/lib/video/playback-qa'
 
 interface VideoFeedProps {
   onUserClick: (userId: string) => void
@@ -21,7 +22,18 @@ export function VideoFeed({ onUserClick, feedType }: VideoFeedProps) {
   const [loadMoreError, setLoadMoreError] = useState(false)
   const [canPrecache, setCanPrecache] = useState(true)
   const [isVisible, setIsVisible] = useState(true)
+  const [showQa, setShowQa] = useState(false)
+  const [samples, setSamples] = useState<PlaybackMetric[]>([])
+  const collectPlayback = useCallback((metric: PlaybackMetric) => {
+    setSamples((current) => [...current.slice(-99), metric])
+  }, [])
+  const qaSummary = summarizePlayback(samples)
+
   const loadMoreAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => {
+    setShowQa(new URLSearchParams(window.location.search).get('perf') === '1')
+  }, [])
 
   // Pause background playback and respect the viewer's data-saving preference.
   useEffect(() => {
@@ -178,6 +190,15 @@ export function VideoFeed({ onUserClick, feedType }: VideoFeedProps) {
       className="relative h-full w-full overflow-y-scroll snap-y snap-mandatory overscroll-contain scrollbar-hide"
       aria-label="موجز الريلز"
     >
+      {showQa && (
+        <div aria-hidden="true" className="pointer-events-none fixed left-3 top-16 z-30 rounded-xl border border-white/15 bg-black/85 px-3 py-2 text-[11px] leading-relaxed text-white shadow-lg">
+          <div className="font-semibold">SpakTok QA · Playback</div>
+          <div>بدء التشغيل P75: {qaSummary.startupP75Ms === null ? '—' : `${qaSummary.startupP75Ms} ms`}</div>
+          <div>عدد القياسات: {qaSummary.startupCount}</div>
+          <div>انقطاعات التشغيل: {qaSummary.rebufferCount}</div>
+          <div>إجمالي التقطّع: {qaSummary.rebufferTotalMs} ms</div>
+        </div>
+      )}
       {isFeedLoading && (
         <div className="flex h-full items-center justify-center px-8 text-center text-sm text-white/70" dir="rtl" role="status">
           جارٍ تحميل الخلاصة...
@@ -201,6 +222,7 @@ export function VideoFeed({ onUserClick, feedType }: VideoFeedProps) {
                 isActive={isActive && isVisible}
                 shouldPrecache={shouldPrecache}
                 onProgress={isActive ? handleActiveProgress : undefined}
+                onPlaybackMetric={showQa ? collectPlayback : undefined}
                 onUserClick={onUserClick}
                 onLike={(videoId, liked) => handleLike(videoId, liked)}
                 onBookmark={(videoId, bookmarked) => handleBookmark(videoId, bookmarked)}
