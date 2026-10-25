@@ -53,7 +53,7 @@ const defaultSettings = {
   notifications: true,
   darkMode: true,
   privateAccount: false,
-  twoFactor: true,
+  twoFactor: false,
   dataSaver: false,
   autoPlay: true,
 };
@@ -94,16 +94,16 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       items: [
         { icon: <User className="w-5 h-5" />, label: "تعديل الملف الشخصي", action: "navigate" },
         { icon: <Lock className="w-5 h-5" />, label: "تغيير كلمة المرور", action: "navigate" },
-        { icon: <CreditCard className="w-5 h-5" />, label: "المحفظة والدفع", action: "navigate", badge: "$125" },
-        { icon: <Gift className="w-5 h-5" />, label: "العملات والهدايا", action: "navigate", badge: "2,500" },
+        { icon: <CreditCard className="w-5 h-5" />, label: "المحفظة والدفع", action: "navigate" },
+        { icon: <Gift className="w-5 h-5" />, label: "العملات والهدايا", action: "navigate" },
         { icon: <QrCode className="w-5 h-5" />, label: "رمز QR الخاص بي", action: "navigate" },
       ],
     },
     {
       title: "الخصوصية والأمان",
       items: [
-        { icon: <Eye className="w-5 h-5" />, label: "حساب خاص", description: "فقط المتابعون يرون محتواك", action: "toggle", settingKey: "privateAccount", value: settings.privateAccount },
-        { icon: <Shield className="w-5 h-5" />, label: "التحقق بخطوتين", description: "حماية إضافية لحسابك", action: "toggle", settingKey: "twoFactor", value: settings.twoFactor },
+        { icon: <Eye className="w-5 h-5" />, label: "حساب خاص", description: "لم يُفعّل على الخادم بعد", action: "toggle", settingKey: "privateAccount", value: settings.privateAccount },
+        { icon: <Shield className="w-5 h-5" />, label: "التحقق بخطوتين", description: "قيد التطوير — غير مفعّل حاليًا", action: "toggle", settingKey: "twoFactor", value: settings.twoFactor },
         { icon: <UserPlus className="w-5 h-5" />, label: "الحسابات المحظورة", action: "navigate" },
         { icon: <Database className="w-5 h-5" />, label: "تحميل بياناتي", action: "navigate" },
       ],
@@ -140,6 +140,10 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
   ];
 
   const toggleSetting = (key: keyof typeof settings) => {
+    if (key === 'privateAccount' || key === 'twoFactor') {
+      showFeedback('هذا الخيار لا يمكن تفعيله بعد؛ لم يتم ربط الحماية مع الخادم.')
+      return
+    }
     setSettings((prev) => {
       const nextValue = !prev[key]
       if (key === "darkMode") {
@@ -248,7 +252,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                         void signOut().catch(() => showFeedback('تعذر تسجيل الخروج. حاول مرة أخرى.'));
                         return;
                       }
-                      showFeedback("يمكنك تأكيد حذف الحساب من هذه الخطوة");
+                      showFeedback('حذف الحساب يتطلب آلية تحقق وحذف بيانات؛ غير متاح بعد.');
                     }
                   }}
                 >
@@ -287,6 +291,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                   {item.action === "toggle" && (
                     <Switch
                       checked={item.value}
+                      disabled={item.settingKey === 'privateAccount' || item.settingKey === 'twoFactor'}
                       onCheckedChange={() => {
                         if (item.settingKey) toggleSetting(item.settingKey);
                       }}
