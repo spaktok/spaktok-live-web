@@ -16,7 +16,7 @@ import { ShopScreen } from '@/components/spaktok/shop-screen'
 import { SettingsScreen } from '@/components/spaktok/settings-screen'
 import { AuthScreen } from '@/components/spaktok/auth-screen'
 import { SplashScreen } from '@/components/spaktok/splash-screen'
-import type { TabType, FeedType } from '@/lib/types'
+import type { TabType } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -25,7 +25,7 @@ export default function SpakTok() {
   const { session, isLoading: isAuthLoading } = useAuth()
   const isAuthenticated = !!session
   const [activeTab, setActiveTab] = useState<TabType>('home')
-  const [feedType, setFeedType] = useState<FeedType>('forYou')
+  const [feedType, setFeedType] = useState<'forYou' | 'following' | 'live'>('forYou')
   const [showCamera, setShowCamera] = useState(false)
   const [viewingStory, setViewingStory] = useState<string | null>(null)
   const [viewingProfile, setViewingProfile] = useState<string | null>(null)
