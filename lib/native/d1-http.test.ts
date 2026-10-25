@@ -1,4 +1,5 @@
-import {describe,expect,it} from 'vitest'
+import {describe,expect,it,vi} from 'vitest'
+vi.mock('server-only',()=>({}))
 import {httpSqlParams} from './d1'
 describe('Cloudflare D1 HTTP parameter encoding',()=>{
  it('sends finite integer SQLite params using REST string convention',()=>{
