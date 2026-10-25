@@ -1,13 +1,6 @@
-import { createClient } from "./server"
-
-/**
- * Resolve the caller from Supabase's verified server-side session cookie.
- * Never trust user identifiers supplied in request headers or JSON bodies.
- */
+import { getNativeUser } from '@/lib/native/auth'
+/** Native D1 session replaces removed Supabase Auth; identity never comes from headers. */
 export async function getAuthenticatedUserId(): Promise<string | null> {
-  const supabase = await createClient()
-  const { data, error } = await supabase.auth.getUser()
-
-  if (error) return null
-  return data.user?.id ?? null
+  const user=await getNativeUser()
+  return user?.id??null
 }
