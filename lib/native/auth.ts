@@ -1,10 +1,8 @@
 import 'server-only'
-import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto'
-import { promisify } from 'node:util'
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { cookies } from 'next/headers'
 import { hasNativeDatabase, oneD1, queryD1 } from './d1'
 
-const scrypt = promisify(scryptCb)
 export const COOKIE = 'spaktok_session'
 const SESSION_SECONDS = 60 * 60 * 24 * 14
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -34,7 +32,7 @@ function pepper(): string {
 }
 export const sha256 = (value: string) => createHash('sha256').update(value).digest('hex')
 export async function derivePassword(password: string, salt: string) {
-  const key = await scrypt(password + pepper(), Buffer.from(salt, 'hex'), 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 })
+  const key = scryptSync(password + pepper(), Buffer.from(salt, 'hex'), 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 })
   return (key as Buffer).toString('hex')
 }
 export function safeEqual(a: string, b: string): boolean {
