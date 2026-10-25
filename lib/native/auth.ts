@@ -1,7 +1,7 @@
 import 'server-only'
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { cookies } from 'next/headers'
-import { hasNativeDatabase, oneD1, queryD1 } from './d1'
+import { batchD1, hasNativeDatabase, oneD1, queryD1 } from './d1'
 
 export const COOKIE = 'spaktok_session'
 const SESSION_SECONDS = 60 * 60 * 24 * 14
@@ -49,12 +49,13 @@ export async function findAuthUser(email: string): Promise<DbUser | null> {
 export async function createAuthUser(email: string, username: string, pass: string): Promise<string> {
   const id = crypto.randomUUID(), salt = randomBytes(16).toString('hex')
   const hash = await derivePassword(pass, salt)
-  // Atomic transaction: both auth row and public profile are created or neither.
-  const sql = `INSERT INTO auth_users (id,email,password_hash,password_salt)
-                VALUES (?, ?, ?, ?);
-               INSERT INTO profiles (id,username,display_name)
-                VALUES (?, ?, ?);`
-  await queryD1(sql, [id,email,hash,salt,id,username,username])
+  // Database API batch is atomic: avoid orphan login/profile rows on conflict.
+  await batchD1([
+    {sql:'INSERT INTO auth_users(id,email,password_hash,password_salt) VALUES (?,?,?,?)',
+     params:[id,email,hash,salt]},
+    {sql:'INSERT INTO profiles(id,username,display_name) VALUES (?,?,?)',
+     params:[id,username,username]},
+  ])
   return id
 }
 export async function rateLimit(id: string, cap: number): Promise<boolean> {

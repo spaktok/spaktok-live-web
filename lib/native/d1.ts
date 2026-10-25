@@ -41,6 +41,27 @@ export async function queryD1<T extends Record<string, unknown>>(
       !payload.result[0]?.success) throw new Error('native_database_query_failed')
   return { rows: payload.result[0].results ?? [], changes: payload.result[0].meta?.changes ?? 0 }
 }
+/** Cloudflare D1 batch executes related statements transactionally. */
+export async function batchD1(queries: Array<{ sql: string; params: SqlParam[] }>): Promise<void> {
+  const c = config()
+  if (!c) throw new Error('native_database_not_configured')
+  const response = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${c.account}/d1/database/${c.database}/query`,
+    {
+      method:'POST',
+      headers:{Authorization:`Bearer ${c.token}`,'Content-Type':'application/json'},
+      body:JSON.stringify({ batch:queries }),
+      cache:'no-store',
+      signal:AbortSignal.timeout(9000),
+    },
+  )
+  if(!response.ok)throw new Error('native_database_unavailable')
+  const data=await response.json() as {success?:boolean;result?:Array<{success?:boolean}>}
+  if(!data.success||!Array.isArray(data.result)||
+     data.result.length!==queries.length||data.result.some(item=>!item.success))
+    throw new Error('native_database_query_failed')
+}
+
 export async function oneD1<T extends Record<string, unknown>>(
   sql: string, params: SqlParam[] = [],
 ): Promise<T | null> { return (await queryD1<T>(sql, params)).rows[0] ?? null }
