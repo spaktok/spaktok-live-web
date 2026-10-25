@@ -21,6 +21,7 @@ type AuthMode = "welcome" | "login" | "signup";
 
 interface AuthScreenProps {
   onComplete?: () => void;
+  initialError?: string | null;
 }
 
 /**
@@ -50,12 +51,14 @@ function mapAuthError(message: string): string {
   return "تعذّر إكمال العملية. حاول مرة أخرى.";
 }
 
-export function AuthScreen({ onComplete }: AuthScreenProps) {
+export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>("welcome");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError === 'auth_unavailable' ? 'خدمة تسجيل الدخول لا تستجيب حاليًا. تحقق من الاتصال أو أعد المحاولة.' : null);
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [serviceError, setServiceError] = useState<string | null>(null);
+  const [isActionLoading, setIsActionLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -80,9 +83,9 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
     }
 
     setIsLoading(true);
-    const supabase = createClient();
-
     try {
+      // Constructor errors must be handled: a missing env used to crash the login form.
+      const supabase = createClient();
       if (mode === "signup") {
         const username = formData.username.trim();
         const { data, error: signUpError } = await supabase.auth.signUp({
@@ -129,11 +132,47 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
         onComplete?.();
       }
     } catch {
-      setError("حدث خطأ غير متوقع. حاول مرة أخرى.");
+      setError("تعذّر الاتصال بخدمة تسجيل الدخول. تحقق من الاتصال أو إعدادات الخدمة.");
+      void fetch('/api/auth/health', { cache: 'no-store' })
+        .then((r) => r.ok ? setServiceError(null) : setServiceError('خدمة المصادقة غير متاحة حاليًا.'))
+        .catch(() => setServiceError('تعذر فحص اتصال المصادقة.'));
     } finally {
       setIsLoading(false);
     }
   };
+
+  
+  const sendAccountEmail = async (kind: 'reset' | 'verify') => {
+    const email = formData.email.trim();
+    setError(null);
+    setInfoMessage(null);
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('أدخل بريدك الإلكتروني الصحيح أولًا.');
+      return;
+    }
+    setIsActionLoading(true);
+    try {
+      const supabase = createClient();
+      if (kind === 'reset') {
+        const { error: requestError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
+        });
+        if (requestError) throw requestError;
+      } else {
+        const { error: requestError } = await supabase.auth.resend({
+          type: 'signup', email,
+          options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        });
+        if (requestError) throw requestError;
+      }
+      setInfoMessage('إذا كان البريد مرتبطًا بحساب قابل للاسترداد، ستصلك رسالة خلال دقائق. تحقق أيضًا من البريد غير المرغوب فيه.');
+    } catch {
+      setError('تعذر إرسال البريد الآن. تحقق من الاتصال وأعد المحاولة لاحقًا.');
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
 
   return (
     <div className="min-h-dvh w-full bg-background flex flex-col items-center relative overflow-hidden">
@@ -322,6 +361,9 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
                   </Button>
                 </div>
 
+                {serviceError && (
+                  <p className="rounded-xl bg-amber-500/10 px-4 py-3 text-right text-sm text-amber-200" role="alert">{serviceError}</p>
+                )}
                 {error && (
                   <p
                     role="alert"
@@ -339,9 +381,19 @@ export function AuthScreen({ onComplete }: AuthScreenProps) {
                   </p>
                 )}
 
+                {mode === 'login' && (
+                  <div className="flex flex-wrap justify-between gap-2 text-xs">
+                    <button type="button" disabled={isActionLoading || isLoading}
+                      className="text-white/75 underline disabled:opacity-50"
+                      onClick={() => void sendAccountEmail('reset')}>نسيت كلمة المرور؟</button>
+                    <button type="button" disabled={isActionLoading || isLoading}
+                      className="text-white/75 underline disabled:opacity-50"
+                      onClick={() => void sendAccountEmail('verify')}>إعادة إرسال تأكيد البريد</button>
+                  </div>
+                )}
                 <Button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || isActionLoading}
                   className="w-full h-14 rounded-2xl text-lg font-semibold bg-gradient-to-r from-primary to-[#3155ff] hover:opacity-90"
                 >
                   {isLoading ? (

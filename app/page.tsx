@@ -22,7 +22,7 @@ import { useAuth } from '@/hooks/use-auth'
 
 export default function SpakTok() {
   const [isLoading, setIsLoading] = useState(true)
-  const { session, isLoading: isAuthLoading } = useAuth()
+  const { session, isLoading: isAuthLoading, error: authError } = useAuth()
   const isAuthenticated = !!session
   const [activeTab, setActiveTab] = useState<TabType>('home')
   const [feedType, setFeedType] = useState<'forYou' | 'following' | 'live'>('forYou')
@@ -79,7 +79,7 @@ export default function SpakTok() {
 
   // Auth Screen — session updates automatically via the auth listener
   if (!isAuthenticated) {
-    return <AuthScreen />
+    return <AuthScreen initialError={authError} />
   }
 
   // Camera Screen

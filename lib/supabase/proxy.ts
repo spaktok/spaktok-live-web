@@ -2,15 +2,21 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  })
+  // Public requests must remain available even when Supabase is offline.
+  // Refresh sessions only when an auth cookie actually exists.
+  const hasAuthCookie = request.cookies.getAll().some(({ name }) =>
+    name.startsWith('sb-') && name.includes('-auth-token')
+  )
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!hasAuthCookie || !url || !key) return NextResponse.next({ request })
+
+  let supabaseResponse = NextResponse.next({ request })
 
   // With Fluid compute, don't put this client in a global environment
   // variable. Always create a new one on each request.
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url, key,
     {
       cookies: {
         getAll() {
@@ -37,9 +43,15 @@ export async function updateSession(request: NextRequest) {
 
   // IMPORTANT: If you remove getUser() and you use server-side rendering
   // with the Supabase client, your users may be randomly logged out.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  let user = null
+  try {
+    const response = await supabase.auth.getUser()
+    user = response.data.user
+  } catch {
+    // Authentication outages must not make all public Next.js routes fail.
+    // Protected server APIs still enforce their own auth checks.
+    return supabaseResponse
+  }
 
   if (
     // if the user is not logged in and the app path, in this case, /protected, is accessed, redirect to the login page
