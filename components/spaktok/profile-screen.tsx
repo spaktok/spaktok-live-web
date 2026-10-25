@@ -48,8 +48,6 @@ export function ProfileScreen({ userId, isOwnProfile = true, onSettingsClick, on
         setProfileVideos(result.videos || [])
       } catch { setProfileError('تعذر تحميل الملف الشخصي') }
       setIsLoadingProfile(false)
-        return
-      }
     }
     void loadProfile()
   }, [profileId])
