@@ -221,6 +221,7 @@ export function VideoFeed({ onUserClick, feedType }: VideoFeedProps) {
                 video={video}
                 isActive={isActive && isVisible}
                 shouldPrecache={shouldPrecache}
+                saveData={!canPrecache}
                 onProgress={isActive ? handleActiveProgress : undefined}
                 onPlaybackMetric={showQa ? collectPlayback : undefined}
                 onUserClick={onUserClick}

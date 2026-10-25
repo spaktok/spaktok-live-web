@@ -8,11 +8,14 @@ import { formatNumber } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 import { downloadVideo, shareExternally } from '@/lib/share'
 import type { PlaybackMetric } from '@/lib/video/playback-qa'
+import { isHlsManifest } from '@/lib/video/media-source'
+import { useAdaptiveMedia } from '@/lib/video/use-adaptive-media'
 
 interface VideoCardProps {
   video: Video
   isActive: boolean
   shouldPrecache?: boolean
+  saveData?: boolean
   onProgress?: (ratio: number) => void
   onPlaybackMetric?: (metric: PlaybackMetric) => void
   onUserClick: (userId: string) => void
@@ -32,13 +35,15 @@ interface VideoComment {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-export function VideoCard({ video, isActive, shouldPrecache = false, onProgress, onPlaybackMetric, onUserClick, onLike, onBookmark, onFollow, onComment, onShare }: VideoCardProps) {
+export function VideoCard({ video, isActive, shouldPrecache = false, saveData = false, onProgress, onPlaybackMetric, onUserClick, onLike, onBookmark, onFollow, onComment, onShare }: VideoCardProps) {
   const [isLiked, setIsLiked] = useState(video.isLiked)
   const [isBookmarked, setIsBookmarked] = useState(video.isBookmarked)
   const [isFollowing, setIsFollowing] = useState(video.user.isFollowing)
   const [isMuted, setIsMuted] = useState(true)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isBuffering, setIsBuffering] = useState(false)
+  const [playbackError, setPlaybackError] = useState(false)
+  const [retrySerial, setRetrySerial] = useState(0)
   const [showHearts, setShowHearts] = useState<{ id: number; x: number; y: number }[]>([])
   const [showComments, setShowComments] = useState(false)
   const [commentText, setCommentText] = useState('')
@@ -84,18 +89,39 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
     return () => controller.abort()
   }, [showComments, video.id, video.user.avatar, video.user.displayName])
 
+  const adaptiveUrl = isHlsManifest(video.videoUrl)
+  // A completed HLS manifest triggers play; MP4 can play directly.
+  const startPlaying = () => {
+    const media = videoRef.current
+    if (!media || !isActive) return
+    void media.play().catch(() => {
+      setIsPlaying(false)
+      setIsBuffering(false)
+    })
+  }
+  const failPlaying = () => {
+    setPlaybackError(true)
+    setIsBuffering(false)
+    setIsPlaying(false)
+  }
+  const { quality } = useAdaptiveMedia(
+    videoRef, video.videoUrl, isActive, saveData, startPlaying, failPlaying,
+  )
+
   useEffect(() => {
     const media = videoRef.current
     if (!media) return
     if (isActive) {
       playRequestedAt.current = performance.now()
       stalledSince.current = null
+      setPlaybackError(false)
       setIsBuffering(true)
-      media.play().catch(() => {
-        playRequestedAt.current = null
-        setIsPlaying(false)
-        setIsBuffering(false)
-      })
+      if (!adaptiveUrl) {
+        void media.play().catch(() => {
+          setIsPlaying(false)
+          setIsBuffering(false)
+        })
+      }
     } else {
       playRequestedAt.current = null
       stalledSince.current = null
@@ -103,7 +129,7 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
       setIsPlaying(false)
       setIsBuffering(false)
     }
-  }, [isActive])
+  }, [isActive, adaptiveUrl, retrySerial])
 
   // Warm the buffer for the upcoming reel without playing it.
   useEffect(() => {
@@ -224,7 +250,7 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
       {/* Video */}
       <video
         ref={videoRef}
-        src={video.videoUrl}
+        src={adaptiveUrl ? undefined : video.videoUrl}
         className="absolute inset-0 w-full h-full object-cover"
         loop
         muted={isMuted}
@@ -239,11 +265,27 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
         onPause={() => { setIsPlaying(false); stalledSince.current = null }}
         onWaiting={handleWaiting}
         onCanPlay={() => setIsBuffering(false)}
+        onError={() => {
+          if (isActive && !adaptiveUrl) failPlaying()
+        }}
         crossOrigin="anonymous"
         aria-label={`فيديو ${video.user.displayName}`}
       />
       
-      {isActive && isBuffering && (
+      {isActive && playbackError && (
+        <button type="button" onClick={() => {
+          setPlaybackError(false)
+          setRetrySerial((number) => number + 1)
+        }} className="absolute left-1/2 top-1/2 z-20 -translate-x-1/2 -translate-y-1/2 rounded-xl bg-black/90 px-5 py-3 text-sm font-semibold text-white" dir="rtl">
+          تعذر تشغيل الفيديو — إعادة المحاولة
+        </button>
+      )}
+      {isActive && quality && (
+        <span className="pointer-events-none absolute right-4 top-20 z-10 rounded-full bg-black/40 px-2 py-1 text-[10px] text-white/70">
+          {quality}
+        </span>
+      )}
+      {isActive && isBuffering && !playbackError && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none" role="status" aria-label="جارٍ تجهيز الفيديو">
           <div className="size-9 animate-spin rounded-full border-2 border-white/30 border-t-white" />
         </div>
@@ -370,6 +412,7 @@ export function VideoCard({ video, isActive, shouldPrecache = false, onProgress,
           onClick={async () => {
             setIsDownloading(true)
             try {
+              if (adaptiveUrl) throw new Error('download_requires_mp4')
               await downloadVideo(video.videoUrl, `spaktok-${video.id}.mp4`)
               setShareStatus('بدأ تنزيل الفيديو')
             } catch {
