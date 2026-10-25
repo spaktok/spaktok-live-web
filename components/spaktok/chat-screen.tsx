@@ -6,7 +6,6 @@ import { cn } from '@/lib/utils'
 import { VoiceRecorder } from '@/components/spaktok/voice-recorder'
 import { CallOverlay } from '@/components/spaktok/call-overlay'
 import { EmptyState, ErrorState, LoadingState } from '@/components/spaktok/feedback-state'
-import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/use-auth'
 import {
   listConversations,
@@ -99,17 +98,11 @@ export function ChatScreen({ onUserClick }: ChatScreenProps) {
     if (!currentUserId) return
     refreshConversations()
 
-    const supabase = createClient()
-    const channel = supabase
-      .channel('inbox')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
-        refreshConversations()
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    // Lightweight polling replaces the deleted Supabase Realtime provider.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState==='visible') void refreshConversations()
+    }, 8000)
+    return () => window.clearInterval(timer)
   }, [currentUserId, refreshConversations])
 
   // Debounced user search when the query is non-empty.
@@ -334,33 +327,14 @@ function ChatConversation({ conversationId, other, currentUserId, onBack, onUser
       }
     })()
 
-    const supabase = createClient()
-    const channel = supabase
-      .channel(`conversation:${conversationId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
-        (payload) => {
-          const msg = payload.new as DBMessage
-          setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]))
-          scrollToBottom()
-          if (msg.sender_id !== currentUserId) markConversationRead(conversationId).catch(() => {})
-        },
-      )
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'messages', filter: `conversation_id=eq.${conversationId}` },
-        (payload) => {
-          const msg = payload.new as DBMessage
-          setMessages((prev) => prev.map((m) => (m.id === msg.id ? msg : m)))
-        },
-      )
-      .subscribe()
-
-    return () => {
-      active = false
-      supabase.removeChannel(channel)
-    }
+    const timer=window.setInterval(async()=>{
+      if (document.visibilityState!=='visible') return
+      try {
+        const items=await fetchMessages(conversationId)
+        if(active)setMessages(items)
+      } catch {/* transient disconnect: preserve visible messages */}
+    },5000)
+    return ()=>{active=false;window.clearInterval(timer)}
   }, [conversationId, currentUserId, scrollToBottom])
 
   // Screenshot heuristic while a view-once image is open (Snap protocol).
@@ -385,8 +359,9 @@ function ChatConversation({ conversationId, other, currentUserId, onBack, onUser
     setInput('')
     setSending(true)
     try {
-      await sendTextMessage(conversationId, content)
-      // Realtime INSERT will append it; no optimistic duplicate needed.
+      const message=await sendTextMessage(conversationId, content)
+      setMessages((items)=>items.some((m)=>m.id===message.id)?items:[...items,message])
+      scrollToBottom()
     } catch {
       setInput(content)
       setConversationError('تعذر إرسال الرسالة. تحقق من الاتصال وحاول مرة أخرى.')
