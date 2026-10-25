@@ -149,7 +149,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       if (key === "darkMode") {
         document.documentElement.classList.toggle("dark", nextValue)
       }
-      setFeedback(`${key === "darkMode" ? "الوضع الليلي" : key === "notifications" ? "الإشعارات" : key === "privateAccount" ? "الحساب الخاص" : key === "dataSaver" ? "توفير البيانات" : "التحقق بخطوتين"} ${nextValue ? "مفعّل" : "متوقف"}`)
+      setFeedback(`${key === "darkMode" ? "الوضع الليلي" : key === "notifications" ? "الإشعارات" : key === "dataSaver" ? "توفير البيانات" : "الإعداد"} ${nextValue ? "مفعّل" : "متوقف"}`)
       return { ...prev, [key]: nextValue }
     })
   };
