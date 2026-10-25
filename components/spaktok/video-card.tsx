@@ -105,7 +105,7 @@ export function VideoCard({ video, isActive, shouldPrecache = false, saveData = 
     setIsPlaying(false)
   }
   const { quality } = useAdaptiveMedia(
-    videoRef, video.videoUrl, isActive, saveData, startPlaying, failPlaying,
+    videoRef, video.videoUrl, isActive, saveData, retrySerial, startPlaying, failPlaying,
   )
 
   useEffect(() => {

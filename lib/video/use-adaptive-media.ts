@@ -10,6 +10,7 @@ export function useAdaptiveMedia(
   url: string,
   active: boolean,
   saveData: boolean,
+  retrySerial: number,
   onReadyToPlay: () => void,
   onPlaybackFailure: () => void,
 ) {
@@ -87,7 +88,7 @@ export function useAdaptiveMedia(
       media.removeAttribute('src')
       media.load()
     }
-  }, [mediaRef, url, active, saveData])
+  }, [mediaRef, url, active, saveData, retrySerial])
 
   return { isAdaptive: isHlsManifest(url), quality }
 }
