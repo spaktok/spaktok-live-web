@@ -3,17 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "node scripts/build-couture-glb.mjs && next build",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
     "cf:dev": "vinext dev",
-    "cf:build": "vinext build",
+    "cf:build": "node scripts/build-couture-glb.mjs && vinext build",
     "cf:preview": "wrangler dev",
     "cf:deploy": "vinext deploy",
     "test": "vitest run --config vitest.config.ts",
     "test:d1": "vitest run --config vitest.config.ts lib/cloudflare/d1-repository.test.ts",
-    "test:cloudflare": "vitest run --config vitest.config.ts lib/cloudflare"
+    "test:cloudflare": "vitest run --config vitest.config.ts lib/cloudflare",
+    "asset:crown": "node scripts/build-couture-glb.mjs"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
