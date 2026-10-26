@@ -116,7 +116,9 @@ export const faceFxCatalog = [
 ] as const
 export type FaceFxId = (typeof faceFxCatalog)[number]['id']
 export const faceFxCode = (id: FaceFxId) => Math.max(0, faceFxCatalog.findIndex(x=>x.id===id))
-export type FaceFxParams = { id: FaceFxId; strength: number }
+export type MakeupRegion = 'foundation'|'lips'|'eyeshadow'|'eyeliner'|'blush'|'contour'|'highlight'
+export type MakeupOverrides = Partial<Record<MakeupRegion,number>>
+export type FaceFxParams = { id: FaceFxId; strength: number; makeup?:MakeupOverrides }
 export const neutralFaceFx: FaceFxParams = { id: 'none', strength: 0.85 }
 export const isFace3DSelected = (id:FaceFxId) => id.startsWith('3d-')
 export const needsFaceFxTracking = (face: FaceFxParams) => face.id !== 'none' && face.strength > 0

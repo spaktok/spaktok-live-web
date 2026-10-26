@@ -332,7 +332,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
           try{
             threeEngineRef.current.render(original?null:face3DRef.current,
               video.videoWidth,video.videoHeight,facing==='user',
-              current.face.id,current.face.strength)
+              current.face.id,current.face.strength,current.face.makeup)
           }catch{
             threeEngineRef.current.dispose()
             threeEngineRef.current=null

@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import {computeMakeupMasks,getMakeupPalette,isMakeupLook,type MakeupLookId,type TrackedPoint} from './makeup3d'
+import type {MakeupOverrides} from './params'
 
 /** Face mesh makeup shares the 478 MediaPipe positions + normals of the depth
  * occluder. Exactly one transparent WebGL draw per video frame. */
@@ -39,19 +40,20 @@ export class FaceMakeupLayer{
   this.mesh.visible=false
   this.mesh.renderOrder=2
  }
- setStyle(id:string,ready:boolean){
+ setStyle(id:string,ready:boolean,custom:MakeupOverrides={}){
   if(!ready||!isMakeupLook(id)){this.mesh.visible=false;return}
   this.mesh.visible=true
-  if(this.current===id)return
-  this.current=id
   const look=getMakeupPalette(id),u=this.mesh.material.uniforms
+  if(this.current!==id){this.current=id
   const pigment=(key:string,color:string)=>(u[key].value as THREE.Color).set(color)
   pigment('uFoundation',look.foundation);pigment('uLip',look.lip)
   pigment('uShadow',look.shadow);pigment('uLiner',look.liner)
   pigment('uBlush',look.blush);pigment('uContour',look.contour)
   pigment('uHighlight',look.highlight)
-  ;(u.uCoverageA.value as THREE.Vector4).set(look.coverage[0],look.coverage[1],look.coverage[2],look.coverage[3])
-  ;(u.uCoverageB.value as THREE.Vector4).set(look.coverage[4],look.coverage[5],look.coverage[6],0)
+  }
+  const amount=(index:number,key:keyof MakeupOverrides)=>Math.min(.95,look.coverage[index]*Math.max(0,Math.min(1,custom[key]??1)))
+  ;(u.uCoverageA.value as THREE.Vector4).set(amount(0,'foundation'),amount(1,'lips'),amount(2,'eyeshadow'),amount(3,'eyeliner'))
+  ;(u.uCoverageB.value as THREE.Vector4).set(amount(4,'blush'),amount(5,'contour'),amount(6,'highlight'),0)
   u.uShimmer.value=look.shimmer
  }
  update(landmarks:ReadonlyArray<TrackedPoint>,sourceAspect:number){

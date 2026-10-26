@@ -10,7 +10,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { FaceLandmarker } from '@mediapipe/tasks-vision'
 import type {FaceGeometry} from './renderer'
-import type {FaceFxId} from './params'
+import type {FaceFxId,MakeupOverrides} from './params'
 import {makeupLooks,isMakeupLook} from './makeup3d'
 import {FaceMakeupLayer} from './makeup3d-render'
 import {makePremiumAccessory} from './face3d-premium'
@@ -276,7 +276,7 @@ export class FaceMesh3DEngine{
   }
  }
  /** Overlay is a transparent PNG-ready canvas; video stays native below. */
- render(frame:Face3DFrame|null,sourceW:number,sourceH:number,mirror:boolean,id:FaceFxId,strength:number){
+ render(frame:Face3DFrame|null,sourceW:number,sourceH:number,mirror:boolean,id:FaceFxId,strength:number,makeup?:MakeupOverrides){
   if(!this.alive)return
   if(!isFace3DId(id)||!frame||strength<=0){
    this.depthMesh.visible=false;this.mount.visible=false
@@ -293,7 +293,7 @@ export class FaceMesh3DEngine{
   const pose=getHeadPose(frame,sourceW,sourceH,this.width,this.height,mirror)
   if(!pose){this.renderer.clear();return}
   this.depthMesh.visible=true
-  this.makeup.setStyle(id,this.lensReady)
+  this.makeup.setStyle(id,this.lensReady,makeup)
   // Update 478 surface vertices only on a *new* inference, not 30-60 times/sec.
   if(frame.timestamp!==this.lastFrame||this.lastSourceW!==sourceW||
     this.lastSourceH!==sourceH||mirror!==this.lastMirror){

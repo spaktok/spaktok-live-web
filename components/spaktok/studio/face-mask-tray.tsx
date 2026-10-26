@@ -41,6 +41,7 @@ export function FaceMaskTray({value,onChange,visible,onToggle}:{
  const [tab,setTab]=useState<Category>('makeup')
  const [search,setSearch]=useState('')
  const [showSearch,setShowSearch]=useState(false)
+ const [showCustomMakeup,setShowCustomMakeup]=useState(false)
  const [favorites,setFavorites]=useState<FaceFxId[]>([])
  const [renderCount,setRenderCount]=useState(18)
  const listRef=useRef<HTMLDivElement|null>(null)
@@ -140,6 +141,37 @@ export function FaceMaskTray({value,onChange,visible,onToggle}:{
             className="min-w-0 flex-1 accent-[#9cb9ff]" aria-label="تغيير قوة المكياج"/>
           <span className="w-9 text-left font-mono tabular-nums">{Math.round(value.strength*100)}%</span>
         </label>}
+
+      {value.id.startsWith('3d-makeup-')&&
+        <div className="mt-1">
+          <button type="button" onClick={()=>setShowCustomMakeup(v=>!v)}
+            className="w-full rounded-xl border border-[#b6c8ff]/15 bg-[#405897]/20 px-3 py-2 text-center text-[11px] font-semibold text-[#d5e0ff]"
+            aria-expanded={showCustomMakeup}>
+            {showCustomMakeup?'إخفاء تخصيص المكياج ↑':'تخصيص الشفاه والعينين والبلاشر ↓'}
+          </button>
+          {showCustomMakeup&&(
+            <div className="mt-2 grid max-h-[26dvh] grid-cols-1 gap-2 overflow-y-auto rounded-xl border border-white/10 bg-[#091024]/80 p-2.5"
+              aria-label="التحكم بمناطق المكياج الثلاثي">
+              {([
+                {key:'foundation',name:'توحيد البشرة'},{key:'lips',name:'أحمر الشفاه'},
+                {key:'eyeshadow',name:'ظلال العين'},{key:'eyeliner',name:'الكحل'},
+                {key:'blush',name:'البلاشر'},{key:'contour',name:'الكونتور'},
+                {key:'highlight',name:'الإضاءة'},
+              ] as const).map(zone=>(
+                <label key={zone.key} className="flex items-center gap-2 text-[11px] text-white/85">
+                  <span className="w-24 shrink-0">{zone.name}</span>
+                  <input type="range" min="0" max="1" step=".05"
+                    value={value.makeup?.[zone.key]??1}
+                    onChange={event=>onChange({...value,makeup:{...value.makeup,[zone.key]:Number(event.target.value)}})}
+                    className="min-w-0 flex-1 accent-[#b7c7ff]"/>
+                  <span className="w-9 text-left font-mono tabular-nums">
+                    {Math.round((value.makeup?.[zone.key]??1)*100)}%
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>}
     </section>
    )}
  </div>
