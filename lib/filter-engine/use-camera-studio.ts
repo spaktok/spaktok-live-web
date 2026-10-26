@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FilterRenderer, type FaceGeometry } from './renderer'
-import { needsFaceTracking, needsFaceFxTracking, needsSegmentation, neutralBeauty, neutralColor, neutralEffects, neutralFaceFx, resolveColor, type StudioState } from './params'
-import { loadFaceLandmarker, recoverFaceLandmarkerOnCpu, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
+import { isFace3DSelected, needsFaceTracking, needsFaceFxTracking, needsSegmentation, neutralBeauty, neutralColor, neutralEffects, neutralFaceFx, resolveColor, type StudioState } from './params'
+import { loadFaceLandmarker, recoverFaceLandmarkerOnCpu, configureFace3DExtras, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
 import { drawFaceMask, drawCoverFrame } from './face-overlay'
 import {trackingIntervalMs,updatedMean} from './vision-scheduler'
+import type {FaceMesh3DEngine,Face3DFrame} from './face3d'
 
 export type Facing = 'user' | 'environment'
 export type CameraStatus = 'idle' | 'starting' | 'ready' | 'denied' | 'unsupported' | 'error'
@@ -40,6 +41,9 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const threeCanvasRef=useRef<HTMLCanvasElement|null>(null)
+  const threeEngineRef=useRef<FaceMesh3DEngine|null>(null)
+  const face3DRef=useRef<Face3DFrame|null>(null)
   const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const recordingNativeArRef=useRef(false)
   const usingNativeArRef=useRef(false)
@@ -68,6 +72,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const [recording, setRecording] = useState(false)
   const [previewFps,setPreviewFps] = useState<number | null>(null)
   const [gpuAvailable,setGpuAvailable] = useState(true)
+  const [threeStatus,setThreeStatus]=useState<'idle'|'loading'|'ready'|'unavailable'>('idle')
   const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null)
 
   stateRef.current = state
@@ -162,6 +167,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     }
     const overlay=arCanvasRef.current
     if(overlay){overlay.width=canvas.width;overlay.height=canvas.height}
+    if(threeCanvasRef.current){threeCanvasRef.current.width=canvas.width;threeCanvasRef.current.height=canvas.height}
     const composition=document.createElement('canvas')
     composition.width=canvas.width;composition.height=canvas.height
     compositeCanvasRef.current=composition
@@ -194,9 +200,33 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     const ctx=surface?.getContext('2d',{alpha:false})
     if(!ctx||!surface)return false
     if(!drawCoverFrame(ctx,video,surface.width,surface.height,mode==='user'))return false
-    if(layer&&!compareRef.current)ctx.drawImage(layer,0,0,surface.width,surface.height)
+    if(!compareRef.current){
+      if(layer)ctx.drawImage(layer,0,0,surface.width,surface.height)
+      if(isFace3DSelected(stateRef.current.face.id)&&threeEngineRef.current&&threeCanvasRef.current){
+        ctx.save();ctx.globalAlpha=Math.max(0,Math.min(1,stateRef.current.face.strength))
+        ctx.drawImage(threeCanvasRef.current,0,0,surface.width,surface.height)
+        ctx.restore()
+      }
+    }
     return true
   }
+
+  useEffect(()=>{
+    if(!isFace3DSelected(state.face.id)){setThreeStatus('idle');return}
+    let cancelled=false
+    setThreeStatus('loading')
+    import('./face3d').then(async({FaceMesh3DEngine})=>{
+      if(cancelled)return
+      const layer=threeCanvasRef.current,base=canvasRef.current
+      if(!layer||!base)return
+      let engine=threeEngineRef.current
+      if(!engine){engine=new FaceMesh3DEngine(layer,base.width,base.height);threeEngineRef.current=engine}
+      await engine.setLens(state.face.id)
+      if(!cancelled)setThreeStatus('ready')
+    }).catch(()=>{if(!cancelled)setThreeStatus('unavailable')})
+    return()=>{cancelled=true}
+  },[state.face.id])
+  useEffect(()=>()=>{threeEngineRef.current?.dispose();threeEngineRef.current=null},[])
 
   useEffect(() => {
     if (status !== 'ready') return
@@ -224,6 +254,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       if (wantsFace) {
         const landmarker = await loadFaceLandmarker().catch(() => null)
         if (!landmarker) { setVision('unavailable'); faceRef.current=null; return }
+        try{await configureFace3DExtras(isFace3DSelected(current.face.id))}
+        catch{/* tracked coordinates still work without expression extras */}
         let result: ReturnType<typeof landmarker.detectForVideo> | null = null
         try {
           result = landmarker.detectForVideo(video, now)
@@ -242,9 +274,22 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
         if (landmarks) {
           lostFrames = 0
           faceRef.current = smoothFace(faceRef.current, toFaceGeometry(landmarks, aspectRatio))
+          if(isFace3DSelected(current.face.id)){
+            const blends:Record<string,number>={}
+            for(const item of result?.faceBlendshapes?.[0]?.categories||[])
+              blends[item.categoryName]=item.score
+            face3DRef.current={
+              landmarks:landmarks.map(p=>({x:p.x,y:p.y,z:p.z??0})),
+              geometry:faceRef.current,
+              matrix:result?.facialTransformationMatrixes?.[0]?.data?
+                Array.from(result.facialTransformationMatrixes[0].data):undefined,
+              blendshapes:blends,timestamp:now,
+            }
+          }
           setVision((value) => (value === 'tracking' ? value : 'tracking'))
         } else if (++lostFrames > 4) {
           faceRef.current = null
+          face3DRef.current=null
           setVision((value) => (value === 'no-face' ? value : 'no-face'))
         }
       }
@@ -281,6 +326,11 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
               video.videoWidth,video.videoHeight,overlay.width,overlay.height,
               facing==='user',now/1000)
           }
+        }
+        if(isFace3DSelected(current.face.id)&&threeEngineRef.current){
+          threeEngineRef.current.render(original?null:face3DRef.current,
+            video.videoWidth,video.videoHeight,facing==='user',
+            current.face.id,current.face.strength)
         }
         if(usingNativeArRef.current){
           // Native video is composited by the browser for the preview; do not
@@ -326,6 +376,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
 
   const flip = useCallback(() => {
     faceRef.current = null
+    face3DRef.current=null
     return start(facing === 'user' ? 'environment' : 'user')
   }, [facing, start])
 
@@ -430,6 +481,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     videoRef,
     canvasRef,
     arCanvasRef,
+    threeCanvasRef,
+    threeStatus,
     gpuAvailable,
     status,
     vision,

@@ -9,6 +9,7 @@ const SEGMENTER_MODEL = 'https://storage.googleapis.com/mediapipe-models/image_s
 let filesetPromise: Promise<Awaited<ReturnType<typeof import('@mediapipe/tasks-vision').FilesetResolver.forVisionTasks>>> | null = null
 let facePromise: Promise<FaceLandmarker> | null = null
 let forcedCpu = false
+let extraFace3DEnabled=false
 let segmenterPromise: Promise<ImageSegmenter> | null = null
 
 async function loadFileset() {
@@ -38,6 +39,8 @@ export function loadFaceLandmarker() {
           baseOptions: { modelAssetPath: FACE_MODEL, delegate },
           runningMode: 'VIDEO',
           numFaces: 1,
+          outputFaceBlendshapes:extraFace3DEnabled,
+          outputFacialTransformationMatrixes:extraFace3DEnabled,
           minFaceDetectionConfidence: 0.45,
           minFacePresenceConfidence: 0.45,
           minTrackingConfidence: 0.45,
@@ -63,6 +66,12 @@ export async function recoverFaceLandmarkerOnCpu(): Promise<FaceLandmarker | nul
   return loadFaceLandmarker()
 }
 
+export async function configureFace3DExtras(enabled:boolean){
+ if(extraFace3DEnabled===enabled)return
+ const model=await loadFaceLandmarker()
+ await model.setOptions({outputFaceBlendshapes:enabled,outputFacialTransformationMatrixes:enabled})
+ extraFace3DEnabled=enabled
+}
 export function loadSegmenter() {
   if (!segmenterPromise) {
     segmenterPromise = (async () => {
