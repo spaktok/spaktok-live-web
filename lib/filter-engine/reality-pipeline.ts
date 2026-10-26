@@ -1,10 +1,10 @@
 import {
-  isFace3DSelected,
   needsFaceFxTracking,
   needsFaceTracking,
   needsSegmentation,
   type StudioState,
 } from './params'
+import {getFaceRealityEffect} from './reality-effect-manifest'
 
 /** Centralized resource/feature decisions for the camera, inferencer and
  * recorder. A face lens must never disable the independent beauty/color pass.
@@ -22,7 +22,12 @@ export function createRealityExecutionPlan(
   state: Pick<StudioState, 'face' | 'beauty' | 'effects'>,
 ): RealityExecutionPlan {
   const faceOverlay = needsFaceFxTracking(state.face)
-  const threeDimensional = faceOverlay && isFace3DSelected(state.face.id)
+  const manifest = faceOverlay ? getFaceRealityEffect(state.face.id) : null
+  // The runtime contract owns the type of effect; string prefixes are no
+  // longer used for the central camera execution plan.
+  const threeDimensional = Boolean(manifest &&
+    (manifest.kind==='wearable-3d'||manifest.kind==='expression-3d'||
+     manifest.kind==='face-surface'))
   return {
     trackFace: faceOverlay || needsFaceTracking(state.beauty),
     trackPerson: needsSegmentation(state.effects),

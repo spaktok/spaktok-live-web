@@ -15,10 +15,13 @@ import {RealityGpuCameraLayer} from './reality-camera-gpu'
 import {RealityGpuBlendPass,needsRealityGpuBlend} from './reality-gpu-blend'
 import {estimateAmbientLight,adaptiveJewelryLight} from './lighting3d'
 import type {FaceFxId,MakeupOverrides} from './params'
-import {makeupLooks,isMakeupLook} from './makeup3d'
+import {makeupLooks} from './makeup3d'
 import {FaceMakeupLayer} from './makeup3d-render'
 import {makePremiumAccessory} from './face3d-premium'
-import {prepareUploadedCrown,UPLOADED_CROWN_MOBILE} from './crown-uploaded-asset'
+import {prepareUploadedCrown} from './crown-uploaded-asset'
+import {getFaceRealityEffect} from './reality-effect-manifest'
+import {RealityEffectRuntime} from './reality-effect-runtime'
+import {resolveRealityAnchor,solveRealityMount} from './reality-effect-anchors'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -32,12 +35,6 @@ export const face3DPresets = [
 export type Face3DId = (typeof face3DPresets)[number]['id']
 export const isFace3DId=(id:string):id is Face3DId=>face3DPresets.some(x=>x.id===id)
 
-// GLTF URLs are allowlisted and served from our own same-origin public assets.
-// No untrusted remote model URLs or arbitrary asset data can be supplied.
-const MODEL_ASSETS:Partial<Record<Face3DId,string>>={
- '3d-crystal':'/face-assets/spaktok-crystal.glb',
- '3d-gold-crown':UPLOADED_CROWN_MOBILE,
-}
 const clamp=(n:number,low:number,high:number)=>Math.min(high,Math.max(low,n))
 export interface Face3DFrame{
  landmarks:ReadonlyArray<{x:number;y:number;z:number}>
@@ -350,32 +347,26 @@ export class FaceMesh3DEngine{
   if(!this.alive)return false
   let root:THREE.Object3D
   try{
-   const asset=MODEL_ASSETS[id]
-   if(asset){
-    try{
-     const parsed=await this.loader.loadAsync(asset)
-     root=parsed.scene
-     if(id==='3d-gold-crown'){
-       // The owner GLB is in meters, +Y up; screen landmarks use +Y down.
-       // Align to headband first, then attach to tracked forehead landmark 10.
-       prepareUploadedCrown(root)
-       this.setupStudioEnvironment()
+   const definition=getFaceRealityEffect(id)
+   if(!definition)throw Error('reality_effect_not_registered:'+id)
+   const runtime=new RealityEffectRuntime<THREE.Object3D>({
+    loadAuthoredGLB:async uri=>(await this.loader.loadAsync(uri)).scene,
+    createProceduralPreview:effect=>
+     effect.kind==='face-surface'?new THREE.Group():
+     makePremiumAccessory(id) ?? (id==='3d-lux-glasses'?makeGlasses():
+      id==='3d-gold-crown'?makeCrown():
+      id==='3d-space-visor'?makeVisor():
+      id==='3d-expression'?makeExpressionMask():makeCap()),
+    calibrateAuthored:(node,effect)=>{
+     if(effect.asset?.calibration==='owner-crown-v1'){
+      prepareUploadedCrown(node)
+      this.setupStudioEnvironment()
      }
-     this.modelQuality='hd'
-    }catch{
-     // Keep the camera operational if the production GLB has not arrived
-     // or a browser cannot decode it. Never claim this is the HD model.
-     root=makePremiumAccessory(id)??new THREE.Group()
-     this.modelQuality='fallback'
-    }
-   }else{
-    this.modelQuality='fallback'
-    root=isMakeupLook(id)?new THREE.Group():
-       makePremiumAccessory(id) ?? (id==='3d-lux-glasses'?makeGlasses():
-       id==='3d-gold-crown'?makeCrown():
-       id==='3d-space-visor'?makeVisor():
-       id==='3d-expression'?makeExpressionMask():makeCap())
-   }
+    },
+   })
+   const instance=await runtime.instantiate(definition)
+   root=instance.node
+   this.modelQuality=instance.quality
    if(!this.alive||token!==this.request){disposeObject(root);return false}
    this.model=root
    this.mount.add(root)
@@ -484,15 +475,34 @@ export class FaceMesh3DEngine{
    this.lastSourceW=sourceW;this.lastSourceH=sourceH;this.lastMirror=mirror
   }
   this.crownContact.visible=this.lensReady&&id==='3d-gold-crown'
-  this.mount.position.set(pose.x,pose.y,18)
+  // Every 3D wearable now uses a named anatomical anchor from its manifest.
+  // Screen-space masks and mesh makeup keep their own independent renderer.
+  const definition=getFaceRealityEffect(id)
+  const point=definition?.anchor?resolveRealityAnchor(
+    definition.anchor,frame.landmarks,sourceW,sourceH,this.width,this.height,
+    mirror,{x:pose.x,y:pose.y},
+  ):null
+  if(definition?.anchor&&!point){
+    this.mount.visible=false
+    this.depthMesh.visible=false
+    this.makeup.setStyle(id,false)
+    if(integrated)this.renderer.render(this.scene,this.camera)
+    else this.renderer.clear()
+    this.finishGpuStats(started,integrated?1:0)
+    return
+  }
+  const local=definition?.asset?.localAnchor??[0,0,0] as const
+  const bias=definition?.asset?.calibration==='owner-crown-v1'
+    ?[0,-.018] as const:[0,0] as const
+  const placement=point?solveRealityMount(point,pose.width,pose,local,bias):null
+  if(placement){
+    // Keep the physical authored-crown depth convention unchanged while
+    // decoupling ALL other wearables from eye-position hardcoding.
+    this.mount.position.set(placement.x,placement.y,
+      definition?.asset?.calibration==='owner-crown-v1'?18:placement.z)
+  }else this.mount.position.set(pose.x,pose.y,18)
   this.mount.scale.setScalar(pose.width)
   this.mount.rotation.set(pose.pitch*.7,pose.yaw*.75,pose.roll)
-  if(id==='3d-gold-crown'){
-    const forehead=getForeheadPixel(frame,sourceW,sourceH,this.width,this.height,mirror)
-    if(forehead){
-      this.mount.position.copy(crownMountPosition(pose,forehead))
-    }
-  }
   if(this.model){
    const expr=frame.geometry.expression
    const mouth=clamp(frame.blendshapes?.jawOpen??expr?.mouthOpen??0,0,1)
