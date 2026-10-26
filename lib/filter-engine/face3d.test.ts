@@ -17,8 +17,8 @@ const frame:Face3DFrame={
  geometry,timestamp:1,blendshapes:{jawOpen:.8,eyeBlinkLeft:.7},
 }
 describe('SpakTok tracked 3D lenses',()=>{
- it('binds six native 3D choices to the face effect catalog',()=>{
-   expect(face3DPresets).toHaveLength(6)
+ it('binds six accessory and eight makeup 3D choices to the catalog',()=>{
+   expect(face3DPresets).toHaveLength(14)
    for(const fx of face3DPresets){
      expect(isFace3DId(fx.id)).toBe(true)
      expect(faceFxCatalog.some(x=>x.id===fx.id)).toBe(true)
