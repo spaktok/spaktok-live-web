@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FilterRenderer, type FaceGeometry } from './renderer'
 import { needsFaceTracking, needsFaceFxTracking, needsSegmentation, neutralBeauty, neutralColor, neutralEffects, neutralFaceFx, resolveColor, type StudioState } from './params'
-import { loadFaceLandmarker, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
+import { loadFaceLandmarker, recoverFaceLandmarkerOnCpu, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
 
 export type Facing = 'user' | 'environment'
 export type CameraStatus = 'idle' | 'starting' | 'ready' | 'denied' | 'unsupported' | 'error'
-export type VisionStatus = 'off' | 'loading' | 'tracking' | 'no-face' | 'unavailable'
+export type VisionStatus = 'off' | 'loading' | 'ready' | 'tracking' | 'no-face' | 'unavailable'
 
 interface Options {
   state: StudioState
@@ -171,7 +171,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     let cancelled = false
     setVision('loading')
     Promise.all([needsFace ? loadFaceLandmarker() : null, needsMask ? loadSegmenter() : null])
-      .then(() => !cancelled && setVision('tracking'))
+      .then(() => !cancelled && setVision(value => value === 'tracking' ? value : 'ready'))
       .catch(() => !cancelled && setVision('unavailable'))
     return () => {
       cancelled = true
@@ -200,13 +200,27 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       const aspectRatio = video.videoWidth / video.videoHeight
       if (wantsFace) {
         const landmarker = await loadFaceLandmarker().catch(() => null)
-        const result = landmarker?.detectForVideo(video, now)
+        if (!landmarker) { setVision('unavailable'); faceRef.current=null; return }
+        let result: ReturnType<typeof landmarker.detectForVideo> | null = null
+        try {
+          result = landmarker.detectForVideo(video, now)
+        } catch {
+          try {
+            const cpu = await recoverFaceLandmarkerOnCpu()
+            result = cpu?.detectForVideo(video, now) ?? null
+          } catch {
+            faceRef.current = null
+            setVision('unavailable')
+            return
+          }
+          if (!result) { faceRef.current=null; setVision('unavailable'); return }
+        }
         const landmarks = result?.faceLandmarks?.[0]
         if (landmarks) {
           lostFrames = 0
           faceRef.current = smoothFace(faceRef.current, toFaceGeometry(landmarks, aspectRatio))
           setVision((value) => (value === 'tracking' ? value : 'tracking'))
-        } else if (++lostFrames > 6) {
+        } else if (++lostFrames > 4) {
           faceRef.current = null
           setVision((value) => (value === 'no-face' ? value : 'no-face'))
         }
@@ -229,7 +243,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       if (stopped) return
       const now = performance.now()
       if (activeRef.current && !document.hidden && video.readyState >= 2 && video.videoWidth) {
-        runVision(now).catch(() => undefined)
+        runVision(now).catch(() => { faceRef.current=null; setVision('unavailable') })
         const current = stateRef.current
         const original = compareRef.current
         if(rendererRef.current){

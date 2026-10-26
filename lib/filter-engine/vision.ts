@@ -1,17 +1,19 @@
 import type { FaceLandmarker, ImageSegmenter } from '@mediapipe/tasks-vision'
 import type { FaceGeometry, Point } from './renderer'
 
-const WASM_BASE = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm'
-const FACE_MODEL = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
+const WASM_BASE = 'https://spaktok-face-assets.spaktok.workers.dev/wasm'
+const WASM_BACKUP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm'
+const FACE_MODEL = 'https://spaktok-face-assets.spaktok.workers.dev/face_landmarker.task'
 const SEGMENTER_MODEL = 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite'
 
 let filesetPromise: Promise<Awaited<ReturnType<typeof import('@mediapipe/tasks-vision').FilesetResolver.forVisionTasks>>> | null = null
 let facePromise: Promise<FaceLandmarker> | null = null
+let forcedCpu = false
 let segmenterPromise: Promise<ImageSegmenter> | null = null
 
 async function loadFileset() {
   if (!filesetPromise) {
-    filesetPromise = import('@mediapipe/tasks-vision').then(({ FilesetResolver }) => FilesetResolver.forVisionTasks(WASM_BASE))
+    filesetPromise = import('@mediapipe/tasks-vision').then(({ FilesetResolver }) => FilesetResolver.forVisionTasks(WASM_BASE).catch(() => FilesetResolver.forVisionTasks(WASM_BACKUP)))
     filesetPromise.catch(() => {
       filesetPromise = null
     })
@@ -31,22 +33,34 @@ export function loadFaceLandmarker() {
   if (!facePromise) {
     facePromise = (async () => {
       const [{ FaceLandmarker }, fileset] = await Promise.all([import('@mediapipe/tasks-vision'), loadFileset()])
-      return withGpuFallback((delegate) =>
+      const create = (delegate: 'GPU' | 'CPU') =>
         FaceLandmarker.createFromOptions(fileset, {
           baseOptions: { modelAssetPath: FACE_MODEL, delegate },
           runningMode: 'VIDEO',
           numFaces: 1,
-          minFaceDetectionConfidence: 0.5,
-          minFacePresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5,
-        }),
-      )
+          minFaceDetectionConfidence: 0.45,
+          minFacePresenceConfidence: 0.45,
+          minTrackingConfidence: 0.45,
+        })
+      return forcedCpu ? create('CPU') : withGpuFallback(create)
     })()
     facePromise.catch(() => {
       facePromise = null
     })
   }
   return facePromise
+}
+
+/** MediaPipe may initialize GPU successfully then throw at runtime on some
+ * mobile WebGL drivers. Retry exactly once with the CPU delegate. */
+export async function recoverFaceLandmarkerOnCpu(): Promise<FaceLandmarker | null> {
+  if (forcedCpu) return null
+  forcedCpu = true
+  const previous = facePromise
+  facePromise = null
+  // Ensure the old model does not compete with the new inference backend.
+  try { (await previous)?.close() } catch {}
+  return loadFaceLandmarker()
 }
 
 export function loadSegmenter() {

@@ -187,8 +187,20 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const statusMessage =
     camera.status === 'denied' ? s('denied') : camera.status === 'unsupported' ? s('unsupported') : camera.status === 'error' ? s('cameraError') : s('starting')
 
-  const visionMessage =
-    camera.vision === 'loading' ? s('loadingAi') : camera.vision === 'no-face' ? s('noFace') : camera.vision === 'unavailable' ? s('visionUnavailable') : null
+  const faceArSelected = studio.face.id !== 'none'
+  const visionMessage = faceArSelected
+    ? camera.vision === 'loading'
+      ? 'جارٍ تحميل محرك تتبع الوجه…'
+      : camera.vision === 'tracking'
+        ? '✓ تم اكتشاف الوجه — القناع نشط'
+        : camera.vision === 'no-face' || camera.vision === 'ready'
+          ? 'القناع محدد — وجّه وجهك إلى الكاميرا بإضاءة واضحة'
+          : camera.vision === 'unavailable'
+            ? 'تعذّر تشغيل تتبع الوجه على هذا الجهاز. القناع غير نشط.'
+            : 'اختر قناعًا للبدء'
+    : camera.vision === 'loading' ? s('loadingAi') :
+      camera.vision === 'no-face' ? s('noFace') :
+      camera.vision === 'unavailable' ? s('visionUnavailable') : null
 
   const formatTime = (total: number) => `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 
