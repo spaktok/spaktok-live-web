@@ -32,7 +32,7 @@ export const isFace3DId=(id:string):id is Face3DId=>face3DPresets.some(x=>x.id==
 // No untrusted remote model URLs or arbitrary asset data can be supplied.
 const MODEL_ASSETS:Partial<Record<Face3DId,string>>={
  '3d-crystal':'/face-assets/spaktok-crystal.glb',
- '3d-gold-crown':'/face-assets/spaktok-royal-couture.glb?v=20261026-royal-2',
+ '3d-gold-crown':'/face-assets/spaktok-royal-couture.glb?v=20261026-tiara-3',
 }
 const clamp=(n:number,low:number,high:number)=>Math.min(high,Math.max(low,n))
 export interface Face3DFrame{
