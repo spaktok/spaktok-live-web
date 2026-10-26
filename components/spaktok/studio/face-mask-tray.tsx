@@ -3,6 +3,7 @@ import {useEffect,useMemo,useRef,useState} from 'react'
 import {ChevronDown,ChevronUp,Heart,Search,ScanFace,X} from 'lucide-react'
 import {faceFxCatalog,type FaceFxParams,type FaceFxId} from '@/lib/filter-engine/params'
 import {cn} from '@/lib/utils'
+import {getMakeupPalette,type MakeupLookId} from '@/lib/filter-engine/makeup3d'
 
 type Category='makeup'|'3d'|'all'|'fashion'|'animal'|'fantasy'|'fun'|'reactive'|'saved'
 const tabs:{id:Category;label:string}[]=[
@@ -12,13 +13,32 @@ const tabs:{id:Category;label:string}[]=[
 ]
 const STORAGE_KEY='spaktok.face-ar.favorites.v1'
 
+
+function MakeupPreview({id}:{id:MakeupLookId}){
+ const p=getMakeupPalette(id)
+ return <svg viewBox="0 0 64 64" className="size-11" aria-hidden="true">
+   <defs><linearGradient id={'skin-'+id} x1="0" x2="1" y1="0" y2="1">
+     <stop stopColor="#eac5ac" offset="0"/><stop stopColor="#b8826f" offset="1"/>
+   </linearGradient></defs>
+   <ellipse cx="32" cy="32" rx="24" ry="29" fill={'url(#skin-'+id+')'}/>
+   <ellipse cx="19" cy="35" rx="8" ry="4" fill={p.blush} opacity={p.coverage[4]*.8}/>
+   <ellipse cx="45" cy="35" rx="8" ry="4" fill={p.blush} opacity={p.coverage[4]*.8}/>
+   <path d="M13 25 Q20 17 27 25M37 25 Q44 17 51 25" fill="none"
+    stroke={p.shadow} strokeWidth="5" strokeLinecap="round" opacity=".8"/>
+   <path d="M14 25Q20 28 27 25M37 25Q44 28 50 25" fill="none"
+    stroke={p.liner} strokeWidth="2" strokeLinecap="round"/>
+   <path d="M23 46 Q28 40 32 44 Q36 40 41 46 Q33 53 23 46" fill={p.lip}/>
+   <path d="M29 30Q32 34 35 30" stroke="#b7816a" strokeWidth="1" fill="none"/>
+ </svg>
+}
+
 export function FaceMaskTray({value,onChange,visible,onToggle}:{
  value:FaceFxParams
  onChange:(value:FaceFxParams)=>void
  visible:boolean
  onToggle:()=>void
 }){
- const [tab,setTab]=useState<Category>('all')
+ const [tab,setTab]=useState<Category>('makeup')
  const [search,setSearch]=useState('')
  const [showSearch,setShowSearch]=useState(false)
  const [favorites,setFavorites]=useState<FaceFxId[]>([])
@@ -98,7 +118,9 @@ export function FaceMaskTray({value,onChange,visible,onToggle}:{
               value.id===mask.id?'border-[#abc3ff] bg-[#425cae]/55':'border-white/10 bg-white/[.05]')}>
               <button type="button" className="flex w-full flex-col items-center gap-1" onClick={()=>onChange({...value,id:mask.id,strength:Math.max(.85,value.strength)})}
                 aria-label={'تفعيل '+mask.name} aria-pressed={value.id===mask.id}>
-                <span className="flex size-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#34456f]/50 to-[#101626]/40 text-[26px]" aria-hidden="true">{mask.icon}</span>
+                <span className="flex size-10 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#34456f]/50 to-[#101626]/40 text-[26px]" aria-hidden="true">
+                   {mask.group==='makeup'?<MakeupPreview id={mask.id as MakeupLookId}/>:mask.icon}
+                 </span>
                 <span className="h-7 w-full overflow-hidden text-center text-[9px] leading-[14px] text-white/85">{mask.name}</span>
               </button>
               {mask.id!=='none'&&<button type="button" aria-label={favorites.includes(mask.id)?'إزالة من المفضلة':'إضافة إلى المفضلة'} aria-pressed={favorites.includes(mask.id)}
@@ -110,6 +132,14 @@ export function FaceMaskTray({value,onChange,visible,onToggle}:{
           ))}
         </div>
       ):<div className="py-4 text-center text-xs text-white/60">{tab==='saved'?'لم تحفظ أي مؤثر بعد':'لا توجد مؤثرات مطابقة'}</div>}
+      {value.id.startsWith('3d-makeup-')&&
+        <label className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2 text-[11px] text-white/75">
+          <span className="shrink-0 font-semibold">قوة المكياج</span>
+          <input type="range" min="0" max="1" step="0.05" value={value.strength}
+            onChange={e=>onChange({...value,strength:Number(e.target.value)})}
+            className="min-w-0 flex-1 accent-[#9cb9ff]" aria-label="تغيير قوة المكياج"/>
+          <span className="w-9 text-left font-mono tabular-nums">{Math.round(value.strength*100)}%</span>
+        </label>}
     </section>
    )}
  </div>
