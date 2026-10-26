@@ -13,9 +13,10 @@ describe('SpakTok real-time filter catalog',()=>{
   expect(needsSegmentation(createStudioState().effects)).toBe(false)
  })
  it('has distinct tracked face effects but no face inference when disabled',()=>{
-  expect(faceFxCatalog.length).toBe(11)
+  expect(faceFxCatalog.length).toBe(41)
   expect(new Set(faceFxCatalog.map(x=>x.id)).size).toBe(faceFxCatalog.length)
   expect(faceFxCode('cat-ears')).toBe(3)
+  expect(faceFxCatalog.filter(x=>x.group==='reactive').length).toBeGreaterThanOrEqual(8)
   expect(needsFaceFxTracking(createStudioState().face)).toBe(false)
   expect(needsFaceFxTracking({id:'cat-ears',strength:0.8})).toBe(true)
   expect(needsFaceFxTracking({id:'puppy',strength:0})).toBe(false)
