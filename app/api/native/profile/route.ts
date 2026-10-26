@@ -24,7 +24,15 @@ export async function GET(req:NextRequest){
       ${view==='videos'?"AND v.status='published'":''}
       ORDER BY v.created_at DESC LIMIT 60`
     const videos=await queryD1<VideoRow>(sql,[view==='videos'?id:user!.id])
-    return json({profile:{id:p.id,username:p.username,displayName:p.display_name,avatar:p.avatar_url||'',bio:p.bio||'',isVerified:Boolean(p.is_verified),followers:p.follower_count||0,following:p.following_count||0,likes:videos.rows.reduce((n,v)=>n+(v.like_count||0),0),createdAt:p.created_at},
+    const stats=await queryD1<{totalViews:number;totalLikes:number;videoCount:number}>(`
+      SELECT coalesce(sum(view_count),0) AS totalViews,
+      coalesce(sum(like_count),0) AS totalLikes,count(*) AS videoCount
+      FROM videos WHERE user_id=? AND status='published'`,[id])
+    const follow=user && user.id!==id ? await queryD1<{following:number}>(
+      'SELECT count(*) AS following FROM follows WHERE follower_id=? AND following_id=?',
+      [user.id,id],
+    ):null
+    return json({profile:{id:p.id,username:p.username,displayName:p.display_name,avatar:p.avatar_url||'',bio:p.bio||'',isVerified:Boolean(p.is_verified),followers:p.follower_count||0,following:p.following_count||0,likes:stats.rows[0]?.totalLikes||0,isFollowing:Boolean(follow?.rows[0]?.following),createdAt:p.created_at},stats:{views:stats.rows[0]?.totalViews||0,likes:stats.rows[0]?.totalLikes||0,videoCount:stats.rows[0]?.videoCount||0},
       videos:videos.rows.map(v=>({id:v.id,thumbnailUrl:v.thumbnail_url||v.media_url,caption:v.description||'',views:v.view_count}))})
   }catch{return json({error:'profile_unavailable'},503)}
 }
