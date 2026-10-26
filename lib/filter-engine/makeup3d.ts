@@ -83,8 +83,15 @@ const LIP_INNER=[78,191,80,81,82,13,312,311,310,415,308,324,318,402,317,14,87,17
 const LEFT_LINER=[33,160,158,157,173,133] as const
 const RIGHT_LINER=[362,398,384,385,386,263] as const
 function linerWeight(p:TrackedPoint,indices:readonly number[],points:ReadonlyArray<TrackedPoint>,aspect:number,faceWidth:number){
- const d=contourDistance(p,indices,points,aspect)
- return Math.exp(-Math.pow(d/Math.max(faceWidth*.042,.0015),2)*1.25)
+ // Eyeliner is a single stroke along the UPPER lid, not a closed contour:
+ // closing the stroke paints a line through the eye and creates floating
+ // eyelid-shaped blobs on a 3D face mesh (the reported mobile artifact).
+ let d=Infinity
+ for(let i=0;i<indices.length-1;i++){
+  const a=points[indices[i]],b=points[indices[i+1]]
+  if(valid(a)&&valid(b))d=Math.min(d,segmentDistance(p,a,b,aspect))
+ }
+ return Math.exp(-Math.pow(d/Math.max(faceWidth*.026,.0015),2)*1.7)
 }
 /** CPU cost: O(478) facial vertices (plus constant small contour segments),
  * one update per new vision inference, not every GPU animation frame. */
@@ -102,7 +109,12 @@ export function computeMakeupMasks(points:ReadonlyArray<TrackedPoint>,sourceAspe
  const eyeWidth=Math.max(len(points[33],points[133],sourceAspect),len(points[362],points[263],sourceAspect),.01)
  const width=Math.max(len(points[234],points[454],sourceAspect),.06)
  const lipMargin=width*.022
- const shadowX=eyeWidth*.83,shadowY=eyeWidth*.58
+ const shadowX=eyeWidth*.81,shadowY=eyeWidth*.52
+ // MediaPipe origin is at the top. Cosmetic pigment cannot occlude eyeballs:
+ // suppress it below the physical upper-lid anchors.
+ const leftUpper=(points[159].y+points[158].y)*.5
+ const rightUpper=(points[386].y+points[385].y)*.5
+ const eyelidFalloff=(y:number,upperY:number)=>clamp((upperY+eyeWidth*.065-y)/(eyeWidth*.10))
  for(let i=0;i<478;i++){
   const p=points[i]
   if(!valid(p))continue
@@ -116,11 +128,13 @@ export function computeMakeupMasks(points:ReadonlyArray<TrackedPoint>,sourceAspe
     clamp(.50+lipDist/Math.max(lipMargin,1e-5)*.55)*clamp(.40+innerDist/Math.max(lipMargin,1e-5)):
     .31*Math.exp(-Math.pow(lipDist/Math.max(lipMargin,1e-5),2)*2)
   const shadow=Math.max(
-   radial(p,{x:leftEye.x,y:leftEye.y-eyeWidth*.25},shadowX,shadowY,sourceAspect),
-   radial(p,{x:rightEye.x,y:rightEye.y-eyeWidth*.25},shadowX,shadowY,sourceAspect))
+   radial(p,{x:leftEye.x,y:leftUpper-eyeWidth*.29},shadowX,shadowY,sourceAspect)*
+      eyelidFalloff(p.y,leftUpper),
+   radial(p,{x:rightEye.x,y:rightUpper-eyeWidth*.29},shadowX,shadowY,sourceAspect)*
+      eyelidFalloff(p.y,rightUpper))
   const liner=Math.max(
-   linerWeight(p,LEFT_LINER,points,sourceAspect,width),
-   linerWeight(p,RIGHT_LINER,points,sourceAspect,width))
+   linerWeight(p,LEFT_LINER,points,sourceAspect,width)*eyelidFalloff(p.y,leftUpper),
+   linerWeight(p,RIGHT_LINER,points,sourceAspect,width)*eyelidFalloff(p.y,rightUpper))
   const blush=Math.max(
    radial(p,leftCheek,width*.25,width*.18,sourceAspect),
    radial(p,rightCheek,width*.25,width*.18,sourceAspect))
@@ -132,9 +146,9 @@ export function computeMakeupMasks(points:ReadonlyArray<TrackedPoint>,sourceAspe
    radial(p,{x:rightCheek.x,y:rightCheek.y-width*.13},width*.10,width*.075,sourceAspect),
    radial(p,nose,width*.05,width*.16,sourceAspect)*.7)
   const foundation=clamp(Math.max(
-   radial(p,centroid([1,4,168],points),width*.8,width*.95,sourceAspect)*.55,
-   radial(p,leftCheek,width*.46,width*.48,sourceAspect)*.65,
-   radial(p,rightCheek,width*.46,width*.48,sourceAspect)*.65))
+   radial(p,centroid([1,4,168],points),width*.8,width*.95,sourceAspect)*.22,
+   radial(p,leftCheek,width*.46,width*.48,sourceAspect)*.29,
+   radial(p,rightCheek,width*.46,width*.48,sourceAspect)*.29))
   a[z]=foundation
   a[z+1]=clamp(lips)
   a[z+2]=clamp(shadow)
