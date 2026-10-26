@@ -7,6 +7,7 @@ import { createStudioState } from '@/lib/filter-engine/params'
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
 import { StudioPanel } from './studio/studio-panel'
+import { StoryComposer } from './stories/story-composer'
 import { uploadVideoDirect } from '@/lib/video/direct-upload-client'
 
 interface CameraScreenProps {
@@ -29,6 +30,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const [countdown, setCountdown] = useState<number | null>(null)
   const [progress, setProgress] = useState(0)
   const [captured, setCaptured] = useState<Captured | null>(null)
+  const [storyEditing, setStoryEditing] = useState(false)
   const [uploadEnabled, setUploadEnabled] = useState(false)
   const [uploadChecking, setUploadChecking] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -383,6 +385,11 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
             ) : (
               <video src={captured.url} autoPlay loop playsInline controls={false} className="absolute inset-0 h-full w-full object-cover" />
             )}
+            {captured.kind==='photo'&&!storyEditing&&
+              <button type="button" onClick={()=>setStoryEditing(true)}
+                className="absolute right-4 top-[max(4rem,env(safe-area-inset-top))] z-10 rounded-full border border-[#b7c8ff]/35 bg-[#2d4b9b]/85 px-5 py-2.5 text-sm font-bold text-white backdrop-blur-xl">
+                ✨ تحويل إلى قصة
+              </button>}
             <div className="absolute inset-x-0 top-0 p-4 pt-[max(1rem,env(safe-area-inset-top))]">
               <button onClick={() => { if (uploading) uploadAbortRef.current?.abort(); setCaptured(null) }} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white" aria-label={s('retake')}>
                 <X className="h-5 w-5" />
@@ -422,6 +429,8 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
               </button>
               </div>
             </div>
+            {captured.kind==='photo'&&storyEditing&&
+              <StoryComposer imageUrl={captured.url} onBack={()=>setStoryEditing(false)}/>}
           </div>
         )}
       </div>
