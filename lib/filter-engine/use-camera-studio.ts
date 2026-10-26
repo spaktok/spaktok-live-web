@@ -7,6 +7,7 @@ import { loadFaceLandmarker, recoverFaceLandmarkerOnCpu, configureFace3DExtras, 
 import { drawFaceMask, drawCoverFrame } from './face-overlay'
 import {trackingIntervalMs,updatedMean} from './vision-scheduler'
 import type {FaceMesh3DEngine,Face3DFrame} from './face3d'
+import {stabilizeFaceMesh,hasFreshFace} from './face3d-tracking'
 
 export type Facing = 'user' | 'environment'
 export type CameraStatus = 'idle' | 'starting' | 'ready' | 'denied' | 'unsupported' | 'error'
@@ -274,18 +275,28 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
         const landmarks = result?.faceLandmarks?.[0]
         if (landmarks) {
           lostFrames = 0
-          faceRef.current = smoothFace(faceRef.current, toFaceGeometry(landmarks, aspectRatio))
           if(isFace3DSelected(current.face.id)){
+            const previous=face3DRef.current
+            const tracked=stabilizeFaceMesh(previous?.landmarks??null,
+              landmarks.map(p=>({x:p.x,y:p.y,z:p.z??0})),
+              previous?now-previous.timestamp:0,aspectRatio)
+            // Pose and deformable mesh need identical stabilized points;
+            // independently smoothed anchors cause floating facial overlays.
+            const aligned=toFaceGeometry(tracked,aspectRatio)
+            faceRef.current=aligned
             const blends:Record<string,number>={}
             for(const item of result?.faceBlendshapes?.[0]?.categories||[])
               blends[item.categoryName]=item.score
             face3DRef.current={
-              landmarks:landmarks.map(p=>({x:p.x,y:p.y,z:p.z??0})),
-              geometry:faceRef.current,
+              landmarks:tracked,
+              geometry:aligned,
               matrix:result?.facialTransformationMatrixes?.[0]?.data?
                 Array.from(result.facialTransformationMatrixes[0].data):undefined,
               blendshapes:blends,timestamp:now,
             }
+          } else {
+            face3DRef.current=null
+            faceRef.current=smoothFace(faceRef.current,toFaceGeometry(landmarks,aspectRatio))
           }
           setVision((value) => (value === 'tracking' ? value : 'tracking'))
         } else if (++lostFrames > 4) {
@@ -330,7 +341,9 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
         }
         if(isFace3DSelected(current.face.id)&&threeEngineRef.current){
           try{
-            threeEngineRef.current.render(original?null:face3DRef.current,
+            const tracked=face3DRef.current
+            const fresh=tracked&&hasFreshFace(tracked.timestamp,now)?tracked:null
+            threeEngineRef.current.render(original?null:fresh,
               video.videoWidth,video.videoHeight,facing==='user',
               current.face.id,current.face.strength,current.face.makeup)
           }catch{
