@@ -42,7 +42,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const [liveSeconds, setLiveSeconds] = useState(0)
   const [liveTitle, setLiveTitle] = useState('')
 
-  const camera = useCameraStudio({ state: studio, audio: mode !== 'photo' })
+  const camera = useCameraStudio({ state: studio, audio: mode !== 'photo', paused: Boolean(captured) })
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => () => {
@@ -240,7 +240,13 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
               {s('recording')}
             </span>
           ) : (
-            visionMessage && <span className="rounded-full bg-black/50 px-3 py-1 text-[11px] text-white/80">{visionMessage}</span>
+            <div className="flex flex-col items-start gap-1.5">
+              {visionMessage&&<span className="rounded-full bg-black/50 px-3 py-1 text-[11px] text-white/80">{visionMessage}</span>}
+              {camera.previewFps!==null&&
+                <span className="rounded-full border border-[#90aaff]/20 bg-black/55 px-2.5 py-1 font-mono text-[10px] tabular-nums text-[#acc4ff]">
+                  {camera.previewFps} FPS • Preview
+                </span>}
+            </div>
           )}
 
           <div className="flex flex-col gap-3">

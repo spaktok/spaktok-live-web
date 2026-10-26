@@ -12,6 +12,7 @@ export type VisionStatus = 'off' | 'loading' | 'tracking' | 'no-face' | 'unavail
 interface Options {
   state: StudioState
   audio?: boolean
+  paused?: boolean
   /** Output aspect ratio (width / height). Portrait 9:16 matches stories and live. */
   aspect?: number
 }
@@ -33,7 +34,7 @@ const chooseOutputHeight = () => {
  * Face mesh and person segmentation run on-device (MediaPipe) so reshape and
  * background effects follow the face frame-by-frame.
  */
-export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Options) {
+export function useCameraStudio({ state, audio = false, paused = false, aspect = 9 / 16 }: Options) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const rendererRef = useRef<FilterRenderer | null>(null)
@@ -43,6 +44,8 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
   const maskRef = useRef<{ data: Uint8Array; width: number; height: number } | null>(null)
   const lastVisionRef = useRef(0)
   const visionBusyRef = useRef(false)
+  const activeRef = useRef(!paused)
+  const fpsRef = useRef({last:0,frames:0})
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const compareRef = useRef(false)
@@ -56,9 +59,11 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
   const [zoomRange, setZoomRange] = useState<{ min: number; max: number } | null>(null)
   const [zoom, setZoomState] = useState(1)
   const [recording, setRecording] = useState(false)
+  const [previewFps,setPreviewFps] = useState<number | null>(null)
   const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null)
 
   stateRef.current = state
+  activeRef.current = !paused
 
   const needsFace = needsFaceTracking(state.beauty)
   const needsMask = needsSegmentation(state.effects)
@@ -215,20 +220,29 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
     const draw = () => {
       if (stopped) return
       const now = performance.now()
-      if (!document.hidden && video.readyState >= 2 && video.videoWidth) {
+      if (activeRef.current && !document.hidden && video.readyState >= 2 && video.videoWidth) {
         runVision(now).catch(() => undefined)
         const current = stateRef.current
         const original = compareRef.current
-        rendererRef.current?.render({
-          source: video,
-          color: original ? neutralColor : resolveColor(current),
-          beauty: original ? neutralBeauty : current.beauty,
-          effects: original ? neutralEffects : current.effects,
-          mirror: facing === 'user',
-          face: faceRef.current,
-          mask: maskRef.current,
-          time: now / 1000,
-        })
+        if(rendererRef.current){
+          rendererRef.current.render({
+            source: video,
+            color: original ? neutralColor : resolveColor(current),
+            beauty: original ? neutralBeauty : current.beauty,
+            effects: original ? neutralEffects : current.effects,
+            mirror: facing === 'user',
+            face: faceRef.current,
+            mask: maskRef.current,
+            time: now / 1000,
+          })
+          const fps=fpsRef.current
+          fps.frames+=1
+          if(fps.last===0)fps.last=now
+          else if(now-fps.last>=1200){
+            setPreviewFps(Math.round(1000*fps.frames/(now-fps.last)))
+            fps.last=now;fps.frames=0
+          }
+        }
       }
       schedule()
     }
@@ -341,6 +355,7 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
     zoomRange,
     zoom,
     recording,
+    previewFps,
     retry: () => start(facing),
     flip,
     setTorch,
