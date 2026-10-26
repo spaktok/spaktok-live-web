@@ -1,5 +1,5 @@
 import {describe,expect,it} from 'vitest'
-import {filterPresets,createStudioState,needsFaceTracking,needsSegmentation,getPreset} from './params'
+import {filterPresets,createStudioState,needsFaceTracking,needsFaceFxTracking,faceFxCatalog,faceFxCode,needsSegmentation,getPreset} from './params'
 describe('SpakTok real-time filter catalog',()=>{
  it('keeps every look uniquely addressable',()=>{
   expect(filterPresets.length).toBeGreaterThanOrEqual(35)
@@ -11,6 +11,14 @@ describe('SpakTok real-time filter catalog',()=>{
  })
  it('does not load segmentation when background mode is disabled',()=>{
   expect(needsSegmentation(createStudioState().effects)).toBe(false)
+ })
+ it('has distinct tracked face effects but no face inference when disabled',()=>{
+  expect(faceFxCatalog.length).toBe(11)
+  expect(new Set(faceFxCatalog.map(x=>x.id)).size).toBe(faceFxCatalog.length)
+  expect(faceFxCode('cat-ears')).toBe(3)
+  expect(needsFaceFxTracking(createStudioState().face)).toBe(false)
+  expect(needsFaceFxTracking({id:'cat-ears',strength:0.8})).toBe(true)
+  expect(needsFaceFxTracking({id:'puppy',strength:0})).toBe(false)
  })
  it('falls back to an available original look',()=>{
   expect(getPreset('unknown').id).toBe('original')

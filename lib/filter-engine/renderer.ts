@@ -1,4 +1,4 @@
-import { backgroundCode, fxCode, type BeautyParams, type ColorParams, type EffectParams } from './params'
+import { backgroundCode, fxCode, faceFxCode, type FaceFxParams, type BeautyParams, type ColorParams, type EffectParams } from './params'
 
 export interface Point {
   x: number
@@ -28,6 +28,7 @@ export interface RenderInput {
   color: ColorParams
   beauty: BeautyParams
   effects: EffectParams
+  faceFx: FaceFxParams
   mirror: boolean
   face: FaceGeometry | null
   mask: { data: Uint8Array; width: number; height: number } | null
@@ -187,6 +188,175 @@ vec2 geometryFx(vec2 uv) {
     if (hash(vec2(slice, t)) > 1.0 - 0.3 * k) uv.x += (hash(vec2(t, slice)) - 0.5) * 0.16 * k;
   }
   return uv;
+}
+
+uniform float uArFace;
+uniform float uArAmount;
+
+// Anti-aliased 2D primitives measured in face-width units.
+float arEllipse(vec2 p, vec2 c, vec2 r) {
+  vec2 d = (p-c)/max(r,vec2(0.001));
+  return 1.0-smoothstep(0.94,1.06,length(d));
+}
+float arRing(vec2 p, vec2 c, vec2 r, float thickness) {
+  return clamp(arEllipse(p,c,r)-arEllipse(p,c,r-vec2(thickness)),0.0,1.0);
+}
+float arStroke(vec2 p, vec2 a, vec2 b, float w) {
+  vec2 v=b-a;
+  float t=clamp(dot(p-a,v)/max(dot(v,v),0.00001),0.0,1.0);
+  return 1.0-smoothstep(w,w+0.012,length(p-(a+t*v)));
+}
+float arCross(vec2 a,vec2 b){return a.x*b.y-a.y*b.x;}
+float arTriangle(vec2 p,vec2 a,vec2 b,vec2 c) {
+  float d=arCross(b-a,c-a);
+  float s=sign(d);
+  float x=arCross(b-a,p-a)*s;
+  float y=arCross(c-b,p-b)*s;
+  float z=arCross(a-c,p-c)*s;
+  return step(0.0,min(x,min(y,z)));
+}
+float arHeart(vec2 p,vec2 center,float size){
+  vec2 q=(p-center)/size;
+  q.y=-q.y;
+  float t=q.x*q.x+q.y*q.y-1.0;
+  float f=t*t*t-q.x*q.x*q.y*q.y*q.y;
+  return 1.0-smoothstep(-0.08,0.08,f);
+}
+float arRect(vec2 p,vec2 c,vec2 radii){
+  vec2 a=abs(p-c)-radii;
+  return 1.0-smoothstep(0.005,0.025,length(max(a,0.0))+min(max(a.x,a.y),0.0));
+}
+vec3 arPaint(vec3 base,vec3 ink,float alpha){
+  return mix(base,ink,clamp(alpha*uArAmount,0.0,1.0));
+}
+vec3 arFaceOverlay(vec3 base,vec2 src) {
+  if (uHasFace<0.5 || uArFace<0.5 || uArAmount<0.001) return base;
+  // Coordinates derive from the tracked eye axis; masks follow head tilt.
+  vec2 eyeAxis=(uRightEye-uLeftEye)*aspectVec();
+  float eyeLength=length(eyeAxis);
+  if(eyeLength<0.005 || uFaceWidth<0.01) return base;
+  vec2 right=eyeAxis/eyeLength;
+  vec2 down=vec2(-right.y,right.x);
+  vec2 relative=(src-0.5*(uLeftEye+uRightEye))*aspectVec()/uFaceWidth;
+  vec2 p=vec2(dot(relative,right),dot(relative,down));
+  float eyeDistance=clamp(eyeLength/uFaceWidth,0.2,0.8);
+  float left=-eyeDistance*0.5;
+  float rightEye=eyeDistance*0.5;
+  float mode=floor(uArFace+0.5);
+  if(mode==1.0 || mode==2.0){
+    // Reflective AR eyewear, fitted to the measured distance between eyes.
+    vec2 rad=vec2(0.22,0.155);
+    float l=arEllipse(p,vec2(left,0.0),rad);
+    float r=arEllipse(p,vec2(rightEye,0.0),rad);
+    float ring=max(arRing(p,vec2(left,0.0),rad,0.027),
+                   arRing(p,vec2(rightEye,0.0),rad,0.027));
+    float bridge=arStroke(p,vec2(left+0.2,-0.015),vec2(rightEye-0.2,-0.015),0.023);
+    if(mode==1.0){
+      base=arPaint(base,vec3(0.12,0.55,0.82),max(l,r)*0.26);
+      base=arPaint(base,vec3(0.23,0.97,1.0),max(ring,bridge));
+      base=arPaint(base,vec3(0.94,0.96,1.0),
+                   max(arStroke(p,vec2(left-0.12,-0.09),vec2(left+0.02,-0.11),0.009),
+                       arStroke(p,vec2(rightEye-0.12,-0.09),vec2(rightEye+0.02,-0.11),0.009)));
+    }else{
+      base=arPaint(base,vec3(0.025,0.035,0.11),max(l,r)*0.90);
+      base=arPaint(base,vec3(0.94,0.77,0.4),max(ring,bridge));
+      base=arPaint(base,vec3(0.79,0.88,0.99),
+           max(arStroke(p,vec2(left-0.11,-0.09),vec2(left+0.005,-0.11),0.011),
+               arStroke(p,vec2(rightEye-0.11,-0.09),vec2(rightEye+0.005,-0.11),0.011))*0.8);
+    }
+  }else if(mode==3.0){
+    // Cat ears and whiskers, with nose geometry locked to the face.
+    float ears=max(arTriangle(p,vec2(-0.55,-0.32),vec2(-0.46,-0.86),vec2(-0.13,-0.52)),
+                   arTriangle(p,vec2(0.13,-0.52),vec2(0.46,-0.86),vec2(0.55,-0.32)));
+    float inner=max(arTriangle(p,vec2(-0.48,-0.47),vec2(-0.44,-0.71),vec2(-0.31,-0.51)),
+                   arTriangle(p,vec2(0.31,-0.51),vec2(0.44,-0.71),vec2(0.48,-0.47)));
+    base=arPaint(base,vec3(0.13,0.11,0.2),ears);
+    base=arPaint(base,vec3(1.0,0.57,0.71),inner);
+    vec2 nose=(uNose-0.5*(uLeftEye+uRightEye))*aspectVec()/uFaceWidth;
+    vec2 n=vec2(dot(nose,right),dot(nose,down));
+    base=arPaint(base,vec3(1.0,0.45,0.62),arEllipse(p,n,vec2(0.07,0.035)));
+    for(int i=0;i<3;i++){
+      float v=float(i)-1.0;
+      float w=arStroke(p,n+vec2(-0.10,0.07),
+                         n+vec2(-0.39,0.07+v*0.09),0.007);
+      w=max(w,arStroke(p,n+vec2(0.10,0.07),n+vec2(0.39,0.07+v*0.09),0.007));
+      base=arPaint(base,vec3(0.96,0.87,0.95),w);
+    }
+  }else if(mode==4.0){
+    // Floppy ears and animated puppy nose.
+    float ears=max(arEllipse(p,vec2(-0.65,-0.40),vec2(0.22,0.43)),
+                   arEllipse(p,vec2(0.65,-0.40),vec2(0.22,0.43)));
+    base=arPaint(base,vec3(0.48,0.24,0.12),ears);
+    float inner=max(arEllipse(p,vec2(-0.67,-0.43),vec2(0.12,0.29)),
+                    arEllipse(p,vec2(0.67,-0.43),vec2(0.12,0.29)));
+    base=arPaint(base,vec3(0.78,0.47,0.37),inner*0.88);
+    vec2 n=(uNose-0.5*(uLeftEye+uRightEye))*aspectVec()/uFaceWidth;
+    vec2 nose=vec2(dot(n,right),dot(n,down));
+    base=arPaint(base,vec3(0.14,0.09,0.12),arEllipse(p,nose,vec2(0.14,0.09)));
+    base=arPaint(base,vec3(1.0,0.85,0.83),arEllipse(p,nose+vec2(-0.045,-0.035),vec2(0.033,0.016)));
+  }else if(mode==5.0){
+    // Faceted crown with diamonds over the brows.
+    float crown=arRect(p,vec2(0.0,-0.56),vec2(0.43,0.075));
+    crown=max(crown,arTriangle(p,vec2(-0.45,-0.54),vec2(-0.38,-0.88),vec2(-0.18,-0.54)));
+    crown=max(crown,arTriangle(p,vec2(-0.20,-0.54),vec2(0.0,-0.99),vec2(0.20,-0.54)));
+    crown=max(crown,arTriangle(p,vec2(0.18,-0.54),vec2(0.38,-0.88),vec2(0.45,-0.54)));
+    base=arPaint(base,vec3(0.98,0.72,0.19),crown);
+    base=arPaint(base,vec3(0.16,0.81,0.98),arEllipse(p,vec2(0.0,-0.55),vec2(0.063,0.072)));
+    base=arPaint(base,vec3(1.0,0.94,0.85),
+         max(arEllipse(p,vec2(-0.27,-0.56),vec2(0.038,0.04)),
+             arEllipse(p,vec2(0.27,-0.56),vec2(0.038,0.04))));
+  }else if(mode==6.0){
+    // Butterfly wings beside both temples.
+    for(int i=0;i<2;i++){
+      float s=i==0?-1.0:1.0;
+      float upper=arEllipse(p,vec2(s*0.54,-0.13),vec2(0.26,0.29));
+      float lower=arEllipse(p,vec2(s*0.54,0.18),vec2(0.20,0.18));
+      base=arPaint(base,vec3(0.76,0.38,0.99),upper*0.76);
+      base=arPaint(base,vec3(0.21,0.91,0.97),lower*0.67);
+      float dot=arEllipse(p,vec2(s*0.58,-0.21),vec2(0.075,0.075));
+      base=arPaint(base,vec3(1.0,0.96,0.89),dot*0.87);
+    }
+  }else if(mode==7.0){
+    // Visor with transparent electric scanning lanes.
+    float visor=arRect(p,vec2(0.0,0.0),vec2(0.64,0.21));
+    float inner=arRect(p,vec2(0.0,0.0),vec2(0.61,0.18));
+    float border=clamp(visor-inner,0.0,1.0);
+    base=arPaint(base,vec3(0.09,0.13,0.32),inner*0.72);
+    base=arPaint(base,vec3(0.1,0.96,0.96),border);
+    float scan=0.33+0.34*sin(p.y*80.0+uTime*3.0);
+    base=arPaint(base,vec3(0.14,0.92,1.0),inner*scan*0.30);
+    base=arPaint(base,vec3(1.0,0.3,0.69),arRect(p,vec2(0.0,-0.19),vec2(0.12,0.013)));
+  }else if(mode==8.0){
+    float leftHeart=arHeart(p,vec2(-0.45,0.32),0.115);
+    float rightHeart=arHeart(p,vec2(0.45,0.32),0.115);
+    base=arPaint(base,vec3(1.0,0.26,0.54),max(leftHeart,rightHeart));
+    float shine=arEllipse(p,vec2(-0.57,0.12),vec2(0.035,0.07))
+               +arEllipse(p,vec2(0.57,0.12),vec2(0.035,0.07));
+    base=arPaint(base,vec3(1.0,0.86,0.94),clamp(shine,0.0,1.0));
+  }else if(mode==9.0){
+    float leftLens=arRing(p,vec2(left,0.0),vec2(0.2,0.2),0.04);
+    float rightLens=arRing(p,vec2(rightEye,0.0),vec2(0.2,0.2),0.04);
+    float bridge=arStroke(p,vec2(left+0.18,0),vec2(rightEye-0.18,0),0.04);
+    base=arPaint(base,vec3(0.63,0.88,0.99),max(max(leftLens,rightLens),bridge));
+    float antenna=arStroke(p,vec2(0,-0.43),vec2(0,-0.78),0.019);
+    base=arPaint(base,vec3(0.73,0.82,0.92),antenna);
+    base=arPaint(base,vec3(0.96,0.2,0.45),arEllipse(p,vec2(0,-0.83),vec2(0.065,0.065)));
+    float cheekNodes=max(arEllipse(p,vec2(-0.46,0.26),vec2(0.055,0.05)),
+                         arEllipse(p,vec2(0.46,0.26),vec2(0.055,0.05)));
+    base=arPaint(base,vec3(0.12,0.98,0.86),cheekNodes);
+  }else if(mode==10.0){
+    float a=arEllipse(p,vec2(-0.54,-0.4),vec2(0.035,0.15));
+    a=max(a,arEllipse(p,vec2(0.54,-0.38),vec2(0.04,0.14)));
+    a=max(a,arEllipse(p,vec2(-0.46,0.32),vec2(0.05,0.045)));
+    a=max(a,arEllipse(p,vec2(0.45,0.27),vec2(0.05,0.05)));
+    base=arPaint(base,vec3(1.0,0.4,0.65),a);
+    float b=max(arEllipse(p,vec2(0.0,-0.68),vec2(0.055,0.17)),
+                arEllipse(p,vec2(0.37,-0.6),vec2(0.03,0.11)));
+    base=arPaint(base,vec3(1.0,0.83,0.16),b);
+    float c=arEllipse(p,vec2(-0.31,-0.59),vec2(0.045,0.09));
+    base=arPaint(base,vec3(0.16,0.89,0.96),c);
+  }
+  return base;
 }
 
 void main() {
@@ -355,6 +525,7 @@ void main() {
     }
   }
 
+  color = arFaceOverlay(color,baseSrc);
   gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }`
 
@@ -497,6 +668,8 @@ export class FilterRenderer {
     this.set1('uBgMode', backgroundCode(input.effects.background))
     this.set1('uFx', fxCode(input.effects.fx))
     this.set1('uFxAmount', input.effects.fxAmount)
+    this.set1('uArFace', face ? faceFxCode(input.faceFx.id) : 0)
+    this.set1('uArAmount', face ? Math.max(0, Math.min(1, input.faceFx.strength)) : 0)
     this.set1('uLipstick', face ? beauty.lipstick : 0)
     this.set1('uBlush', face ? beauty.blush : 0)
     this.set1('uClarity', color.clarity)

@@ -318,7 +318,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                   إنهاء المعاينة
                 </button>
               </div>
-              {showPanel && <StudioPanel state={studio} onChange={setStudio} captureFrame={camera.captureAnalysisFrame} tabs={['filters', 'beauty', 'ai']} />}
+              {showPanel && <StudioPanel state={studio} onChange={setStudio} captureFrame={camera.captureAnalysisFrame} tabs={['face', 'beauty', 'filters']} />}
             </div>
           ) : (
             <>

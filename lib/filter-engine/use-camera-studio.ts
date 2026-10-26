@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FilterRenderer, type FaceGeometry } from './renderer'
-import { needsFaceTracking, needsSegmentation, neutralBeauty, neutralColor, neutralEffects, resolveColor, type StudioState } from './params'
+import { needsFaceTracking, needsFaceFxTracking, needsSegmentation, neutralBeauty, neutralColor, neutralEffects, neutralFaceFx, resolveColor, type StudioState } from './params'
 import { loadFaceLandmarker, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
 
 export type Facing = 'user' | 'environment'
@@ -65,7 +65,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   stateRef.current = state
   activeRef.current = !paused
 
-  const needsFace = needsFaceTracking(state.beauty)
+  const needsFace = needsFaceTracking(state.beauty) || needsFaceFxTracking(state.face)
   const needsMask = needsSegmentation(state.effects)
 
   const stopStream = useCallback(() => {
@@ -182,7 +182,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       // Serialize ML inference and keep WebGL rendering independent.
       if (visionBusyRef.current || document.hidden) return
       const current = stateRef.current
-      const wantsFace = needsFaceTracking(current.beauty)
+      const wantsFace = needsFaceTracking(current.beauty) || needsFaceFxTracking(current.face)
       const wantsMask = needsSegmentation(current.effects)
       if (!wantsFace && !wantsMask) return
       if (now - lastVisionRef.current < (wantsMask ? 150 : 90)) return
@@ -230,6 +230,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
             color: original ? neutralColor : resolveColor(current),
             beauty: original ? neutralBeauty : current.beauty,
             effects: original ? neutralEffects : current.effects,
+            faceFx: original ? neutralFaceFx : current.face,
             mirror: facing === 'user',
             face: faceRef.current,
             mask: maskRef.current,

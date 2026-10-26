@@ -54,12 +54,34 @@ export function needsSegmentation(effects: EffectParams) {
   return effects.background !== 'none' && effects.backgroundBlur > 0
 }
 
+
+/** Original SpakTok face-attached AR, rendered into the captured WebGL canvas. */
+export const faceFxCatalog = [
+  { id: 'none', name: 'بدون قناع', icon: '🙂', group: 'all' },
+  { id: 'neon-glasses', name: 'نظارات نيون', icon: '👓', group: 'fashion' },
+  { id: 'midnight-shades', name: 'نظارات داكنة', icon: '🕶️', group: 'fashion' },
+  { id: 'cat-ears', name: 'قطة لطيفة', icon: '🐱', group: 'fun' },
+  { id: 'puppy', name: 'كلب صغير', icon: '🐶', group: 'fun' },
+  { id: 'royal-crown', name: 'تاج ملكي', icon: '👑', group: 'fantasy' },
+  { id: 'butterfly', name: 'فراشة', icon: '🦋', group: 'fantasy' },
+  { id: 'cyber-visor', name: 'سايبر', icon: '🤖', group: 'fashion' },
+  { id: 'heart-cheeks', name: 'قلوب', icon: '💗', group: 'fun' },
+  { id: 'robot', name: 'روبوت', icon: '⚙️', group: 'fantasy' },
+  { id: 'festival', name: 'احتفال', icon: '🎉', group: 'fun' },
+] as const
+export type FaceFxId = (typeof faceFxCatalog)[number]['id']
+export const faceFxCode = (id: FaceFxId) => Math.max(0, faceFxCatalog.findIndex(x=>x.id===id))
+export type FaceFxParams = { id: FaceFxId; strength: number }
+export const neutralFaceFx: FaceFxParams = { id: 'none', strength: 0.85 }
+export const needsFaceFxTracking = (face: FaceFxParams) => face.id !== 'none' && face.strength > 0
+
 export interface StudioState {
   presetId: string
   intensity: number
   color: ColorParams
   beauty: BeautyParams
   effects: EffectParams
+  face: FaceFxParams
 }
 
 export const neutralColor: ColorParams = {
@@ -151,7 +173,7 @@ export function getPreset(id: string): FilterPreset {
 }
 
 export function createStudioState(presetId = 'original'): StudioState {
-  return { presetId, intensity: 1, color: { ...neutralColor }, beauty: { ...neutralBeauty }, effects: { ...neutralEffects } }
+  return { presetId, intensity: 1, color: { ...neutralColor }, beauty: { ...neutralBeauty }, effects: { ...neutralEffects }, face: { ...neutralFaceFx } }
 }
 
 /** Preset is applied at `intensity`, then user adjustments are added on top. */

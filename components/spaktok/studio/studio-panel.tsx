@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Check, Loader2, RotateCcw, Sparkles, Wand2, Star, Clock3 } from 'lucide-react'
+import { Check, Loader2, RotateCcw, Sparkles, Wand2, Star, Clock3, ScanFace } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   backgroundModes,
@@ -10,6 +10,7 @@ import {
   createStudioState,
   filterPresets,
   fxList,
+  faceFxCatalog,
   presetCategories,
   type BackgroundMode,
   type FxId,
@@ -47,7 +48,7 @@ function Chip({ active, onClick, children }: { active: boolean; onClick: () => v
   )
 }
 
-export type StudioTab = 'filters' | 'adjust' | 'beauty' | 'effects' | 'ai'
+export type StudioTab = 'face' | 'filters' | 'adjust' | 'beauty' | 'effects' | 'ai'
 
 interface StudioPanelProps {
   state: StudioState
@@ -91,7 +92,7 @@ function Slider({ label, value, min, max, onChange }: { label: string; value: nu
   )
 }
 
-export function StudioPanel({ state, onChange, captureFrame, tabs = ['filters', 'adjust', 'beauty', 'effects', 'ai'] }: StudioPanelProps) {
+export function StudioPanel({ state, onChange, captureFrame, tabs = ['face', 'filters', 'adjust', 'beauty', 'effects', 'ai'] }: StudioPanelProps) {
   const { s, language } = useStudioStrings()
   const [tab, setTab] = useState<StudioTab>(tabs[0])
   const [category, setCategory] = useState<PresetCategory | 'favorites'>('trending')
@@ -152,6 +153,35 @@ export function StudioPanel({ state, onChange, captureFrame, tabs = ['filters', 
   return (
     <div className="flex flex-col gap-3 rounded-t-3xl bg-black/75 pb-3 pt-3 backdrop-blur-xl">
       <div className="min-h-32 px-4">
+        {tab === 'face' && (
+          <div className="flex flex-col gap-3" dir="rtl">
+            <div className="flex items-center justify-between">
+              <div><p className="text-[10px] font-bold tracking-[.16em] text-[#a8beff]">SPAKTOK FACE AR</p>
+              <p className="mt-1 text-xs text-white/65">أقنعة تتحرك مع وجهك أثناء التصوير</p></div>
+              <ScanFace className="size-6 text-[#a5baff]" aria-hidden="true"/>
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+              {faceFxCatalog.map(effect=>(
+                <button type="button" key={effect.id}
+                  onClick={()=>onChange({...state,face:{...state.face,id:effect.id}})}
+                  aria-pressed={state.face.id===effect.id} aria-label={effect.name}
+                  className="flex min-w-[78px] shrink-0 flex-col items-center gap-1.5">
+                  <span className={cn('flex size-[68px] items-center justify-center rounded-[22px] border-2 bg-gradient-to-br text-3xl transition',
+                    state.face.id===effect.id
+                      ? 'border-[#b9caff] from-[#4764c3]/70 to-[#202c63] shadow-[0_8px_25px_rgba(87,126,246,.23)]'
+                      : 'border-white/10 from-white/10 to-white/[.03]')}>{effect.icon}</span>
+                  <span className={cn('max-w-[80px] text-center text-[11px]',
+                    state.face.id===effect.id?'font-bold text-white':'text-white/60')}>{effect.name}</span>
+                </button>
+              ))}
+            </div>
+            {state.face.id!=='none'&&(
+              <Slider label="قوة القناع" value={state.face.strength} min={0} max={1}
+                onChange={strength=>onChange({...state,face:{...state.face,strength}})}/>
+            )}
+            <p className="text-[11px] leading-5 text-white/45">تعمل الأقنعة عند اكتشاف الوجه أمام الكاميرا. نقاط الوجه تُعالج على جهازك فقط.</p>
+          </div>
+        )}
         {tab === 'filters' && (
           <div className="flex flex-col gap-3">
             <div className="flex gap-4 overflow-x-auto scrollbar-hide" role="tablist" aria-label="تصنيفات الفلاتر">
@@ -337,7 +367,8 @@ export function StudioPanel({ state, onChange, captureFrame, tabs = ['filters', 
               aria-pressed={tab === value}
             >
               {value === 'ai' && <Sparkles className="h-3.5 w-3.5" />}
-              {s(value)}
+              {value === 'face' && <ScanFace className="h-3.5 w-3.5" />}
+              {value === 'face' ? 'أقنعة الوجه' : s(value)}
             </button>
           ))}
         </div>

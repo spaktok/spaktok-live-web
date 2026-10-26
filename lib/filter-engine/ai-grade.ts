@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { backgroundModes, filterPresets, fxList, neutralBeauty, neutralColor, type StudioState } from './params'
+import { backgroundModes, filterPresets, fxList, neutralBeauty, neutralColor, neutralFaceFx, type StudioState } from './params'
 
 const unit = z.number().min(-1).max(1)
 const positive = z.number().min(0).max(1)
@@ -50,6 +50,7 @@ export function gradeToState(grade: Grade): StudioState {
     intensity: grade.intensity,
     color: { ...neutralColor, ...grade.color },
     beauty: { ...neutralBeauty, ...grade.beauty },
+    face: { ...neutralFaceFx },
     effects: {
       background: grade.backgroundStrength > 0 ? grade.background : 'none',
       backgroundBlur: grade.backgroundStrength,
