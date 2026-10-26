@@ -128,6 +128,22 @@ export const filterPresets: FilterPreset[] = [
   { id: 'mono', name: 'Mono', category: 'mono', color: { saturation: -1, contrast: 0.12 }, swatch: '#8a8a8a' },
   { id: 'noir', name: 'Noir', category: 'mono', color: { saturation: -1, contrast: 0.45, exposure: -0.05, vignette: 0.5, grain: 0.2 }, swatch: '#2b2b2b' },
   { id: 'silver', name: 'Silver', category: 'mono', color: { saturation: -1, contrast: -0.05, exposure: 0.1, fade: 0.15, glow: 0.2 }, swatch: '#c9c9c9' },
+  // Original SpakTok looks — parameter presets, not CapCut assets or cloned filters.
+  { id: 'aurora', name: 'Aurora', category: 'trending', color: { contrast: 0.12, vibrance: 0.26, tint: 0.14, temperature: -0.12, shadowTint: rgb('#243f8e'), highlightTint: rgb('#cb90fc'), splitAmount: 0.36, glow: 0.2 }, swatch: '#8b91f5' },
+  { id: 'crystal', name: 'Crystal', category: 'trending', color: { exposure: 0.07, sharpen: 0.35, clarity: 0.27, highlights: -0.19, shadows: 0.2, vibrance: 0.13 }, swatch: '#8bccf0' },
+  { id: 'rose-hour', name: 'Rose Hour', category: 'portrait', color: { temperature: 0.17, tint: 0.15, exposure: 0.1, contrast: -0.1, glow: 0.28, highlightTint: rgb('#ffb9ca'), splitAmount: 0.25 }, swatch: '#f1a3bd' },
+  { id: 'editorial', name: 'Editorial', category: 'portrait', color: { contrast: 0.17, saturation: -0.14, sharpen: 0.27, shadows: 0.09, fade: 0.04, vignette: 0.14 }, swatch: '#bdc2cf' },
+  { id: 'analog-90', name: 'Analog 90', category: 'film', color: { temperature: 0.19, saturation: -0.08, contrast: -0.12, grain: 0.34, fade: 0.29, vignette: 0.22 }, swatch: '#ad896e' },
+  { id: 'indie-night', name: 'Indie Night', category: 'film', color: { exposure: -0.08, contrast: 0.2, temperature: -0.12, tint: 0.08, grain: 0.28, shadowTint: rgb('#142c68'), highlightTint: rgb('#d88a78'), splitAmount: 0.38 }, swatch: '#555c8c' },
+  { id: 'silver-screen', name: 'Silver Screen', category: 'film', color: { saturation: -0.62, contrast: 0.27, vignette: 0.32, grain: 0.15, highlights: -0.1 }, swatch: '#949bac' },
+  { id: 'electric', name: 'Electric', category: 'vibe', color: { contrast: 0.24, vibrance: 0.53, temperature: -0.17, tint: 0.2, shadowTint: rgb('#151cf2'), highlightTint: rgb('#ff58da'), splitAmount: 0.49, glow: 0.33 }, swatch: '#8557ed' },
+  { id: 'mint-cool', name: 'Mint Cool', category: 'vibe', color: { contrast: 0.09, saturation: 0.14, temperature: -0.3, tint: -0.18, shadowTint: rgb('#125c59'), highlightTint: rgb('#b0f4e9'), splitAmount: 0.3 }, swatch: '#70cdb8' },
+  { id: 'dreamwave', name: 'Dreamwave', category: 'vibe', color: { exposure: 0.05, contrast: -0.15, saturation: 0.09, glow: 0.48, fade: 0.2, tint: 0.16 }, swatch: '#a5a1ec' },
+  { id: 'streetlight', name: 'Streetlight', category: 'scene', color: { exposure: 0.2, shadows: 0.31, highlights: -0.24, contrast: 0.16, clarity: 0.18, temperature: -0.09, vignette: 0.23 }, swatch: '#435c93' },
+  { id: 'coffee', name: 'Coffee', category: 'scene', color: { temperature: 0.33, exposure: 0.08, vibrance: 0.13, contrast: 0.15, vignette: 0.12, shadowTint: rgb('#583d2d'), splitAmount: 0.13 }, swatch: '#b27e48' },
+  { id: 'ocean-air', name: 'Ocean Air', category: 'scene', color: { temperature: -0.21, vibrance: 0.25, contrast: 0.08, highlights: -0.3, shadows: 0.16, clarity: 0.33 }, swatch: '#3f9bc5' },
+  { id: 'ink', name: 'Ink', category: 'mono', color: { saturation: -1, contrast: 0.65, shadows: -0.2, highlights: -0.15, vignette: 0.45 }, swatch: '#343841' },
+  { id: 'soft-paper', name: 'Soft Paper', category: 'mono', color: { saturation: -1, contrast: -0.14, exposure: 0.22, fade: 0.31, grain: 0.16 }, swatch: '#c5c1b9' },
 ]
 
 export function getPreset(id: string): FilterPreset {
@@ -179,5 +195,5 @@ export const beautySliders: (keyof BeautyParams)[] = ['smooth', 'whiten', 'slim'
 
 /** Face geometry is only needed for warps and makeup; skin smoothing works without tracking. */
 export function needsFaceTracking(beauty: BeautyParams) {
-  return beauty.slim > 0 || beauty.eyes > 0 || beauty.jaw > 0 || beauty.nose > 0 || beauty.lipstick > 0 || beauty.blush > 0 || beauty.smooth > 0
+  return beauty.slim > 0 || beauty.eyes > 0 || beauty.jaw > 0 || beauty.nose > 0 || beauty.lipstick > 0 || beauty.blush > 0
 }
