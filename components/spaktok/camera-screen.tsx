@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Download, Radio, RefreshCw, Send, SlidersHorizontal, Timer, X, Zap } from 'lucide-react'
+import { Camera, Download, Radio, RefreshCw, Send, SlidersHorizontal, Timer, X, Zap, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createStudioState } from '@/lib/filter-engine/params'
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
@@ -180,7 +180,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
 
   const modes: CaptureMode[] = ['photo', '15s', '60s', 'story', 'live']
   const modeLabel = (value: CaptureMode) =>
-    value === 'photo' ? s('photo') : value === '15s' ? s('video15') : value === '60s' ? s('video60') : value === 'story' ? s('story') : s('live')
+    value === 'photo' ? s('photo') : value === '15s' ? s('video15') : value === '60s' ? s('video60') : value === 'story' ? s('story') : 'معاينة البث'
 
   const statusMessage =
     camera.status === 'denied' ? s('denied') : camera.status === 'unsupported' ? s('unsupported') : camera.status === 'error' ? s('cameraError') : s('starting')
@@ -228,7 +228,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
             <div className="flex items-center gap-2">
               <span className="flex items-center gap-1.5 rounded-md bg-[#ff3b30] px-2 py-1 text-xs font-bold text-white">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
-                {s('live')}
+                معاينة محلية • ليس بثًا
               </span>
               <span className="rounded-md bg-black/50 px-2 py-1 text-xs tabular-nums text-white">{formatTime(liveSeconds)}</span>
             </div>
@@ -275,6 +275,12 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
             >
               <SlidersHorizontal className="h-5 w-5" />
             </button>
+            <button type="button" onPointerDown={()=>camera.setCompare(true)}
+              onPointerUp={()=>camera.setCompare(false)} onPointerCancel={()=>camera.setCompare(false)}
+              onPointerLeave={()=>camera.setCompare(false)} aria-label="اضغط باستمرار لمقارنة قبل وبعد"
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white/90 backdrop-blur active:bg-[#587ae9]">
+              <Eye className="size-5"/>
+            </button>
           </div>
         </div>
 
@@ -295,13 +301,13 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
         <div className="absolute inset-x-0 bottom-0 flex flex-col pb-[env(safe-area-inset-bottom)]">
           {isLive ? (
             <div className="flex flex-col gap-3 bg-gradient-to-t from-black/80 to-transparent p-4">
-              <p className="text-xs text-white/60">{s('noComments')}</p>
+              <p className="text-xs text-white/70" dir="rtl">معاينة محلية للفلاتر قبل البث. لم تبدأ بثًا عامًا، ولا يوجد مشاهدون.</p>
               <div className="flex items-center gap-2">
                 <button onClick={() => setShowPanel((value) => !value)} className="flex-1 rounded-full bg-white/15 py-2.5 text-sm font-semibold text-white">
                   {s('filters')}
                 </button>
                 <button onClick={() => setIsLive(false)} className="rounded-full bg-[#ff3b30] px-6 py-2.5 text-sm font-bold text-white">
-                  {s('endLive')}
+                  إنهاء المعاينة
                 </button>
               </div>
               {showPanel && <StudioPanel state={studio} onChange={setStudio} captureFrame={camera.captureAnalysisFrame} tabs={['filters', 'beauty', 'ai']} />}
@@ -326,7 +332,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                     onClick={handleShutter}
                     disabled={camera.status !== 'ready'}
                     className="relative flex h-20 w-20 items-center justify-center disabled:opacity-50"
-                    aria-label={mode === 'live' ? s('goLive') : modeLabel(mode)}
+                    aria-label={mode === 'live' ? 'بدء المعاينة المحلية' : modeLabel(mode)}
                   >
                     <svg className="absolute inset-0 -rotate-90" viewBox="0 0 80 80" aria-hidden="true">
                       <circle cx="40" cy="40" r="37" fill="none" stroke="currentColor" strokeWidth="4" className="text-white/90" />

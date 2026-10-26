@@ -1,360 +1,350 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { FilterRenderer, type FaceGeometry } from './renderer'
-import { needsFaceTracking, needsSegmentation, neutralBeauty, neutralColor, neutralEffects, resolveColor, type StudioState } from './params'
-import { loadFaceLandmarker, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
+import { useEffect, useState } from 'react'
+import { Check, Loader2, RotateCcw, Sparkles, Wand2, Star, Clock3 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import {
+  backgroundModes,
+  beautySliders,
+  colorSliders,
+  createStudioState,
+  filterPresets,
+  fxList,
+  presetCategories,
+  type BackgroundMode,
+  type FxId,
+  type PresetCategory,
+  type StudioState,
+} from '@/lib/filter-engine/params'
+import { gradeToState, type Grade } from '@/lib/filter-engine/ai-grade'
+import { useStudioStrings } from '@/lib/filter-engine/strings'
 
-export type Facing = 'user' | 'environment'
-export type CameraStatus = 'idle' | 'starting' | 'ready' | 'denied' | 'unsupported' | 'error'
-export type VisionStatus = 'off' | 'loading' | 'tracking' | 'no-face' | 'unavailable'
+const backgroundLabel: Record<BackgroundMode, string> = { none: 'bgNone', blur: 'bgBlur', splash: 'bgSplash', studio: 'bgStudio' }
+const fxLabel: Record<FxId, string> = {
+  none: 'fxNone',
+  'rgb-split': 'fxRgbSplit',
+  glitch: 'fxGlitch',
+  vhs: 'fxVhs',
+  shake: 'fxShake',
+  'zoom-blur': 'fxZoomBlur',
+  'light-leak': 'fxLightLeak',
+  duotone: 'fxDuotone',
+  mirror: 'fxMirror',
+  kaleido: 'fxKaleido',
+  fisheye: 'fxFisheye',
+  pixel: 'fxPixel',
+}
 
-interface Options {
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn('shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors', active ? 'bg-white text-black' : 'bg-white/10 text-white/75')}
+    >
+      {children}
+    </button>
+  )
+}
+
+export type StudioTab = 'filters' | 'adjust' | 'beauty' | 'effects' | 'ai'
+
+interface StudioPanelProps {
   state: StudioState
-  audio?: boolean
-  /** Output aspect ratio (width / height). Portrait 9:16 matches stories and live. */
-  aspect?: number
+  onChange: (next: StudioState) => void
+  captureFrame: () => string | null
+  tabs?: StudioTab[]
 }
 
-type VideoWithFrameCallback = HTMLVideoElement & {
-  requestVideoFrameCallback?: (cb: () => void) => number
-  cancelVideoFrameCallback?: (id: number) => void
-}
+const categories = presetCategories
 
-// Reduce overdraw on low-end phones without sacrificing recorded frame quality.
-const chooseOutputHeight = () => {
-  const cpu = navigator.hardwareConcurrency || 4
-  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
-  return cpu <= 4 || (memory !== undefined && memory <= 3) ? 960 : 1280
-}
-
-/**
- * Real camera pipeline: getUserMedia -> WebGL color/beauty shader -> canvas.
- * Face mesh and person segmentation run on-device (MediaPipe) so reshape and
- * background effects follow the face frame-by-frame.
- */
-export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Options) {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const rendererRef = useRef<FilterRenderer | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const stateRef = useRef(state)
-  const faceRef = useRef<FaceGeometry | null>(null)
-  const maskRef = useRef<{ data: Uint8Array; width: number; height: number } | null>(null)
-  const lastVisionRef = useRef(0)
-  const visionBusyRef = useRef(false)
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<Blob[]>([])
-  const compareRef = useRef(false)
-
-  const [facing, setFacing] = useState<Facing>('user')
-  const [status, setStatus] = useState<CameraStatus>('idle')
-  const [vision, setVision] = useState<VisionStatus>('off')
-  const [hasMultipleCameras, setHasMultipleCameras] = useState(true)
-  const [torchSupported, setTorchSupported] = useState(false)
-  const [torchOn, setTorchOn] = useState(false)
-  const [zoomRange, setZoomRange] = useState<{ min: number; max: number } | null>(null)
-  const [zoom, setZoomState] = useState(1)
-  const [recording, setRecording] = useState(false)
-  const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null)
-
-  stateRef.current = state
-
-  const needsFace = needsFaceTracking(state.beauty)
-  const needsMask = needsSegmentation(state.effects)
-
-  const stopStream = useCallback(() => {
-    streamRef.current?.getTracks().forEach((track) => track.stop())
-    streamRef.current = null
-  }, [])
-
-  const start = useCallback(
-    async (nextFacing: Facing) => {
-      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-        setStatus('unsupported')
-        return
-      }
-      setStatus('starting')
-      stopStream()
-      try {
-        // A fresh stream per facing mode is the only reliable way to switch cameras on iOS and Android.
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: nextFacing },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30, max: 60 },
-          },
-          audio: audio ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true } : false,
-        })
-        streamRef.current = stream
-        const track = stream.getVideoTracks()[0]
-        const settings = track.getSettings()
-        const capabilities = (track.getCapabilities?.() ?? {}) as MediaTrackCapabilities & {
-          torch?: boolean
-          zoom?: { min: number; max: number }
-        }
-        setTorchSupported(Boolean(capabilities.torch))
-        setTorchOn(false)
-        setZoomRange(capabilities.zoom ? { min: capabilities.zoom.min, max: Math.min(capabilities.zoom.max, 10) } : null)
-        setZoomState(1)
-        setResolution(settings.width && settings.height ? { width: settings.width, height: settings.height } : null)
-
-        const actualFacing = (settings.facingMode as Facing | undefined) ?? nextFacing
-        setFacing(actualFacing)
-
-        const video = videoRef.current
-        if (video) {
-          video.srcObject = stream
-          video.muted = true
-          await video.play().catch(() => undefined)
-        }
-        setStatus('ready')
-
-        navigator.mediaDevices
-          .enumerateDevices()
-          .then((devices) => setHasMultipleCameras(devices.filter((device) => device.kind === 'videoinput').length > 1))
-          .catch(() => undefined)
-      } catch (error) {
-        const name = (error as DOMException)?.name
-        setStatus(name === 'NotAllowedError' || name === 'SecurityError' ? 'denied' : 'error')
-      }
-    },
-    [audio, stopStream],
+function Slider({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (value: number) => void }) {
+  const display = Math.round(value * 100)
+  const bipolar = min < 0
+  const percent = ((value - min) / (max - min)) * 100
+  const origin = bipolar ? 50 : 0
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="flex items-center justify-between text-xs text-white/70">
+        <span>{label}</span>
+        <span className="tabular-nums text-white">{bipolar && display > 0 ? `+${display}` : display}</span>
+      </span>
+      <span className="relative flex h-6 items-center">
+        <span className="absolute inset-x-0 h-1 rounded-full bg-white/15" />
+        <span
+          className="absolute h-1 rounded-full bg-[#3155ff]"
+          style={{ left: `${Math.min(origin, percent)}%`, width: `${Math.abs(percent - origin)}%` }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={0.01}
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+          onDoubleClick={() => onChange(bipolar ? 0 : min)}
+          className="studio-range relative w-full"
+          aria-label={label}
+        />
+      </span>
+    </label>
   )
+}
+
+export function StudioPanel({ state, onChange, captureFrame, tabs = ['filters', 'adjust', 'beauty', 'effects', 'ai'] }: StudioPanelProps) {
+  const { s, language } = useStudioStrings()
+  const [tab, setTab] = useState<StudioTab>(tabs[0])
+  const [category, setCategory] = useState<PresetCategory | 'favorites'>('trending')
+  const [favorites, setFavorites] = useState<string[]>([])
+  const [recent, setRecent] = useState<string[]>([])
+  const [prompt, setPrompt] = useState('')
+  const [aiState, setAiState] = useState<'idle' | 'working' | 'error'>('idle')
+  const [aiSummary, setAiSummary] = useState<string | null>(null)
 
   useEffect(() => {
-    start('user')
-    return () => {
-      recorderRef.current?.state === 'recording' && recorderRef.current.stop()
-      stopStream()
-    }
-  }, [start, stopStream])
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const height = chooseOutputHeight()
-    canvas.height = height
-    canvas.width = Math.round(height * aspect)
+    // Device-local preferences without server cost, identifiers, or facial data.
     try {
-      rendererRef.current = new FilterRenderer(canvas)
-    } catch {
-      rendererRef.current = null
-    }
-    return () => {
-      rendererRef.current?.dispose()
-      rendererRef.current = null
-    }
-  }, [aspect])
-
-  useEffect(() => {
-    if (!needsFace && !needsMask) {
-      faceRef.current = null
-      maskRef.current = null
-      setVision('off')
-      return
-    }
-    let cancelled = false
-    setVision('loading')
-    Promise.all([needsFace ? loadFaceLandmarker() : null, needsMask ? loadSegmenter() : null])
-      .then(() => !cancelled && setVision('tracking'))
-      .catch(() => !cancelled && setVision('unavailable'))
-    return () => {
-      cancelled = true
-    }
-  }, [needsFace, needsMask])
-
-  useEffect(() => {
-    if (status !== 'ready') return
-    const video = videoRef.current as VideoWithFrameCallback | null
-    if (!video) return
-    let frameId = 0
-    let stopped = false
-    let lostFrames = 0
-
-    const runVision = async (now: number) => {
-      // No overlapping MediaPipe inference. Rendering and recording never await ML.
-      if (visionBusyRef.current || document.hidden) return
-      const current = stateRef.current
-      const wantsFace = needsFaceTracking(current.beauty)
-      const wantsMask = needsSegmentation(current.effects)
-      if (!wantsFace && !wantsMask) return
-      const interval = wantsMask ? 150 : 90
-      if (now - lastVisionRef.current < interval) return
-      lastVisionRef.current = now
-      visionBusyRef.current = true
-      try {
-      const aspectRatio = video.videoWidth / video.videoHeight
-      if (wantsFace) {
-        const landmarker = await loadFaceLandmarker().catch(() => null)
-        const result = landmarker?.detectForVideo(video, now)
-        const landmarks = result?.faceLandmarks?.[0]
-        if (landmarks) {
-          lostFrames = 0
-          faceRef.current = smoothFace(faceRef.current, toFaceGeometry(landmarks, aspectRatio))
-          setVision((value) => (value === 'tracking' ? value : 'tracking'))
-        } else if (++lostFrames > 6) {
-          faceRef.current = null
-          setVision((value) => (value === 'no-face' ? value : 'no-face'))
-        }
-      }
-      if (wantsMask) {
-        const segmenter = await loadSegmenter().catch(() => null)
-        segmenter?.segmentForVideo(video, now, (result) => {
-          const mask = result.confidenceMasks?.[0]
-          if (!mask) return
-          const floats = mask.getAsFloat32Array()
-          const bytes = new Uint8Array(floats.length)
-          for (let i = 0; i < floats.length; i++) bytes[i] = floats[i] * 255
-          maskRef.current = { data: bytes, width: mask.width, height: mask.height }
-        })
-      }
-      } finally {
-        visionBusyRef.current = false
-      }
-    }
-
-    const draw = () => {
-      if (stopped) return
-      const now = performance.now()
-      if (!document.hidden && video.readyState >= 2 && video.videoWidth) {
-        runVision(now).catch(() => undefined)
-        const current = stateRef.current
-        const original = compareRef.current
-        rendererRef.current?.render({
-          source: video,
-          color: original ? neutralColor : resolveColor(current),
-          beauty: original ? neutralBeauty : current.beauty,
-          effects: original ? neutralEffects : current.effects,
-          mirror: facing === 'user',
-          face: faceRef.current,
-          mask: maskRef.current,
-          time: now / 1000,
-        })
-      }
-      schedule()
-    }
-
-    const schedule = () => {
-      if (video.requestVideoFrameCallback) frameId = video.requestVideoFrameCallback(draw)
-      else frameId = requestAnimationFrame(draw)
-    }
-    schedule()
-    return () => {
-      stopped = true
-      if (video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(frameId)
-      cancelAnimationFrame(frameId)
-    }
-  }, [status, facing])
-
-  const flip = useCallback(() => {
-    faceRef.current = null
-    return start(facing === 'user' ? 'environment' : 'user')
-  }, [facing, start])
-
-  const setTorch = useCallback(async (on: boolean) => {
-    const track = streamRef.current?.getVideoTracks()[0]
-    if (!track) return
-    try {
-      await track.applyConstraints({ advanced: [{ torch: on } as MediaTrackConstraintSet] })
-      setTorchOn(on)
-    } catch {
-      setTorchOn(false)
-    }
+      const saved = JSON.parse(localStorage.getItem('spaktok.studio.favorites.v1') || '[]') as unknown
+      const last = JSON.parse(localStorage.getItem('spaktok.studio.recent.v1') || '[]') as unknown
+      if(Array.isArray(saved))setFavorites(saved.filter(v=>typeof v==='string'&&filterPresets.some(p=>p.id===v)).slice(0,30))
+      if(Array.isArray(last))setRecent(last.filter(v=>typeof v==='string'&&filterPresets.some(p=>p.id===v)).slice(0,8))
+    } catch {/* private browsing storage may be unavailable */}
   }, [])
 
-  const setZoom = useCallback(async (value: number) => {
-    const track = streamRef.current?.getVideoTracks()[0]
-    if (!track) return
-    setZoomState(value)
-    await track.applyConstraints({ advanced: [{ zoom: value } as MediaTrackConstraintSet] }).catch(() => undefined)
-  }, [])
-
-  /** Hold-to-compare: renders the untouched camera feed while true. */
-  const setCompare = useCallback((value: boolean) => {
-    compareRef.current = value
-  }, [])
-
-  const capturePhoto = useCallback((quality = 0.95) => canvasRef.current?.toDataURL('image/jpeg', quality) ?? null, [])
-
-  /** Small frame for AI analysis — keeps the request fast and cheap. */
-  const captureAnalysisFrame = useCallback(() => {
-    const video = videoRef.current
-    if (!video?.videoWidth) return null
-    const scale = 512 / Math.max(video.videoWidth, video.videoHeight)
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.round(video.videoWidth * scale)
-    canvas.height = Math.round(video.videoHeight * scale)
-    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
-    return canvas.toDataURL('image/jpeg', 0.8)
-  }, [])
-
-  /** Filtered output stream (canvas video + mic audio) — used for recording and live broadcast. */
-  const getOutputStream = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return null
-    const output = canvas.captureStream(30)
-    streamRef.current?.getAudioTracks().forEach((track) => output.addTrack(track))
-    return output
-  }, [])
-
-  const startRecording = useCallback(() => {
-    const output = getOutputStream()
-    if (!output || typeof MediaRecorder === 'undefined') return false
-    const mimeType = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((type) =>
-      MediaRecorder.isTypeSupported(type),
-    )
-    const recorder = new MediaRecorder(output, { mimeType, videoBitsPerSecond: 6_000_000 })
-    chunksRef.current = []
-    recorder.ondataavailable = (event) => event.data.size && chunksRef.current.push(event.data)
-    recorder.start(250)
-    recorderRef.current = recorder
-    setRecording(true)
-    return true
-  }, [getOutputStream])
-
-  const stopRecording = useCallback(
-    () =>
-      new Promise<Blob | null>((resolve) => {
-        const recorder = recorderRef.current
-        if (!recorder || recorder.state !== 'recording') {
-          resolve(null)
-          return
-        }
-        recorder.onstop = () => {
-          setRecording(false)
-          resolve(new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' }))
-        }
-        recorder.stop()
-      }),
-    [],
-  )
-
-  return {
-    videoRef,
-    canvasRef,
-    status,
-    vision,
-    facing,
-    resolution,
-    hasMultipleCameras,
-    torchSupported,
-    torchOn,
-    zoomRange,
-    zoom,
-    recording,
-    retry: () => start(facing),
-    flip,
-    setTorch,
-    setZoom,
-    setCompare,
-    capturePhoto,
-    captureAnalysisFrame,
-    getOutputStream,
-    startRecording,
-    stopRecording,
+  const selectPreset = (id: string) => {
+    onChange({ ...state, presetId: id, intensity: id===state.presetId?state.intensity:1 })
+    const updated=[id,...recent.filter(item=>item!==id)].slice(0,8)
+    setRecent(updated)
+    try {localStorage.setItem('spaktok.studio.recent.v1',JSON.stringify(updated))}catch{}
   }
-}
 
-export type CameraStudio = ReturnType<typeof useCameraStudio>
+  const toggleFavorite = (id:string) => {
+    const updated=favorites.includes(id)?favorites.filter(v=>v!==id):[id,...favorites].slice(0,30)
+    setFavorites(updated)
+    try {localStorage.setItem('spaktok.studio.favorites.v1',JSON.stringify(updated))}catch{}
+  }
+
+  const runAi = async (request?: string) => {
+    const image = captureFrame()
+    if (!image) return
+    setAiState('working')
+    setAiSummary(null)
+    try {
+      const response = await fetch('/api/ai/filter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image, prompt: request || undefined, locale: language }),
+      })
+      if (!response.ok) throw new Error('ai-failed')
+      const grade: Grade = await response.json()
+      onChange(gradeToState(grade))
+      setAiSummary(grade.summary)
+      setAiState('idle')
+    } catch {
+      setAiState('error')
+    }
+  }
+
+  const visiblePresets = category==='favorites'
+    ? filterPresets.filter(p=>favorites.includes(p.id))
+    : filterPresets.filter(p=>p.id==='original'||p.category===category)
+
+  return (
+    <div className="flex flex-col gap-3 rounded-t-3xl bg-black/75 pb-3 pt-3 backdrop-blur-xl">
+      <div className="min-h-32 px-4">
+        {tab === 'filters' && (
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-4 overflow-x-auto scrollbar-hide" role="tablist" aria-label="تصنيفات الفلاتر">
+              <button onClick={()=>setCategory('favorites')} aria-pressed={category==='favorites'}
+                className={cn('inline-flex shrink-0 items-center gap-1 text-xs font-semibold',category==='favorites'?'text-[#acc4ff]':'text-white/50')}>
+                <Star className="size-3.5"/> المفضلة {favorites.length || ''}
+              </button>
+              {categories.map((value) => (
+                <button
+                  key={value}
+                  onClick={() => setCategory(value)}
+                  className={cn('shrink-0 text-xs font-semibold transition-colors', category === value ? 'text-white' : 'text-white/45')}
+                  aria-pressed={category === value}
+                >
+                  {s(value)}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-hide">
+              {visiblePresets.map((preset) => {
+                const active = state.presetId === preset.id
+                return (
+                  <div key={preset.id} className="relative flex shrink-0 flex-col items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => selectPreset(preset.id)}
+                    className="flex flex-col items-center gap-1.5"
+                    aria-pressed={active}
+                    aria-label={`فلتر ${preset.name}`}
+                  >
+                    <span
+                      className={cn('relative flex h-14 w-14 items-center justify-center rounded-2xl border-2 transition-all', active ? 'border-white' : 'border-transparent')}
+                      style={{ backgroundColor: preset.swatch }}
+                    >
+                      {active && <Check className="h-5 w-5 text-white drop-shadow" />}
+                    </span>
+                    <span className={cn('text-[11px]', active ? 'text-white' : 'text-white/60')}>{preset.name}</span>
+                  </button>
+                  {preset.id!=='original'&&
+                    <button type="button" className="absolute -right-1 -top-1 flex size-6 items-center justify-center rounded-full border border-white/20 bg-[#0c1424]/90 text-[#b8c9ff]"
+                      onClick={()=>toggleFavorite(preset.id)} aria-label={favorites.includes(preset.id)?'حذف من المفضلة':'حفظ في المفضلة'}
+                      aria-pressed={favorites.includes(preset.id)}>
+                      <Star className="size-3" fill={favorites.includes(preset.id)?'currentColor':'none'}/>
+                    </button>}
+                  </div>
+                )
+              })}
+            </div>
+            {category==='favorites'&&visiblePresets.length===0&&
+              <p className="py-3 text-center text-xs text-white/50">اضغط النجمة بجانب أي فلتر ليظهر هنا.</p>}
+            {recent.length>0&&category==='trending'&&
+              <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap py-1">
+                <Clock3 className="size-3.5 shrink-0 text-white/45"/>
+                {recent.slice(0,4).map(id=><button type="button" key={id} onClick={()=>selectPreset(id)}
+                  className="shrink-0 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-white/75">{filterPresets.find(p=>p.id===id)?.name}</button>)}
+              </div>}
+            {state.presetId !== 'original' && (
+              <Slider label={s('intensity')} value={state.intensity} min={0} max={1} onChange={(intensity) => onChange({ ...state, intensity })} />
+            )}
+          </div>
+        )}
+
+        {tab === 'adjust' && (
+          <div className="grid max-h-44 grid-cols-1 gap-3 overflow-y-auto pe-1 sm:grid-cols-2">
+            {colorSliders.map(({ key, min, max }) => (
+              <Slider
+                key={key}
+                label={s(key)}
+                value={state.color[key]}
+                min={min}
+                max={max}
+                onChange={(value) => onChange({ ...state, color: { ...state.color, [key]: value } })}
+              />
+            ))}
+          </div>
+        )}
+
+        {tab === 'beauty' && (
+          <div className="grid max-h-44 grid-cols-1 gap-3 overflow-y-auto pe-1 sm:grid-cols-2">
+            {beautySliders.map((key) => (
+              <Slider
+                key={key}
+                label={s(key)}
+                value={state.beauty[key]}
+                min={0}
+                max={1}
+                onChange={(value) => onChange({ ...state, beauty: { ...state.beauty, [key]: value } })}
+              />
+            ))}
+          </div>
+        )}
+
+        {tab === 'effects' && (
+          <div className="flex max-h-48 flex-col gap-3 overflow-y-auto pe-1">
+            <span className="text-xs font-semibold text-white/60">{s('background')}</span>
+            <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+              {backgroundModes.map((mode) => (
+                <Chip
+                  key={mode}
+                  active={state.effects.background === mode}
+                  onClick={() =>
+                    onChange({
+                      ...state,
+                      effects: { ...state.effects, background: mode, backgroundBlur: mode === 'none' ? 0 : state.effects.backgroundBlur || 0.7 },
+                    })
+                  }
+                >
+                  {s(backgroundLabel[mode] as never)}
+                </Chip>
+              ))}
+            </div>
+            {state.effects.background !== 'none' && (
+              <Slider
+                label={s('strength')}
+                value={state.effects.backgroundBlur}
+                min={0}
+                max={1}
+                onChange={(backgroundBlur) => onChange({ ...state, effects: { ...state.effects, backgroundBlur } })}
+              />
+            )}
+            <span className="text-xs font-semibold text-white/60">{s('cameraFx')}</span>
+            <div className="grid grid-cols-4 gap-2">
+              {fxList.map((fx) => (
+                <Chip key={fx} active={state.effects.fx === fx} onClick={() => onChange({ ...state, effects: { ...state.effects, fx } })}>
+                  {s(fxLabel[fx] as never)}
+                </Chip>
+              ))}
+            </div>
+            {state.effects.fx !== 'none' && (
+              <Slider
+                label={s('fxAmount')}
+                value={state.effects.fxAmount}
+                min={0}
+                max={1}
+                onChange={(fxAmount) => onChange({ ...state, effects: { ...state.effects, fxAmount } })}
+              />
+            )}
+          </div>
+        )}
+
+        {tab === 'ai' && (
+          <div className="flex flex-col gap-3">
+            <p className="text-pretty text-xs leading-relaxed text-white/60">{aiSummary || s('aiHint')}</p>
+            <button
+              onClick={() => runAi()}
+              disabled={aiState === 'working'}
+              className="flex items-center justify-center gap-2 rounded-full bg-[#3155ff] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {aiState === 'working' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+              {aiState === 'working' ? s('aiWorking') : s('autoEnhance')}
+            </button>
+            <form
+              className="flex items-center gap-2 rounded-full bg-white/10 ps-4"
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (prompt.trim()) runAi(prompt.trim())
+              }}
+            >
+              <input
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder={s('aiPlaceholder')}
+                className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-white outline-none placeholder:text-white/40"
+                aria-label={s('aiPlaceholder')}
+              />
+              <button type="submit" disabled={aiState === 'working' || !prompt.trim()} className="m-1 flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-black disabled:opacity-40">
+                <Sparkles className="h-3.5 w-3.5" />
+                {s('aiApply')}
+              </button>
+            </form>
+            {aiState === 'error' && <p className="text-xs text-[#ff6b6b]" role="alert">{s('aiFailed')}</p>}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-1 border-t border-white/10 px-2 pt-2">
+        <div className="flex flex-1 justify-around">
+          {tabs.map((value) => (
+            <button
+              key={value}
+              onClick={() => setTab(value)}
+              className={cn('flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors', tab === value ? 'bg-white text-black' : 'text-white/60')}
+              aria-pressed={tab === value}
+            >
+              {value === 'ai' && <Sparkles className="h-3.5 w-3.5" />}
+              {s(value)}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => onChange(createStudioState())} className="flex h-8 w-8 items-center justify-center rounded-full text-white/60" aria-label={s('reset')}>
+          <RotateCcw className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}

@@ -21,7 +21,12 @@ type VideoWithFrameCallback = HTMLVideoElement & {
   cancelVideoFrameCallback?: (id: number) => void
 }
 
-const OUTPUT_HEIGHT = 1280
+// Use a smaller WebGL surface on lower-end devices to avoid UI jank.
+const chooseOutputHeight = () => {
+  const cpu = navigator.hardwareConcurrency || 4
+  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
+  return cpu <= 4 || (memory !== undefined && memory <= 3) ? 960 : 1280
+}
 
 /**
  * Real camera pipeline: getUserMedia -> WebGL color/beauty shader -> canvas.
@@ -37,6 +42,7 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
   const faceRef = useRef<FaceGeometry | null>(null)
   const maskRef = useRef<{ data: Uint8Array; width: number; height: number } | null>(null)
   const lastVisionRef = useRef(0)
+  const visionBusyRef = useRef(false)
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const compareRef = useRef(false)
@@ -128,8 +134,9 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    canvas.height = OUTPUT_HEIGHT
-    canvas.width = Math.round(OUTPUT_HEIGHT * aspect)
+    const height = chooseOutputHeight()
+    canvas.height = height
+    canvas.width = Math.round(height * aspect)
     try {
       rendererRef.current = new FilterRenderer(canvas)
     } catch {
@@ -167,12 +174,16 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
     let lostFrames = 0
 
     const runVision = async (now: number) => {
-      // Vision runs at ~30fps max; rendering stays at the camera's native rate.
-      if (now - lastVisionRef.current < 33) return
-      lastVisionRef.current = now
+      // Serialize ML inference and keep WebGL rendering independent.
+      if (visionBusyRef.current || document.hidden) return
       const current = stateRef.current
       const wantsFace = needsFaceTracking(current.beauty)
       const wantsMask = needsSegmentation(current.effects)
+      if (!wantsFace && !wantsMask) return
+      if (now - lastVisionRef.current < (wantsMask ? 150 : 90)) return
+      lastVisionRef.current = now
+      visionBusyRef.current = true
+      try {
       const aspectRatio = video.videoWidth / video.videoHeight
       if (wantsFace) {
         const landmarker = await loadFaceLandmarker().catch(() => null)
@@ -198,12 +209,13 @@ export function useCameraStudio({ state, audio = false, aspect = 9 / 16 }: Optio
           maskRef.current = { data: bytes, width: mask.width, height: mask.height }
         })
       }
+      } finally { visionBusyRef.current = false }
     }
 
     const draw = () => {
       if (stopped) return
       const now = performance.now()
-      if (video.readyState >= 2 && video.videoWidth) {
+      if (!document.hidden && video.readyState >= 2 && video.videoWidth) {
         runVision(now).catch(() => undefined)
         const current = stateRef.current
         const original = compareRef.current

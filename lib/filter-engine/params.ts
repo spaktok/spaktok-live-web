@@ -151,7 +151,7 @@ export function getPreset(id: string): FilterPreset {
 }
 
 export function createStudioState(presetId = 'original'): StudioState {
-  return { presetId, intensity: 1, color: { ...neutralColor }, beauty: { ...naturalBeauty }, effects: { ...neutralEffects } }
+  return { presetId, intensity: 1, color: { ...neutralColor }, beauty: { ...neutralBeauty }, effects: { ...neutralEffects } }
 }
 
 /** Preset is applied at `intensity`, then user adjustments are added on top. */
