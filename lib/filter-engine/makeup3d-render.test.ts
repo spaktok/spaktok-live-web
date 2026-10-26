@@ -24,6 +24,12 @@ describe('GPU 3D face cosmetics and premium accessories',()=>{
   expect(layer.mesh.material.depthWrite).toBe(false)
   layer.setStyle('3d-makeup-glam',true)
   expect(layer.mesh.visible).toBe(true)
+  const originalLip=(layer.mesh.material.uniforms.uCoverageA.value as THREE.Vector4).y
+  expect(originalLip).toBeGreaterThan(.5)
+  layer.setStyle('3d-makeup-glam',true,{lips:0,eyeliner:.2})
+  expect((layer.mesh.material.uniforms.uCoverageA.value as THREE.Vector4).y).toBe(0)
+  expect((layer.mesh.material.uniforms.uCoverageA.value as THREE.Vector4).w).toBeLessThan(.2)
+  layer.setStyle('3d-makeup-glam',true,{lips:1,eyeliner:1})
   layer.update(vertices,9/16)
   expect([...layer.masksA.array as Float32Array].some(v=>v>.05)).toBe(true)
   expect([...layer.masksB.array as Float32Array].some(v=>v>.05)).toBe(true)
