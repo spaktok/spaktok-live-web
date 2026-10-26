@@ -238,13 +238,13 @@ export class FaceMesh3DEngine{
   this.camera.left=0;this.camera.right=w;this.camera.top=0;this.camera.bottom=h
   this.camera.updateProjectionMatrix()
  }
- async setLens(id:Face3DId):Promise<void>{
-  if(this.current===id)return
+ async setLens(id:Face3DId):Promise<boolean>{
+  if(this.current===id)return this.lensReady
   this.current=id
   this.lensReady=false
   const token=++this.request
   if(this.model){this.mount.remove(this.model);disposeObject(this.model);this.model=null}
-  if(!this.alive)return
+  if(!this.alive)return false
   let root:THREE.Object3D
   try{
    const asset=MODEL_ASSETS[id]
@@ -257,12 +257,14 @@ export class FaceMesh3DEngine{
        id==='3d-space-visor'?makeVisor():
        id==='3d-expression'?makeExpressionMask():makeCap()
    }
-   if(!this.alive||token!==this.request){disposeObject(root);return}
+   if(!this.alive||token!==this.request){disposeObject(root);return false}
    this.model=root
    this.mount.add(root)
    this.lensReady=true
+   return true
   }catch{
    if(token===this.request)this.current=null
+   return false
   }
  }
  /** Overlay is a transparent PNG-ready canvas; video stays native below. */

@@ -222,8 +222,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       if(!layer||!base)return
       let engine=threeEngineRef.current
       if(!engine){engine=new FaceMesh3DEngine(layer,base.width,base.height);threeEngineRef.current=engine}
-      await engine.setLens(state.face.id)
-      if(!cancelled)setThreeStatus('ready')
+      const loaded=await engine.setLens(state.face.id)
+      if(!cancelled)setThreeStatus(loaded?'ready':'unavailable')
     }).catch(()=>{if(!cancelled)setThreeStatus('unavailable')})
     return()=>{cancelled=true}
   },[state.face.id])
@@ -329,9 +329,15 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
           }
         }
         if(isFace3DSelected(current.face.id)&&threeEngineRef.current){
-          threeEngineRef.current.render(original?null:face3DRef.current,
-            video.videoWidth,video.videoHeight,facing==='user',
-            current.face.id,current.face.strength)
+          try{
+            threeEngineRef.current.render(original?null:face3DRef.current,
+              video.videoWidth,video.videoHeight,facing==='user',
+              current.face.id,current.face.strength)
+          }catch{
+            threeEngineRef.current.dispose()
+            threeEngineRef.current=null
+            setThreeStatus('unavailable')
+          }
         }
         if(usingNativeArRef.current){
           // Native video is composited by the browser for the preview; do not
