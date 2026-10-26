@@ -45,7 +45,7 @@ void main() {
   gl_Position = vec4(aPosition, 0.0, 1.0);
 }`
 
-const fragmentShader = `
+export const realityColorFragmentShader = `
 precision highp float;
 varying vec2 vUv;
 uniform sampler2D uVideo;
@@ -571,7 +571,7 @@ export class FilterRenderer {
     }
     const program = gl.createProgram()!
     gl.attachShader(program, compile(gl.VERTEX_SHADER, vertexShader))
-    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, fragmentShader))
+    gl.attachShader(program, compile(gl.FRAGMENT_SHADER, realityColorFragmentShader))
     gl.linkProgram(program)
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || 'link-error')
     return program

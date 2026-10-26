@@ -1,10 +1,10 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { FilterRenderer, type FaceGeometry } from './renderer'
+import { FilterRenderer, type FaceGeometry, type RenderInput } from './renderer'
 import { isFace3DSelected, neutralBeauty, neutralColor, neutralEffects, neutralFaceFx, resolveColor, type StudioState } from './params'
 import { composeRealityFrame } from './reality-compositor'
-import { createRealityExecutionPlan } from './reality-pipeline'
+import { createRealityExecutionPlan, shouldUseRealityGpu2 } from './reality-pipeline'
 import { loadFaceLandmarker, recoverFaceLandmarkerOnCpu, configureFace3DExtras, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
 import { drawFaceMask } from './face-overlay'
 import {trackingIntervalMs,updatedMean} from './vision-scheduler'
@@ -53,6 +53,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const compositeArRef=useRef(false)
   const rendererRef = useRef<FilterRenderer | null>(null)
   const filteredFrameReadyRef = useRef(false)
+  const gpu2RequestedRef=useRef(false)
+  const gpu2ActiveRef=useRef(false)
   const streamRef = useRef<MediaStream | null>(null)
   const stateRef = useRef(state)
   const faceRef = useRef<FaceGeometry | null>(null)
@@ -77,6 +79,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const [recording, setRecording] = useState(false)
   const [previewFps,setPreviewFps] = useState<number | null>(null)
   const [gpuAvailable,setGpuAvailable] = useState(true)
+  const [gpu2Active,setGpu2Active] = useState(false)
   const [threeStatus,setThreeStatus]=useState<'idle'|'loading'|'ready'|'unavailable'>('idle')
   const [threeQuality,setThreeQuality]=useState<'hd'|'fallback'|'none'>('none')
   const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null)
@@ -88,6 +91,11 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
 
   const needsFace = executionPlan.trackFace
   const needsMask = executionPlan.trackPerson
+
+  useEffect(()=>{
+    // Device QA opt-in only until Android/iOS parity and sustained FPS pass.
+    gpu2RequestedRef.current=new URLSearchParams(window.location.search).get('realityGpu')==='2'
+  },[])
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -370,23 +378,44 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
               facing==='user',now/1000)
           }
         }
+        // A single Three.js WebGL context handles the camera shader, face
+        // depth and PBR assets in QA mode. Legacy stays the safe default.
+        let frameUsedGpu2=false
         if(isFace3DSelected(current.face.id)&&threeEngineRef.current){
           try{
             const tracked=face3DRef.current
             const fresh=tracked&&hasFreshFace(tracked.timestamp,now)?tracked:null
+            const candidate=shouldUseRealityGpu2(gpu2RequestedRef.current,true,current)
+            const cameraInput:RenderInput|undefined=candidate?{
+              source:video,
+              color:original?neutralColor:resolveColor(current),
+              beauty:original?neutralBeauty:current.beauty,
+              effects:original?neutralEffects:current.effects,
+              faceFx:neutralFaceFx,
+              mirror:facing==='user',
+              face:faceRef.current,
+              mask:maskRef.current,
+              time:now/1000,
+            }:undefined
             threeEngineRef.current.render(original?null:fresh,
               video.videoWidth,video.videoHeight,facing==='user',
-              current.face.id,current.face.strength,current.face.makeup)
+              current.face.id,current.face.strength,current.face.makeup,cameraInput)
+            frameUsedGpu2=candidate
           }catch{
             threeEngineRef.current.dispose()
             threeEngineRef.current=null
+            frameUsedGpu2=false
             setThreeStatus('unavailable')
           }
         }
-        // Always render the graded/beautified camera frame, even with an AR
-        // lens selected. Otherwise selecting a crown silently disables color
-        // grading and face beauty. The 2D/3D layers remain above this base.
-        if(rendererRef.current){
+        if(gpu2ActiveRef.current!==frameUsedGpu2){
+          gpu2ActiveRef.current=frameUsedGpu2
+          setGpu2Active(frameUsedGpu2)
+        }
+        // Legacy shader remains fully supported for all normal flows.
+        // In GPU v2 the SAME GLSL executes inside FaceMesh3DEngine, avoiding
+        // another GL pass and a Canvas2D recording compositing readback.
+        if(!frameUsedGpu2&&rendererRef.current){
           try{
             filteredFrameReadyRef.current=rendererRef.current.render({
               source:video,
@@ -407,8 +436,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
             setGpuAvailable(false)
           }
         }
-        // Compose AFTER the latest GPU draw: recorded output and photo
-        // captures must include the same color grade, makeup and 3D effect.
+        // Integrated GPU v2 records Three.js's final canvas directly.
+        if(frameUsedGpu2)filteredFrameReadyRef.current=false
         if(recordingCompositeRef.current)drawCompositeFrame(video,facing,overlay)
         const fps=fpsRef.current
         fps.frames+=1
@@ -463,6 +492,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   }, [])
 
   const capturePhoto = useCallback((quality=0.95)=>{
+    if(gpu2ActiveRef.current && threeCanvasRef.current)
+      return threeCanvasRef.current.toDataURL('image/jpeg',quality)
     if(compositeArRef.current){
       const video=videoRef.current
       if(video?.videoWidth){
@@ -492,8 +523,9 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
 
   /** Filtered output stream (canvas video + mic audio) — used for recording and live broadcast. */
   const getOutputStream = useCallback(() => {
-    const canvas = compositeArRef.current||!filteredFrameReadyRef.current?
-      compositeCanvasRef.current:canvasRef.current
+    const canvas = gpu2ActiveRef.current?threeCanvasRef.current:
+      compositeArRef.current||!filteredFrameReadyRef.current?
+        compositeCanvasRef.current:canvasRef.current
     if (!canvas) return null
     if(canvas===compositeCanvasRef.current && videoRef.current?.videoWidth)
       drawCompositeFrame(videoRef.current,facing,arCanvasRef.current)
@@ -503,7 +535,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   }, [facing])
 
   const startRecording = useCallback(() => {
-    recordingCompositeRef.current = compositeArRef.current||!filteredFrameReadyRef.current
+    recordingCompositeRef.current = !gpu2ActiveRef.current && (compositeArRef.current||!filteredFrameReadyRef.current)
     const output = getOutputStream()
     if (!output || typeof MediaRecorder === 'undefined') { recordingCompositeRef.current=false; return false }
     const mimeType = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((type) =>
@@ -544,6 +576,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     threeStatus,
     threeQuality,
     gpuAvailable,
+    gpu2Active,
     status,
     vision,
     facing,

@@ -32,3 +32,14 @@ export function createRealityExecutionPlan(
     gpuColorAndBeauty: true,
   }
 }
+
+/** GPU v2 requires an explicit QA opt-in and a real 3D lens. Rendering and
+ * capture use the same canvas only while this predicate is true.
+ */
+export function shouldUseRealityGpu2(
+  requested:boolean,
+  has3dEngine:boolean,
+  state:Pick<StudioState,'face'|'beauty'|'effects'>,
+):boolean {
+  return requested && has3dEngine && createRealityExecutionPlan(state).threeDimensional
+}

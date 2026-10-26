@@ -10,7 +10,8 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js'
 import { FaceLandmarker } from '@mediapipe/tasks-vision'
-import type {FaceGeometry} from './renderer'
+import type {FaceGeometry,RenderInput} from './renderer'
+import {RealityGpuCameraLayer} from './reality-camera-gpu'
 import type {FaceFxId,MakeupOverrides} from './params'
 import {makeupLooks,isMakeupLook} from './makeup3d'
 import {FaceMakeupLayer} from './makeup3d-render'
@@ -260,6 +261,7 @@ export class FaceMesh3DEngine{
  /** HD: an actual authored GLB; fallback: geometric preview asset. */
  modelQuality:'hd'|'fallback'|'none'='none'
  private studioEnvironment:THREE.WebGLRenderTarget|null=null
+ private gpuCamera:RealityGpuCameraLayer|null=null
  private lastSourceW=0
  private lastSourceH=0
  private lastMirror=false
@@ -312,6 +314,7 @@ export class FaceMesh3DEngine{
   this.renderer.setSize(w,h,false)
   // Keep identical projection convention after size changes (Y downward).
   resizeVideoAlignedCamera(this.camera,w,h)
+  this.gpuCamera?.resize(w,h)
  }
  private setupStudioEnvironment(){
   if(this.studioEnvironment)return
@@ -373,14 +376,28 @@ export class FaceMesh3DEngine{
    return false
   }
  }
- /** Overlay is a transparent PNG-ready canvas; video stays native below. */
- render(frame:Face3DFrame|null,sourceW:number,sourceH:number,mirror:boolean,id:FaceFxId,strength:number,makeup?:MakeupOverrides){
+ /** A camera input enables GPU v2: video/beauty and physical 3D use the
+  * SAME WebGLRenderer, enabling scene-based transmission. Without it, the
+  * previous alpha-overlay renderer remains unchanged for safe fallback. */
+ render(frame:Face3DFrame|null,sourceW:number,sourceH:number,mirror:boolean,id:FaceFxId,strength:number,makeup?:MakeupOverrides,cameraInput?:RenderInput){
   if(!this.alive)return
+  if(cameraInput){
+   if(!this.gpuCamera){
+    if(!(cameraInput.source instanceof HTMLVideoElement))throw Error('reality_gpu2_requires_video')
+    this.gpuCamera=new RealityGpuCameraLayer(this.scene,cameraInput.source,this.width,this.height)
+   }
+   this.gpuCamera.update(cameraInput)
+   this.gpuCamera.setVisible(true)
+  }else this.gpuCamera?.setVisible(false)
+  const integrated=Boolean(cameraInput)
+  this.renderer.setClearColor(0x000000,integrated?1:0)
+  this.canvas.style.opacity=integrated?'1':String(clamp(strength,0,1))
   if(!isFace3DId(id)||!frame||strength<=0){
    this.depthMesh.visible=false;this.mount.visible=false
    this.crownContact.visible=false
    this.makeup.setStyle(id,false)
-   this.renderer.clear()
+   if(integrated)this.renderer.render(this.scene,this.camera)
+   else this.renderer.clear()
    return
   }
   this.mount.visible=this.lensReady
@@ -390,7 +407,7 @@ export class FaceMesh3DEngine{
    }
   })
   const pose=getHeadPose(frame,sourceW,sourceH,this.width,this.height,mirror)
-  if(!pose){this.renderer.clear();return}
+  if(!pose){if(integrated)this.renderer.render(this.scene,this.camera);else this.renderer.clear();return}
   this.depthMesh.visible=true
   this.makeup.setStyle(id,this.lensReady,makeup)
   // Update 478 surface vertices only on a *new* inference, not 30-60 times/sec.
@@ -444,13 +461,15 @@ export class FaceMesh3DEngine{
   this.mount.visible=this.lensReady
   this.renderer.render(this.scene,this.camera)
   // Opacity is applied with the composited canvas element, not color grading.
-  this.canvas.style.opacity=String(clamp(strength,0,1))
+  this.canvas.style.opacity=integrated?'1':String(clamp(strength,0,1))
  }
  dispose(){
   if(!this.alive)return
   this.alive=false;this.request++
   if(this.model){this.mount.remove(this.model);disposeObject(this.model)}
   this.makeup.dispose()
+  this.gpuCamera?.dispose()
+  this.gpuCamera=null
   this.crownContact.geometry.dispose()
   this.crownContact.material.dispose()
   this.studioEnvironment?.dispose()
