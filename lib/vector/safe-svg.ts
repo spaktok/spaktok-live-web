@@ -13,8 +13,14 @@ const ALLOWED_TAGS=new Set([
 ].map(x=>x.toLowerCase()))
 const ALLOWED_NAMESPACE='http://www.w3.org/2000/svg'
 function unsafeCss(value:string):boolean{
- return /@import\b|@font-face\b|expression\s*\(|behavior\s*:|-moz-binding|url\s*\(\s*(?!['"]?#)/i.test(value)
+ if(/@import\b|@font-face\b|expression\s*\(|behavior\s*:|-moz-binding/i.test(value))return true
+ if(!/url\s*\(/i.test(value))return false
+ const urls=[...value.matchAll(/url\s*\(\s*(['"]?)(.*?)\1\s*\)/gi)]
+ // Allow only local SVG gradients, masks and clip-path references.
+ if(!urls.length)return true
+ return urls.some(match=>!/^#[A-Za-z_][A-Za-z0-9_.:-]*$/.test(match[2].trim()))
 }
+
 export function validateSelfContainedSvg(text:string):void{
  if(!text||new TextEncoder().encode(text).byteLength>MAX_VECTOR_BYTES)throw new Error('vector_size')
  if(/<!DOCTYPE|<!ENTITY|<\?xml-stylesheet/i.test(text))throw new Error('vector_external_xml')
