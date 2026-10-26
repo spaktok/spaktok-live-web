@@ -75,6 +75,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const [previewFps,setPreviewFps] = useState<number | null>(null)
   const [gpuAvailable,setGpuAvailable] = useState(true)
   const [threeStatus,setThreeStatus]=useState<'idle'|'loading'|'ready'|'unavailable'>('idle')
+  const [threeQuality,setThreeQuality]=useState<'hd'|'fallback'|'none'>('none')
   const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null)
 
   stateRef.current = state
@@ -238,9 +239,10 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   }
 
   useEffect(()=>{
-    if(!isFace3DSelected(state.face.id)){setThreeStatus('idle');return}
+    if(!isFace3DSelected(state.face.id)){setThreeStatus('idle');setThreeQuality('none');return}
     let cancelled=false
     setThreeStatus('loading')
+    setThreeQuality('none')
     import('./face3d').then(async({FaceMesh3DEngine,isFace3DId})=>{
       if(!isFace3DId(state.face.id))return
       if(cancelled)return
@@ -249,8 +251,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       let engine=threeEngineRef.current
       if(!engine){engine=new FaceMesh3DEngine(layer,base.width,base.height);threeEngineRef.current=engine}
       const loaded=await engine.setLens(state.face.id)
-      if(!cancelled)setThreeStatus(loaded?'ready':'unavailable')
-    }).catch(()=>{if(!cancelled)setThreeStatus('unavailable')})
+      if(!cancelled){setThreeQuality(loaded?engine.modelQuality:'none');setThreeStatus(loaded?'ready':'unavailable')}
+    }).catch(()=>{if(!cancelled){setThreeQuality('none');setThreeStatus('unavailable')}})
     return()=>{cancelled=true}
   },[state.face.id])
   useEffect(()=>()=>{threeEngineRef.current?.dispose();threeEngineRef.current=null},[])
@@ -528,6 +530,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     arCanvasRef,
     threeCanvasRef,
     threeStatus,
+    threeQuality,
     gpuAvailable,
     status,
     vision,

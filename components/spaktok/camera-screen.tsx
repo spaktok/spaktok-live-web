@@ -207,7 +207,9 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   // Do not permanently cover the crown with a misleading "loading" banner.
   // Once 3D is visibly rendering, use silent status unless tracking fails.
   const faceHint = !faceArSelected || camera.status !== 'ready' ? null :
-    camera.threeStatus === 'unavailable' && studio.face.id.startsWith('3d-')
+    camera.threeStatus === 'ready' && studio.face.id==='3d-gold-crown' && camera.threeQuality==='fallback'
+      ? 'تعذر تحميل التاج التفصيلي؛ يُعرض نموذج احتياطي'
+      : camera.threeStatus === 'unavailable' && studio.face.id.startsWith('3d-')
       ? 'تعذّر تحميل المجسم ثلاثي الأبعاد'
       : camera.vision === 'unavailable'
         ? 'تتبع الوجه غير متاح — تحقق من إذن الكاميرا'
