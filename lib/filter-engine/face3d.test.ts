@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest'
 import * as THREE from 'three'
 import {FaceLandmarker} from '@mediapipe/tasks-vision'
-import {face3DPresets,isFace3DId,viewportCrop,getHeadPose,trianglesFromConnections,createVideoAlignedCamera,resizeVideoAlignedCamera} from './face3d'
+import {face3DPresets,isFace3DId,viewportCrop,getHeadPose,getForeheadPixel,trianglesFromConnections,createVideoAlignedCamera,resizeVideoAlignedCamera} from './face3d'
 import type {Face3DFrame} from './face3d'
 import {faceFxCatalog} from './params'
 const geometry={
@@ -55,6 +55,20 @@ describe('SpakTok tracked 3D lenses',()=>{
    const projected=new THREE.Vector3(120,1020,18).project(camera)
    expect((1-projected.y)*1280/2).toBeCloseTo(1020)
    expect((projected.x+1)*720/2).toBeCloseTo(120)
+ })
+ it('pins the crown to the actual forehead with exactly one selfie X mirror',()=>{
+   const landmarks=frame.landmarks.map(p=>({...p}))
+   landmarks[10]={x:.34,y:.18,z:-.03}
+   const shifted={...frame,landmarks}
+   const normal=getForeheadPixel(shifted,720,1280,360,640,false)!
+   const mirrored=getForeheadPixel(shifted,720,1280,360,640,true)!
+   expect(normal.y).toBeCloseTo(mirrored.y)
+   expect(normal.x+mirrored.x).toBeCloseTo(360)
+   expect(normal.y).toBeCloseTo(.18*640)
+   const moved=landmarks.map(p=>({...p}))
+   moved[10]={...moved[10],y:.43}
+   const displaced=getForeheadPixel({...shifted,landmarks:moved},720,1280,360,640,false)!
+   expect(displaced.y-normal.y).toBeCloseTo(.25*640)
  })
  it('rejects invalid face geometry and incomplete tracked meshes',()=>{
    expect(viewportCrop(0,720,360,640)).toBeNull()
