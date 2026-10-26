@@ -39,9 +39,10 @@ export default function SpakTok() {
 
   useEffect(() => {
     const params=new URLSearchParams(window.location.search)
-    const user=params.get('user'),video=params.get('video')
+    const user=params.get('user'),video=params.get('video'),story=params.get('story')
     const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-    if(user&&uuid.test(user)){setViewingProfile(user);setActiveTab('profile')}
+    if(story&&uuid.test(story)){setViewingStory(story)}
+    else if(user&&uuid.test(user)){setViewingProfile(user);setActiveTab('profile')}
     else if(video&&uuid.test(video)){setFocusedVideoId(video);setFeedType('forYou');setActiveTab('home')}
     const status = params.get('payment')
     if (status === 'success' || status === 'cancelled') {
