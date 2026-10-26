@@ -54,7 +54,13 @@ describe('GPU 3D face cosmetics and premium accessories',()=>{
    expect(group).not.toBeNull()
    const meshes:THREE.Mesh[]=[]
    group!.traverse(node=>{if(node instanceof THREE.Mesh)meshes.push(node)})
-   expect(meshes.length,id).toBeGreaterThan(9)
+   if(id==='3d-gold-crown'){
+     // A polished mobile scene must batch static filigree instead of
+     // issuing hundreds of draws for individual diamonds/prongs.
+     expect(meshes.length,id).toBeLessThan(45)
+     expect(meshes.length,id).toBeGreaterThan(6)
+     expect(meshes.reduce((n,m)=>n+(m.geometry.index?m.geometry.index.count/3:m.geometry.getAttribute('position').count/3),0)).toBeGreaterThan(20000)
+   }else expect(meshes.length,id).toBeGreaterThan(9)
    expect(meshes.some(mesh=>mesh.material instanceof THREE.MeshPhysicalMaterial),id).toBe(true)
    for(const mesh of meshes)mesh.geometry.dispose()
    for(const mat of new Set(meshes.flatMap(m=>Array.isArray(m.material)?m.material:[m.material])))mat.dispose()
