@@ -6,7 +6,7 @@
  */
 import * as THREE from 'three'
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js'
-import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js'
+import {mergeGeometries,mergeVertices} from 'three/addons/utils/BufferGeometryUtils.js'
 import {mkdir,writeFile} from 'node:fs/promises'
 import {dirname,resolve} from 'node:path'
 
@@ -156,7 +156,10 @@ for(const [material,items] of batches){
  if(!merged)throw Error('incompatible_face_asset_geometries')
  triangles+=merged.getAttribute('position').count/3
  items.forEach(item=>item.dispose())
- const mesh=new THREE.Mesh(merged,material)
+ // Reuse shared curve vertices in glTF instead of duplicating each triangle.
+ const indexed=mergeVertices(merged,1e-5)
+ merged.dispose()
+ const mesh=new THREE.Mesh(indexed,material)
  mesh.name='Couture_'+material.color.getHexString()
  mesh.frustumCulled=false
  group.add(mesh)
