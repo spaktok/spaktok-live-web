@@ -13,6 +13,7 @@ import type {FaceGeometry} from './renderer'
 import type {FaceFxId} from './params'
 import {makeupLooks,isMakeupLook} from './makeup3d'
 import {FaceMakeupLayer} from './makeup3d-render'
+import {makePremiumAccessory} from './face3d-premium'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -259,10 +260,10 @@ export class FaceMesh3DEngine{
     root=parsed.scene
    }else{
     root=isMakeupLook(id)?new THREE.Group():
-       id==='3d-lux-glasses'?makeGlasses():
+       makePremiumAccessory(id) ?? (id==='3d-lux-glasses'?makeGlasses():
        id==='3d-gold-crown'?makeCrown():
        id==='3d-space-visor'?makeVisor():
-       id==='3d-expression'?makeExpressionMask():makeCap()
+       id==='3d-expression'?makeExpressionMask():makeCap())
    }
    if(!this.alive||token!==this.request){disposeObject(root);return false}
    this.model=root
