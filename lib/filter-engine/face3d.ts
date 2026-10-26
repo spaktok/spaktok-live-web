@@ -26,7 +26,7 @@ export const isFace3DId=(id:string):id is Face3DId=>face3DPresets.some(x=>x.id==
 // GLTF URLs are allowlisted and served from our own same-origin public assets.
 // No untrusted remote model URLs or arbitrary asset data can be supplied.
 const MODEL_ASSETS:Partial<Record<Face3DId,string>>={
- '3d-crystal':'/face-assets/spaktok-crystal.gltf',
+ '3d-crystal':'/face-assets/spaktok-crystal.glb',
 }
 const clamp=(n:number,low:number,high:number)=>Math.min(high,Math.max(low,n))
 export interface Face3DFrame{
