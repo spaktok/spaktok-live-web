@@ -110,7 +110,7 @@ function jewel(x,y,z,w,h,mat='pink',sides=14){
 /** Discrete jewel faces use distinct dyed-crystal materials. Because each
  * prism facet has its OWN vertices and normal, the gold crown has obvious
  * multi-hue depth even without transmissive access to the HTML camera video. */
-function prismaticCenterStone(x,y,z,w,h,sides=24){
+function prismaticCenterStone(x,y,z,w,h,sides=32){
  const rim=[],table=[]
  const spectrum=['violet','pink','cyan','blue','violet','amber','pink','diamond']
  for(let i=0;i<sides;i++){
@@ -130,7 +130,10 @@ function prismaticCenterStone(x,y,z,w,h,sides=24){
   const k=spectrum[(i+Math.floor(i/3))%spectrum.length]
   face([rim[i],rim[j],table[j]],k)
   face([rim[i],table[j],table[i]],spectrum[(i+3)%spectrum.length])
-  face([table[i],table[j],[x,y,z+.16]],spectrum[(i+5)%spectrum.length])
+  // Distinct oblique facets and a small multi-chromatic table give the
+  // central marquise a deep, faceted appearance, not a flat rainbow decal.
+  const center=[x+w*.035*Math.sin(i*.8),y+h*.04*Math.cos(i*.9),z+.152]
+  face([table[i],table[j],center],spectrum[(i+5)%spectrum.length])
   face([rim[j],rim[i],[x,y,z-.095]],'violet')
  }
  ring(x,y,z,w*1.08,h*1.08,.013,'rose')
@@ -141,13 +144,26 @@ function prismaticCenterStone(x,y,z,w,h,sides=24){
  }
 }
 
-for(const [y,r,m] of [[-.52,.012,'champagne'],[-.55,.02,'rose'],[-.59,.011,'silver']]){
+for(const [y,r,m] of [[-.49,.009,'champagne'],[-.52,.012,'champagne'],[-.55,.02,'rose'],[-.59,.011,'silver'],[-.635,.008,'champagne']]){
  const points=[]
  for(let k=0;k<=72;k++){
   const x=(k/72-.5)*1.08,z=.08-.29*Math.pow(Math.abs(x)/.54,2)
   points.push([x,y-.018*(1-(x/.54)**2),z])
  }
  wire(points,r,m,70)
+}
+// Delicate openwork leaves, calibrated to the attached reference. Bent
+// filigree arches remain true 3D tubes with face-depth, not a 2D texture.
+function leaf(cx,cy,cz,rx,ry,side){
+ const points1=[],points2=[]
+ for(let i=0;i<=28;i++){
+  const t=i/28,a=t*Math.PI
+  points1.push([cx+side*rx*Math.cos(a),cy+ry*Math.sin(a),cz+.027*Math.sin(a)])
+  points2.push([cx+side*rx*Math.cos(a),cy-ry*Math.sin(a),cz+.027*Math.sin(a)])
+ }
+ wire(points1,.006,'rose',32)
+ wire(points2,.005,'champagne',32)
+ wire([[cx-side*rx,cy,cz],[cx,cy,cz+.025],[cx+side*rx,cy,cz]],.003,'silver',24)
 }
 for(const side of [-1,1]){
  for(let tier=0;tier<3;tier++){
@@ -156,7 +172,14 @@ for(const side of [-1,1]){
     [x+side*.073,tip-.08,.085],[x+side*.115,tip+.045,.085],[x+side*.02,-.55,.12]],
     tier===0?.012:.009,'rose')
   spiral(x+side*.05,tip+.02,.143,.08,side)
+  leaf(x+side*.025,tip+.09,.14,.04,.095,side)
  }
+ // Three-dimensional raised Rococo gold vines, inspired by the supplied
+ // filigree reference. Keep a narrow clear gap around the central gemstone.
+ wire([[side*.10,-.55,.14],[side*.15,-.69,.20],[side*.245,-.76,.25],
+   [side*.31,-.70,.22],[side*.33,-.61,.19]],.009,'champagne',54)
+ spiral(side*.31,-.66,.24,.051,side,'rose')
+ leaf(side*.36,-.67,.2,.052,.08,side)
  wire([[side*.02,-.62,.13],[side*.09,-.91,.11],[side*.20,-1.10,.07],
   [side*.275,-.93,.08],[side*.43,-.73,.11],[side*.49,-.55,.07]],.012,'rose',75)
  wire([[side*.04,-.56,.14],[side*.18,-.77,.16],[side*.29,-.87,.13],[side*.38,-.68,.135]],.008,'silver')
@@ -170,17 +193,29 @@ for(const side of [-1,1]){
  wire([[0,-.56,.16],[side*.12,-.7,.16],[side*.17,-.84,.18],
  [side*.09,-.99,.14],[0,-1.02,.15]],.009,'silver',56)
 }
-ring(0,-.91,.24,.147,.236,.025,'dark')
-ring(0,-.91,.28,.137,.23,.012,'champagne')
-prismaticCenterStone(0,-.92,.32,.136,.214,24)
+// Deep rose-gold bezel, layered edge and 32 discrete prismatic facets.
+ring(0,-.91,.24,.164,.250,.024,'dark')
+ring(0,-.91,.28,.151,.239,.014,'rose')
+ring(0,-.91,.30,.144,.23,.007,'champagne')
+prismaticCenterStone(0,-.92,.32,.136,.214,32)
+for(let k=0;k<24;k++){
+ const a=k/24*2*Math.PI
+ const x=.18*Math.cos(a),y=-.91+.269*Math.sin(a)
+ jewel(x,y,.20,.008,.011,k%4===0?'blue':k%4===1?'diamond':k%4===2?'pink':'cyan',10)
+}
 jewel(0,-1.22,.20,.039,.065,'blue')
 jewel(-.116,-1.16,.19,.027,.043,'diamond')
 jewel(.116,-1.16,.19,.027,.043,'diamond')
 const palette=['blue','pink','diamond','cyan','amber']
-for(let k=-10;k<=10;k++){
+for(let k=-12;k<=12;k++){
  if(Math.abs(k)<3)continue
- const x=k*.048,z=.14-.17*Math.pow(Math.abs(x)/.55,2)
+ const x=k*.043,z=.14-.17*Math.pow(Math.abs(x)/.55,2)
  jewel(x,-.55-.006*Math.cos(k*.6),z+.045,.014,.021,palette[Math.abs(k)%5],10)
+}
+// Double continuous band of individually seated round crystals, open back.
+for(let k=-17;k<=17;k++){
+ const x=k*.029,z=.15-.15*Math.pow(Math.abs(x)/.55,2)
+ jewel(x,-.596,z+.055,.009,.012,k%7===0?'pink':k%9===0?'cyan':'diamond',10)
 }
 for(const side of [-1,1]){
  for(let k=0;k<13;k++){
@@ -208,7 +243,7 @@ for(const [material,items] of batches){
  mesh.frustumCulled=false
  group.add(mesh)
 }
-if(triangles<10000)throw Error('Asset too simple to publish')
+if(triangles<14000)throw Error('Asset too simple to publish')
 const binary=await new GLTFExporter().parseAsync(group,{binary:true,onlyVisible:true})
 const target=resolve('public/face-assets/spaktok-royal-couture.glb')
 await mkdir(dirname(target),{recursive:true})
