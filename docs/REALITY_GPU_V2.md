@@ -27,3 +27,16 @@ Open your Vercel deployment's camera URL with `?realityGpu=2`, select a 3D lens 
 - Face tracking with an invalid head pose now hides the mesh, crown and makeup rather than leaving a stale object visible.
 - MediaPipe mask updates reuse the existing GPU texture while width/height are unchanged, avoiding repeated texture creation per segmentation result.
 - The unit tests cover correct UV handedness, sRGB/linear round-trip invariants, and shader variant separation.
+
+## Phase 4 — precise AR strength, scene light, performance probes (2026-10-27)
+
+- Fractional 3D effect strength now renders (1) the integrated camera-plus-AR scene and (2) camera-only to two GPU linear-sRGB render targets, then mixes in a fullscreen pass on the same WebGL context. This avoids fading the camera when lowering crown opacity. The regular full-strength path still renders once.
+- Scene-light sampling runs on-device on a 32×18 downscaled video frame no more frequently than every 500ms. A bounded, smoothed mapping controls key/fill/rim intensity, directional offset and color warmth. It does not claim HDR or real environment probes.
+- QA HUD exposes CPU-side JavaScript render submission duration, draw-call count and pass count together with the existing preview FPS. These are not GPU execution time or thermal benchmarks.
+- Camera images, sampled pixels and inferred facial landmarks are not sent to the lighting service or to Cloudflare.
+- Feature remains behind ?realityGpu=2, awaiting Android/iOS real-camera comparison, screenshot/video parity, thermal profiling and regression tests.
+
+## Risk controls
+- A partial-strength AR effect requires three GPU render passes (full scene, camera only, compositor); low-end devices may slow down.
+- Tests cover fractional vs whole opacity blending and bounded lighting response, but passing a Next.js build alone does not imply these tests have been executed.
+- If frame pacing, color fidelity or transparency differs between devices, return to the default non-GPU-v2 camera without the QA flag.

@@ -80,6 +80,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const [previewFps,setPreviewFps] = useState<number | null>(null)
   const [gpuAvailable,setGpuAvailable] = useState(true)
   const [gpu2Active,setGpu2Active] = useState(false)
+  const [gpu2Metrics,setGpu2Metrics] = useState<{cpuRenderMs:number;drawCalls:number;triangles:number;passes:number}|null>(null)
   const [threeStatus,setThreeStatus]=useState<'idle'|'loading'|'ready'|'unavailable'>('idle')
   const [threeQuality,setThreeQuality]=useState<'hd'|'fallback'|'none'>('none')
   const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null)
@@ -444,6 +445,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
         if(fps.last===0)fps.last=now
         else if(now-fps.last>=1200){
           setPreviewFps(Math.round(1000*fps.frames/(now-fps.last)))
+          // CPU submission time and draw calls, not actual GPU execution time.
+          setGpu2Metrics(frameUsedGpu2?threeEngineRef.current?.lastGpuStats??null:null)
           fps.last=now;fps.frames=0
         }
       }
@@ -577,6 +580,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     threeQuality,
     gpuAvailable,
     gpu2Active,
+    gpu2Metrics,
     status,
     vision,
     facing,

@@ -20,3 +20,22 @@ export function estimateAmbientLight(data:Uint8ClampedArray,width:number,height:
  const l=left/ln,r=right/rn
  return {brightness,warmth,side:clip((l-r)/Math.max(.12,l+r),-.6,.6)}
 }
+
+/** Bounded, low-resolution camera-light estimate to guide the AR rig.
+ * Not a real scene light probe or calibrated HDR environment capture.
+ */
+export function adaptiveJewelryLight(sample:AmbientLightEstimate) {
+ const b=clip(sample.brightness,.07,.85)
+ const w=clip(sample.warmth,-.35,.35)
+ const side=clip(sample.side,-.6,.6)
+ const exposure=clip(.75+b*.65,.8,1.25)
+ return {
+  fill:clip(1.35*exposure,.9,1.7),
+  key:clip(2.3*exposure,1.55,3.1),
+  rim:clip(.7*(.95+b*.2),.55,.9),
+  horizontalOffset:side*240,
+  red:1,
+  green:clip(.91-w*.10,.83,.96),
+  blue:clip(.83-w*.30,.7,.96),
+ }
+}

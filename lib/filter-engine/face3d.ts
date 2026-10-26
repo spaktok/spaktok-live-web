@@ -12,6 +12,8 @@ import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js'
 import { FaceLandmarker } from '@mediapipe/tasks-vision'
 import type {FaceGeometry,RenderInput} from './renderer'
 import {RealityGpuCameraLayer} from './reality-camera-gpu'
+import {RealityGpuBlendPass,needsRealityGpuBlend} from './reality-gpu-blend'
+import {estimateAmbientLight,adaptiveJewelryLight} from './lighting3d'
 import type {FaceFxId,MakeupOverrides} from './params'
 import {makeupLooks,isMakeupLook} from './makeup3d'
 import {FaceMakeupLayer} from './makeup3d-render'
@@ -262,6 +264,14 @@ export class FaceMesh3DEngine{
  modelQuality:'hd'|'fallback'|'none'='none'
  private studioEnvironment:THREE.WebGLRenderTarget|null=null
  private gpuCamera:RealityGpuCameraLayer|null=null
+ private gpuBlend:RealityGpuBlendPass|null=null
+ private lightSampler:HTMLCanvasElement|null=null
+ private lastLightUpdate=-Infinity
+ private smoothedLight:{brightness:number;warmth:number;side:number}|null=null
+ readonly fillLight=new THREE.HemisphereLight(0xfff1e6,0x6a607b,1.35)
+ readonly keyLight=new THREE.DirectionalLight(0xffdfc2,2.3)
+ readonly rimLight=new THREE.DirectionalLight(0x719fff,.7)
+ lastGpuStats:{cpuRenderMs:number;drawCalls:number;triangles:number;passes:number}|null=null
  private lastSourceW=0
  private lastSourceH=0
  private lastMirror=false
@@ -277,15 +287,14 @@ export class FaceMesh3DEngine{
   this.renderer.outputColorSpace=THREE.SRGBColorSpace
   this.renderer.toneMapping=THREE.ACESFilmicToneMapping
   this.renderer.toneMappingExposure=1.05
+  this.renderer.info.autoReset=false
   // Canvas, CSS object-fit and MediaPipe all use Y increasing DOWN.
   // OrthographicCamera(left,right,top,bottom): top MUST be 0 and bottom H.
   // The previous (0,width,height,0) inverted the entire face overlay vertically.
   this.camera=createVideoAlignedCamera(width,height)
-  this.scene.add(new THREE.HemisphereLight(0xfff1e6,0x6a607b,1.35))
-  const main=new THREE.DirectionalLight(0xffdfc2,2.3)
-  main.position.set(-250,-400,800);this.scene.add(main)
-  const rim=new THREE.DirectionalLight(0x719fff,.7)
-  rim.position.set(350,50,450);this.scene.add(rim)
+  this.scene.add(this.fillLight)
+  this.keyLight.position.set(-250,-400,800);this.scene.add(this.keyLight)
+  this.rimLight.position.set(350,50,450);this.scene.add(this.rimLight)
   this.scene.add(this.mount)
   this.mount.add(this.crownContact)
   // MediaPipe exposes a triangle tessellation of the REAL tracked face.
@@ -315,6 +324,7 @@ export class FaceMesh3DEngine{
   // Keep identical projection convention after size changes (Y downward).
   resizeVideoAlignedCamera(this.camera,w,h)
   this.gpuCamera?.resize(w,h)
+  this.gpuBlend?.resize(w,h)
  }
  private setupStudioEnvironment(){
   if(this.studioEnvironment)return
@@ -376,12 +386,46 @@ export class FaceMesh3DEngine{
    return false
   }
  }
+ private adaptLight(source:RenderInput['source'],at:number){
+  if(!Number.isFinite(at)||at-this.lastLightUpdate<.5)return
+  this.lastLightUpdate=at
+  if(!(source instanceof HTMLVideoElement)||!source.videoWidth)return
+  try{
+   if(!this.lightSampler){
+    this.lightSampler=document.createElement('canvas')
+    this.lightSampler.width=32;this.lightSampler.height=18
+   }
+   const ctx=this.lightSampler.getContext('2d',{willReadFrequently:true})
+   if(!ctx)return
+   ctx.drawImage(source,0,0,32,18)
+   const estimate=estimateAmbientLight(ctx.getImageData(0,0,32,18).data,32,18)
+   const old=this.smoothedLight
+   const avg=(a:number,b:number)=>a+(b-a)*.2
+   const next=old?{brightness:avg(old.brightness,estimate.brightness),
+    warmth:avg(old.warmth,estimate.warmth),side:avg(old.side,estimate.side)}:estimate
+   this.smoothedLight=next
+   const light=adaptiveJewelryLight(next)
+   this.fillLight.intensity=light.fill
+   this.keyLight.intensity=light.key
+   this.rimLight.intensity=light.rim
+   this.keyLight.position.x=-250+light.horizontalOffset
+   this.keyLight.color.setRGB(light.red,light.green,light.blue)
+  }catch{ /* Keep studio lighting if camera sampling is unsupported. */ }
+ }
+ private finishGpuStats(start:number,passes:number){
+  const stats=this.renderer.info.render
+  this.lastGpuStats={cpuRenderMs:Math.max(0,performance.now()-start),
+   drawCalls:stats.calls,triangles:stats.triangles,passes}
+ }
  /** A camera input enables GPU v2: video/beauty and physical 3D use the
   * SAME WebGLRenderer, enabling scene-based transmission. Without it, the
   * previous alpha-overlay renderer remains unchanged for safe fallback. */
  render(frame:Face3DFrame|null,sourceW:number,sourceH:number,mirror:boolean,id:FaceFxId,strength:number,makeup?:MakeupOverrides,cameraInput?:RenderInput){
   if(!this.alive)return
+  const started=performance.now()
+  this.renderer.info.reset()
   if(cameraInput){
+   this.adaptLight(cameraInput.source,cameraInput.time)
    if(!this.gpuCamera){
     if(!(cameraInput.source instanceof HTMLVideoElement))throw Error('reality_gpu2_requires_video')
     this.gpuCamera=new RealityGpuCameraLayer(this.scene,cameraInput.source,this.width,this.height)
@@ -398,6 +442,7 @@ export class FaceMesh3DEngine{
    this.makeup.setStyle(id,false)
    if(integrated)this.renderer.render(this.scene,this.camera)
    else this.renderer.clear()
+   this.finishGpuStats(started,integrated?1:0)
    return
   }
   this.mount.visible=this.lensReady
@@ -416,6 +461,7 @@ export class FaceMesh3DEngine{
    this.makeup.setStyle(id,false)
    if(integrated)this.renderer.render(this.scene,this.camera)
    else this.renderer.clear()
+   this.finishGpuStats(started,integrated?1:0)
    return
   }
   this.depthMesh.visible=true
@@ -469,7 +515,24 @@ export class FaceMesh3DEngine{
    })
   }
   this.mount.visible=this.lensReady
-  this.renderer.render(this.scene,this.camera)
+  let passes=1
+  if(integrated&&needsRealityGpuBlend(strength)&&this.gpuCamera){
+   if(!this.gpuBlend)this.gpuBlend=new RealityGpuBlendPass(this.renderer,this.width,this.height)
+   this.gpuBlend.render(strength,
+    ()=>this.renderer.render(this.scene,this.camera),
+    ()=>{
+     const oldMount=this.mount.visible,oldDepth=this.depthMesh.visible
+     const oldMakeup=this.makeup.mesh.visible
+     this.mount.visible=false;this.depthMesh.visible=false;this.makeup.mesh.visible=false
+     try{this.renderer.render(this.scene,this.camera)}
+     finally{
+      this.mount.visible=oldMount;this.depthMesh.visible=oldDepth
+      this.makeup.mesh.visible=oldMakeup
+     }
+    })
+   passes=3
+  }else this.renderer.render(this.scene,this.camera)
+  this.finishGpuStats(started,passes)
   // Opacity is applied with the composited canvas element, not color grading.
   this.canvas.style.opacity=integrated?'1':String(clamp(strength,0,1))
  }
@@ -480,6 +543,8 @@ export class FaceMesh3DEngine{
   this.makeup.dispose()
   this.gpuCamera?.dispose()
   this.gpuCamera=null
+  this.gpuBlend?.dispose()
+  this.gpuBlend=null
   this.crownContact.geometry.dispose()
   this.crownContact.material.dispose()
   this.studioEnvironment?.dispose()
