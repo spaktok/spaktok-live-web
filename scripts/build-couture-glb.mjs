@@ -37,8 +37,17 @@ const materials={
  blue:material(0x48afff,.08,.067),violet:material(0xa56af9,.07,.072),
  cyan:material(0x60f6f5,.07,.07),amber:material(0xffc16b,.08,.085)
 }
+// IMPORTANT: the live camera is a separate HTML video element BEHIND the
+// transparent WebGL overlay. MeshPhysicalMaterial.transmission samples only
+// the WebGL scene and cannot refract the DOM video, washing gemstones gray.
+// Keep gems physically faceted but opaque until camera-video texture and
+// ray-refraction are rendered in ONE shared GPU scene.
 for(const key of ['diamond','pink','blue','violet','cyan','amber']){
- Object.assign(materials[key],{transmission:.06,ior:1.75,thickness:.15,iridescence:.3})
+ const gem=materials[key]
+ Object.assign(gem,{transmission:0,ior:1.75,thickness:0,iridescence:.12,
+  clearcoat:1,clearcoatRoughness:.035,roughness:.075,metalness:.025})
+ gem.emissive.copy(gem.color).multiplyScalar(key==='diamond'?.035:.075)
+ gem.emissiveIntensity=.25
 }
 const batches=new Map()
 for(const material of Object.values(materials))batches.set(material,[])
@@ -97,6 +106,41 @@ function jewel(x,y,z,w,h,mat='pink',sides=14){
       [x+side*w*.72,y+upper*h*.64,z+.058])
  }
 }
+
+/** Discrete jewel faces use distinct dyed-crystal materials. Because each
+ * prism facet has its OWN vertices and normal, the gold crown has obvious
+ * multi-hue depth even without transmissive access to the HTML camera video. */
+function prismaticCenterStone(x,y,z,w,h,sides=24){
+ const rim=[],table=[]
+ const spectrum=['violet','pink','cyan','blue','violet','amber','pink','diamond']
+ for(let i=0;i<sides;i++){
+  const a=i/sides*2*Math.PI
+  const radius=Math.sin(a)>0?1:.78
+  rim.push([x+w*Math.sin(a)*radius,y+h*Math.cos(a),z])
+  table.push([x+w*.62*Math.sin(a)*radius,y+h*.62*Math.cos(a),z+.085])
+ }
+ function face(vertices,mat){
+  const geometry=new THREE.BufferGeometry()
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices.flat(),3))
+  geometry.computeVertexNormals()
+  add(geometry,mat)
+ }
+ for(let i=0;i<sides;i++){
+  const j=(i+1)%sides
+  const k=spectrum[(i+Math.floor(i/3))%spectrum.length]
+  face([rim[i],rim[j],table[j]],k)
+  face([rim[i],table[j],table[i]],spectrum[(i+3)%spectrum.length])
+  face([table[i],table[j],[x,y,z+.16]],spectrum[(i+5)%spectrum.length])
+  face([rim[j],rim[i],[x,y,z-.095]],'violet')
+ }
+ ring(x,y,z,w*1.08,h*1.08,.013,'rose')
+ ring(x,y,z+.075,w*.69,h*.69,.006,'champagne')
+ for(const side of [-1,1])for(const upper of [-1,1]){
+  add(new THREE.IcosahedronGeometry(.012,1),'champagne',
+      [x+side*w*.77,y+upper*h*.66,z+.065])
+ }
+}
+
 for(const [y,r,m] of [[-.52,.012,'champagne'],[-.55,.02,'rose'],[-.59,.011,'silver']]){
  const points=[]
  for(let k=0;k<=72;k++){
@@ -128,7 +172,7 @@ for(const side of [-1,1]){
 }
 ring(0,-.91,.24,.147,.236,.025,'dark')
 ring(0,-.91,.28,.137,.23,.012,'champagne')
-jewel(0,-.92,.32,.136,.214,'violet',22)
+prismaticCenterStone(0,-.92,.32,.136,.214,24)
 jewel(0,-1.22,.20,.039,.065,'blue')
 jewel(-.116,-1.16,.19,.027,.043,'diamond')
 jewel(.116,-1.16,.19,.027,.043,'diamond')
