@@ -10,6 +10,7 @@ interface Profile {
 }
 interface Clip {id:string;thumbnailUrl:string;caption:string;views:number}
 interface Stats {views:number;likes:number;videoCount:number}
+interface PrivateDraft {id:string;state:string;createdAt:string;bytes:number}
 interface Props {userId?:string;isOwnProfile?:boolean;onSettingsClick?:()=>void;onBack?:()=>void;onVideoClick?:(id:string)=>void}
 
 const compact=(n:number)=>new Intl.NumberFormat('ar',{notation:'compact',maximumFractionDigits:1}).format(n)
@@ -28,6 +29,7 @@ export function ProfileScreen({userId,isOwnProfile=true,onSettingsClick,onBack,o
  const [bio,setBio]=useState('')
  const [busy,setBusy]=useState(false)
  const [feedback,setFeedback]=useState<string|null>(null)
+ const [drafts,setDrafts]=useState<PrivateDraft[]>([])
 
  useEffect(()=>{
   if(!id)return
@@ -80,6 +82,16 @@ export function ProfileScreen({userId,isOwnProfile=true,onSettingsClick,onBack,o
   }catch{setFeedback('لم نتمكن من تحديث المتابعة. حاول مجددًا.')}
   finally{setBusy(false)}
  }
+ useEffect(()=>{
+  if(!isOwnProfile||!authenticated)return
+  const controller=new AbortController()
+  fetch('/api/videos/upload/status',{cache:'no-store',signal:controller.signal})
+    .then(async r=>r.ok?r.json():{items:[]})
+    .then((data:{items?:PrivateDraft[]})=>{if(!controller.signal.aborted)setDrafts(data.items||[])})
+    .catch(()=>{})
+  return ()=>controller.abort()
+ },[authenticated?.id,isOwnProfile,revision])
+
  const share=async()=>{
   if(!profile)return
   const url=new URL(window.location.origin)
@@ -153,6 +165,17 @@ export function ProfileScreen({userId,isOwnProfile=true,onSettingsClick,onBack,o
         <div><p className="text-lg font-bold">{compact(stats.views)}</p><p className="text-[10px] text-white/45">مشاهدة</p></div>
        </div>
       </div>
+     )}
+     {isOwnProfile&&drafts.length>0&&(
+      <section className="mx-5 mb-6 rounded-3xl border border-[#819fff]/20 bg-[#243b75]/10 p-4">
+       <div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-bold">مسودات الفيديو الخاصة</h3>
+        <span className="rounded-full bg-[#97b1ff]/15 px-2.5 py-1 text-[10px] text-[#afc5ff]">غير منشورة</span></div>
+       <div className="space-y-2">{drafts.slice(0,5).map(d=><div key={d.id} className="flex items-center justify-between rounded-xl border border-white/[.06] bg-white/[.04] px-3 py-2.5">
+        <div><p className="text-xs text-white/85">{d.state==='private_review'?'قيد المراجعة':d.state==='issued'?'لم يكتمل الرفع':'تعذّر الرفع'}</p>
+        <p className="mt-1 text-[10px] text-white/40">{new Date(d.createdAt).toLocaleDateString('ar')}</p></div>
+        <span className="text-[10px] text-white/45">{(d.bytes/1048576).toFixed(1)} MB</span>
+       </div>)}</div><p className="mt-3 text-[11px] text-white/40">هذه ملفات خاصة، ولن تُنشر دون مراجعة.</p>
+      </section>
      )}
      <div className="sticky top-[60px] z-10 border-y border-white/[.08] bg-[#090d1a]/95 px-5 backdrop-blur-xl">
       <div className="grid grid-cols-3 gap-2">

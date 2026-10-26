@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Radio, Sparkles } from 'lucide-react'
 import { BottomNavigation } from '@/components/spaktok/bottom-navigation'
 import { VideoFeed } from '@/components/spaktok/video-feed'
 import { StoryViewer } from '@/components/spaktok/story-viewer'
@@ -195,7 +196,14 @@ export default function SpakTok() {
 
             {/* Content */}
             {feedType === 'live' ? (
-              <LiveGrid onLiveClick={handleLiveClick} onBack={() => setFeedType('forYou')} />
+              <div className="relative flex h-full flex-col items-center justify-center overflow-hidden px-8 text-center text-white" dir="rtl">
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(72,95,211,.25),transparent_58%)]"/>
+                <div className="relative mb-6 flex size-24 items-center justify-center rounded-[28px] border border-[#8daaff]/25 bg-[#273e7f]/25"><Radio className="size-10 text-[#a8c0ff]"/></div>
+                <div className="relative flex items-center gap-2 text-[10px] tracking-[.2em] text-[#8aa9fa]"><Sparkles className="size-3"/>SPAKTOK LIVE</div>
+                <h2 className="relative mt-3 text-2xl font-extrabold">البث المباشر قريبًا</h2>
+                <p className="relative mt-3 max-w-xs text-sm leading-7 text-white/55">نعمل على بثّ آمن وسريع، ولن نعرض بثوثًا تجريبية وكأنها حقيقية.</p>
+                <button onClick={() => setFeedType('forYou')} className="relative mt-7 rounded-2xl bg-[#8faaff] px-6 py-3 text-sm font-bold text-[#0b1632]">العودة للمقاطع</button>
+              </div>
             ) : (
               <div className="absolute inset-0">
                 <VideoFeed key={feedType + (focusedVideoId || '')} feedType={feedType} initialVideoId={focusedVideoId} onUserClick={handleUserClick} onCreate={() => setShowCamera(true)} onDiscover={() => handleTabChange('discover')} />
