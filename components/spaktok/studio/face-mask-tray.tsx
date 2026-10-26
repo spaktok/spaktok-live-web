@@ -4,9 +4,9 @@ import {ChevronDown,ChevronUp,Heart,Search,ScanFace,X} from 'lucide-react'
 import {faceFxCatalog,type FaceFxParams,type FaceFxId} from '@/lib/filter-engine/params'
 import {cn} from '@/lib/utils'
 
-type Category='3d'|'all'|'fashion'|'animal'|'fantasy'|'fun'|'reactive'|'saved'
+type Category='makeup'|'3d'|'all'|'fashion'|'animal'|'fantasy'|'fun'|'reactive'|'saved'
 const tabs:{id:Category;label:string}[]=[
- {id:'3d',label:'ثلاثي الأبعاد'},{id:'all',label:'الكل'},{id:'saved',label:'المفضلة'},{id:'reactive',label:'الذكية'},
+ {id:'makeup',label:'مكياج 3D'},{id:'3d',label:'مجسمات 3D'},{id:'all',label:'الكل'},{id:'saved',label:'المفضلة'},{id:'reactive',label:'الذكية'},
  {id:'animal',label:'الحيوانات'},{id:'fashion',label:'المظهر'},
  {id:'fantasy',label:'الخيال'},{id:'fun',label:'المرح'},
 ]

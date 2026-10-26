@@ -11,6 +11,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { FaceLandmarker } from '@mediapipe/tasks-vision'
 import type {FaceGeometry} from './renderer'
 import type {FaceFxId} from './params'
+import {makeupLooks,isMakeupLook} from './makeup3d'
+import {FaceMakeupLayer} from './makeup3d-render'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -19,6 +21,7 @@ export const face3DPresets = [
  {id:'3d-metal-cap',name:'قبعة معدنية',icon:'🧢',group:'3d'},
  {id:'3d-crystal',name:'جوهرة ثلاثية',icon:'💎',group:'3d'},
  {id:'3d-expression',name:'قناع التعبيرات',icon:'🎭',group:'3d'},
+ ...makeupLooks,
 ] as const
 export type Face3DId = (typeof face3DPresets)[number]['id']
 export const isFace3DId=(id:string):id is Face3DId=>face3DPresets.some(x=>x.id===id)
@@ -181,6 +184,7 @@ export class FaceMesh3DEngine{
  readonly mount=new THREE.Group()
  readonly depthMesh:THREE.Mesh
  readonly depthPositions:THREE.BufferAttribute
+ readonly makeup:FaceMakeupLayer
  private readonly loader=new GLTFLoader()
  private model:THREE.Object3D|null=null
  private current:Face3DId|null=null
@@ -230,6 +234,8 @@ export class FaceMesh3DEngine{
   this.depthMesh.renderOrder=-5
   this.depthMesh.frustumCulled=false
   this.scene.add(this.depthMesh)
+  this.makeup=new FaceMakeupLayer(meshGeo,triangles)
+  this.scene.add(this.makeup.mesh)
  }
  resize(w:number,h:number){
   if(this.width===w&&this.height===h)return
@@ -252,7 +258,8 @@ export class FaceMesh3DEngine{
     const parsed=await this.loader.loadAsync(asset)
     root=parsed.scene
    }else{
-    root=id==='3d-lux-glasses'?makeGlasses():
+    root=isMakeupLook(id)?new THREE.Group():
+       id==='3d-lux-glasses'?makeGlasses():
        id==='3d-gold-crown'?makeCrown():
        id==='3d-space-visor'?makeVisor():
        id==='3d-expression'?makeExpressionMask():makeCap()
@@ -272,6 +279,7 @@ export class FaceMesh3DEngine{
   if(!this.alive)return
   if(!isFace3DId(id)||!frame||strength<=0){
    this.depthMesh.visible=false;this.mount.visible=false
+   this.makeup.setStyle(id,false)
    this.renderer.clear()
    return
   }
@@ -284,6 +292,7 @@ export class FaceMesh3DEngine{
   const pose=getHeadPose(frame,sourceW,sourceH,this.width,this.height,mirror)
   if(!pose){this.renderer.clear();return}
   this.depthMesh.visible=true
+  this.makeup.setStyle(id,this.lensReady)
   // Update 478 surface vertices only on a *new* inference, not 30-60 times/sec.
   if(frame.timestamp!==this.lastFrame||this.lastSourceW!==sourceW||
     this.lastSourceH!==sourceH||mirror!==this.lastMirror){
@@ -297,6 +306,7 @@ export class FaceMesh3DEngine{
    }
    this.depthPositions.needsUpdate=true
    this.depthMesh.geometry.computeVertexNormals()
+   this.makeup.update(frame.landmarks,sourceW/sourceH)
    this.lastFrame=frame.timestamp
    this.lastSourceW=sourceW;this.lastSourceH=sourceH;this.lastMirror=mirror
   }
@@ -333,6 +343,7 @@ export class FaceMesh3DEngine{
   if(!this.alive)return
   this.alive=false;this.request++
   if(this.model){this.mount.remove(this.model);disposeObject(this.model)}
+  this.makeup.dispose()
   this.depthMesh.geometry.dispose()
   ;(this.depthMesh.material as THREE.Material).dispose()
   this.renderer.dispose()

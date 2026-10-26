@@ -104,6 +104,15 @@ export const faceFxCatalog = [
   { id: '3d-metal-cap', name: 'قبعة معدنية', icon: '🧢', group: '3d' },
   { id: '3d-crystal', name: 'جوهرة ثلاثية', icon: '💎', group: '3d' },
   { id: '3d-expression', name: 'قناع التعبيرات', icon: '🎭', group: '3d' },
+
+  { id: '3d-makeup-soft', name: 'مكياج ناعم', icon: '🌷', group: 'makeup' },
+  { id: '3d-makeup-glam', name: 'مكياج سهرة', icon: '💄', group: 'makeup' },
+  { id: '3d-makeup-bridal', name: 'إطلالة عروس', icon: '👰', group: 'makeup' },
+  { id: '3d-makeup-smoky', name: 'عيون دخانية', icon: '🖤', group: 'makeup' },
+  { id: '3d-makeup-rose', name: 'وردي مخملي', icon: '🌹', group: 'makeup' },
+  { id: '3d-makeup-neon', name: 'نيون فني', icon: '🪩', group: 'makeup' },
+  { id: '3d-makeup-golden', name: 'توهج ذهبي', icon: '✨', group: 'makeup' },
+  { id: '3d-makeup-editorial', name: 'مكياج فني', icon: '🎨', group: 'makeup' },
 ] as const
 export type FaceFxId = (typeof faceFxCatalog)[number]['id']
 export const faceFxCode = (id: FaceFxId) => Math.max(0, faceFxCatalog.findIndex(x=>x.id===id))
