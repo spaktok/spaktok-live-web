@@ -5,7 +5,7 @@ import * as THREE from 'three'
  * 8301ca876983e9850a62dd86bfb3f406679aadb23549eb03308d74c84383f0f9
  * GLTF coordinates +Y UP, +Z front, physical meter units. Face engine +Y DOWN.
  */
-export const UPLOADED_CROWN_MOBILE='/face-assets/spaktok-owner-crown-mobile.glb?v=20261026-owner-v1'
+export { UPLOADED_CROWN_MOBILE } from './crown-asset-url'
 export const TARGET_CROWN_HEAD_WIDTH=0.97
 export const CROWN_BAND_LOCAL_Y=-0.55
 export const SOURCE_HEADBAND_Y=-0.0089

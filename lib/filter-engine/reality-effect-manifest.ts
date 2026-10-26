@@ -1,5 +1,5 @@
 import { backgroundModes, faceFxCatalog, filterPresets, fxList, neutralBeauty, type FaceFxId } from './params'
-import { UPLOADED_CROWN_MOBILE } from './crown-uploaded-asset'
+import { UPLOADED_CROWN_MOBILE } from './crown-asset-url'
 
 /** Explicit, versioned effect contracts for the entire camera studio:
  * AR wearables, mesh makeup, legacy masks, color looks, post-FX, background.
