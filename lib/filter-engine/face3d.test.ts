@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest'
 import * as THREE from 'three'
 import {FaceLandmarker} from '@mediapipe/tasks-vision'
-import {face3DPresets,isFace3DId,viewportCrop,getHeadPose,getForeheadPixel,trianglesFromConnections,createVideoAlignedCamera,resizeVideoAlignedCamera} from './face3d'
+import {face3DPresets,isFace3DId,viewportCrop,getHeadPose,getForeheadPixel,trianglesFromConnections,createVideoAlignedCamera,resizeVideoAlignedCamera,crownMountPosition,CROWN_BASE_LOCAL_Y} from './face3d'
 import type {Face3DFrame} from './face3d'
 import {faceFxCatalog} from './params'
 const geometry={
@@ -69,6 +69,18 @@ describe('SpakTok tracked 3D lenses',()=>{
    moved[10]={...moved[10],y:.43}
    const displaced=getForeheadPixel({...shifted,landmarks:moved},720,1280,360,640,false)!
    expect(displaced.y-normal.y).toBeCloseTo(.25*640)
+ })
+ it('locks the physical crown band to forehead landmarks across roll, yaw, pitch and translation',()=>{
+   const pose={x:220,y:370,width:174,roll:.42,yaw:.31,pitch:-.18}
+   const forehead={x:175,y:200}
+   const mount=crownMountPosition(pose,forehead)
+   const band=new THREE.Vector3(0,CROWN_BASE_LOCAL_Y*pose.width,0).applyEuler(
+     new THREE.Euler(pose.pitch*.7,pose.yaw*.75,pose.roll))
+   expect(mount.x+band.x).toBeCloseTo(forehead.x,5)
+   expect(mount.y+band.y).toBeCloseTo(forehead.y-pose.width*.018,5)
+   const shifted=crownMountPosition(pose,{x:forehead.x+30,y:forehead.y+70})
+   expect(shifted.x-mount.x).toBeCloseTo(30,5)
+   expect(shifted.y-mount.y).toBeCloseTo(70,5)
  })
  it('rejects invalid face geometry and incomplete tracked meshes',()=>{
    expect(viewportCrop(0,720,360,640)).toBeNull()
