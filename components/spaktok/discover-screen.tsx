@@ -1,387 +1,204 @@
 'use client'
 
-import { useState } from 'react'
-import { Search, TrendingUp, Sparkles, Music2, Hash, Users, Play, MapPin, ChevronLeft, Bell, ShoppingBag } from 'lucide-react'
-import { mockVideos, mockUsers, mockLiveStreams, formatNumber } from '@/lib/mock-data'
+import { useEffect, useState } from 'react'
+import { Search, Compass, Sparkles, ArrowUpRight, Film, Users, Bell, ShoppingBag, Heart, Eye, UserPlus, Check, RefreshCw, Radio } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-interface DiscoverScreenProps {
-  onUserClick: (userId: string) => void
-  onVideoClick: (videoId: string) => void
-  onShopClick?: () => void
-  onNotificationsClick?: () => void
+type Creator = {
+  id:string;username:string;displayName:string;avatar:string;bio:string;followers:number;
+  isVerified:boolean;isFollowing:boolean
+}
+type Clip = {id:string;userId:string;username:string;thumbnailUrl:string;caption:string;
+  views:number;likes:number;createdAt:string}
+type SearchResponse={creators:Creator[];videos:Clip[];query:string}
+interface Props {
+  onUserClick:(id:string)=>void
+  onVideoClick:(id:string)=>void
+  onShopClick?:()=>void
+  onNotificationsClick?:()=>void
 }
 
-type CategoryType = 'all' | 'trending' | 'music' | 'gaming' | 'food' | 'sports' | 'fashion'
+const count=(n:number)=>new Intl.NumberFormat('ar',{notation:'compact',maximumFractionDigits:1}).format(n)
+const avatarColors=['from-[#253b86] to-[#4766f5]','from-[#193b66] to-[#047c8c]','from-[#503281] to-[#bb588e]']
+export function DiscoverScreen({onUserClick,onVideoClick,onShopClick,onNotificationsClick}:Props){
+  const [search,setSearch]=useState('')
+  const [mode,setMode]=useState<'all'|'people'|'videos'>('all')
+  const [creators,setCreators]=useState<Creator[]>([])
+  const [videos,setVideos]=useState<Clip[]>([])
+  const [isLoading,setIsLoading]=useState(true)
+  const [error,setError]=useState(false)
+  const [revision,setRevision]=useState(0)
+  const [actionStatus,setActionStatus]=useState<string|null>(null)
+  const [busy,setBusy]=useState<string|null>(null)
 
-export function DiscoverScreen({ onUserClick, onVideoClick, onShopClick, onNotificationsClick }: DiscoverScreenProps) {
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<CategoryType>('all')
-  const [followedUsers, setFollowedUsers] = useState<string[]>([])
-  const [locationEnabled, setLocationEnabled] = useState(false)
-  const [ghostMode, setGhostMode] = useState(true)
-  const [selectedPlace, setSelectedPlace] = useState('الرياض')
+  useEffect(()=>{
+    const controller=new AbortController()
+    const timer=window.setTimeout(async()=>{
+      setIsLoading(true);setError(false)
+      try{
+        const response=await fetch('/api/native/discover?q='+encodeURIComponent(search.trim()),{
+          cache:'no-store',signal:controller.signal,
+        })
+        if(!response.ok)throw new Error('discovery_unavailable')
+        const data=await response.json() as SearchResponse
+        if(!controller.signal.aborted){
+          setCreators(data.creators);setVideos(data.videos)
+        }
+      }catch{
+        if(!controller.signal.aborted)setError(true)
+      }finally{if(!controller.signal.aborted)setIsLoading(false)}
+    },search.trim()?260:0)
+    return ()=>{controller.abort();window.clearTimeout(timer)}
+  },[search,revision])
 
-  const normalizedQuery = searchQuery.trim().toLowerCase()
-  const visibleUsers = mockUsers
-    .filter((user) => !normalizedQuery || `${user.displayName} ${user.username}`.toLowerCase().includes(normalizedQuery))
-    .slice(0, 5)
-  const visibleVideos = mockVideos
-    .filter((video) => !normalizedQuery || `${video.caption} ${video.user.username} ${video.tags.join(' ')}`.toLowerCase().includes(normalizedQuery))
-    .filter((video) => selectedCategory === 'all' || selectedCategory === 'trending' || video.tags.some((tag) => tag.toLowerCase().includes(selectedCategory)))
-    .slice(0, 4)
-
-  const categories: { id: CategoryType; label: string; icon?: any }[] = [
-    { id: 'all', label: 'الكل' },
-    { id: 'trending', label: 'ترند', icon: TrendingUp },
-    { id: 'music', label: 'موسيقى', icon: Music2 },
-    { id: 'gaming', label: 'ألعاب' },
-    { id: 'food', label: 'طعام' },
-    { id: 'sports', label: 'رياضة' },
-    { id: 'fashion', label: 'أزياء' },
-  ]
-
-  const trendingTags = [
-    { tag: 'رمضان_كريم', posts: '2.5M' },
-    { tag: 'تحدي_الرقص', posts: '1.8M' },
-    { tag: 'وصفات_سريعة', posts: '950K' },
-    { tag: 'تقنية_2026', posts: '720K' },
-    { tag: 'سفر_وترحال', posts: '580K' },
-  ]
+  const follow=async(person:Creator)=>{
+    if(busy)return
+    setBusy(person.id)
+    try{
+      const next=!person.isFollowing
+      const response=await fetch('/api/follows',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({followingId:person.id,following:next}),
+      })
+      if(!response.ok)throw new Error('follow_failed')
+      setCreators(items=>items.map(c=>c.id===person.id?{
+        ...c,isFollowing:next,followers:Math.max(0,c.followers+(next?1:-1)),
+      }:c))
+    }catch{setActionStatus('تعذّر تحديث المتابعة. أعد المحاولة.')}
+    finally{setBusy(null)}
+  }
 
   return (
-    <div className="min-h-screen pb-24">
-      {/* Header */}
-      <div className="sticky top-0 z-10 glass safe-top">
-        <div className="px-4 py-3">
-          <div className="mb-3 flex items-center justify-between">
-            <h1 className="text-lg font-bold text-white">اكتشف</h1>
-            <div className="flex items-center gap-2">
-              {onNotificationsClick && (
-                <button type="button" onClick={onNotificationsClick} aria-label="فتح التنبيهات" className="relative rounded-xl p-2 text-white/80 hover:bg-white/10">
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-rose-500" />
-                </button>
-              )}
-              {onShopClick && (
-                <button type="button" onClick={onShopClick} aria-label="فتح المتجر" className="rounded-xl p-2 text-white/80 hover:bg-white/10">
-                  <ShoppingBag className="h-5 w-5" />
-                </button>
-              )}
+    <div className="spak-discover min-h-dvh pb-28 text-white" dir="rtl">
+      <header className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#080c19]/90 px-5 pb-4 pt-[max(1.2rem,env(safe-area-inset-top))] backdrop-blur-2xl">
+        <div className="mx-auto max-w-3xl">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <div className="mb-1 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.24em] text-[#8ca8ff]">
+                <Compass size={13}/> SPAKTOK • EXPLORE
+              </div>
+              <h1 className="text-[28px] font-extrabold tracking-tight">اكتشف عالمك<span className="text-[#7d9dff]">.</span></h1>
+              <p className="mt-1 text-xs text-white/45">مبدعون حقيقيون، ومحتوى ينمو معك</p>
+            </div>
+            <div className="flex gap-2">
+              {onNotificationsClick&&<button type="button" onClick={onNotificationsClick} aria-label="الإشعارات" className="spak-icon-control"><Bell className="size-5"/></button>}
+              {onShopClick&&<button type="button" onClick={onShopClick} aria-label="المتجر" className="spak-icon-control"><ShoppingBag className="size-5"/></button>}
             </div>
           </div>
-
-          {/* Search Bar */}
-          <div className="glass-card rounded-2xl flex items-center px-4 py-3 mb-4">
-            <Search className="w-5 h-5 text-white/40" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث عن أشخاص، أصوات، هاشتاقات..."
-              className="flex-1 bg-transparent text-white text-sm placeholder:text-white/40 outline-none mr-3"
-            />
-          </div>
-
-          {/* Categories */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
-            {categories.map((cat) => (
-              <button
-                key={cat.id}
-                onClick={() => setSelectedCategory(cat.id)}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all press-effect",
-                  selectedCategory === cat.id
-                    ? "bg-gradient-to-r from-[#ffffff] to-[#ffffff] text-white neon-cyan"
-                    : "glass-light text-white/70"
-                )}
-              >
-                {cat.icon && <cat.icon className="w-4 h-4" />}
-                {cat.label}
+          <label className="spak-search-field flex h-13 items-center gap-3 px-4">
+            <Search className="size-5 shrink-0 text-[#97b0ff]"/>
+            <span className="sr-only">ابحث عن الفيديوهات والمبدعين</span>
+            <input value={search} onChange={e=>setSearch(e.target.value)} maxLength={60} placeholder="ابحث عن فيديو أو مبدع..."
+              className="w-full flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/35" autoComplete="off"/>
+            {search&&<button type="button" onClick={()=>setSearch('')} className="rounded-full bg-white/10 px-2 py-1 text-[11px] text-white/65">مسح</button>}
+          </label>
+          <div className="mt-4 flex gap-2">
+            {([{id:'all',label:'الكل'},{id:'videos',label:'الفيديوهات'},{id:'people',label:'المبدعون'}] as const).map(item=>(
+              <button key={item.id} type="button" onClick={()=>setMode(item.id)}
+                aria-pressed={mode===item.id}
+                className={cn('rounded-full px-4 py-2 text-xs font-semibold transition-colors',
+                  mode===item.id?'bg-white text-[#0c1530] shadow-[0_6px_24px_rgba(255,255,255,.12)]':'bg-white/[.07] text-white/60 hover:text-white')}>
+                {item.label}
               </button>
             ))}
           </div>
         </div>
-      </div>
+      </header>
 
-      <div className="px-4 py-4 space-y-6">
-        {/* Trending Hashtags */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Hash className="w-5 h-5 text-[#ffffff]" />
-              <h2 className="text-lg font-bold text-white">هاشتاقات رائجة</h2>
-            </div>
-            <button className="text-sm text-[#ffffff] flex items-center gap-1">
-              عرض الكل
-              <ChevronLeft className="w-4 h-4" />
-            </button>
+      <main className="mx-auto max-w-3xl space-y-8 px-5 py-6">
+        {actionStatus&&<p role="status" className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{actionStatus}</p>}
+        {isLoading?(
+          <div className="space-y-5" role="status" aria-label="تحميل المحتوى">
+            <div className="h-20 animate-pulse rounded-3xl bg-white/[.07]"/>
+            <div className="grid grid-cols-2 gap-3">{[0,1,2,3].map(i=><div key={i} className="aspect-[3/4] animate-pulse rounded-3xl bg-white/[.05]"/>)}</div>
           </div>
-          <div className="flex gap-2 overflow-x-auto scrollbar-hide">
-            {trendingTags.map((item, index) => (
-              <button
-                key={item.tag}
-                type="button"
-                onClick={() => setSearchQuery(item.tag.replaceAll('_', ' '))}
-                className="glass-card rounded-xl p-3 flex-shrink-0 press-effect min-w-[140px] text-right"
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={cn(
-                    "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
-                    index === 0 ? "bg-[#FFB800] text-black" :
-                    index === 1 ? "bg-white/20 text-white" :
-                    index === 2 ? "bg-[#CD7F32] text-white" :
-                    "glass-light text-white/70"
-                  )}>
-                    {index + 1}
-                  </span>
-                  <TrendingUp className={cn(
-                    "w-4 h-4",
-                    index < 3 ? "text-[#ffffff]" : "text-white/50"
-                  )} />
+        ):error?(
+          <div className="spak-empty-shell">
+            <RefreshCw className="mx-auto mb-3 size-8 text-[#90aaff]"/>
+            <h2 className="text-lg font-bold">تعذّر تحميل الاكتشاف</h2>
+            <p className="mt-2 text-sm text-white/50">تأكد من الاتصال بالشبكة، ثم حاول مجددًا.</p>
+            <button onClick={()=>setRevision(n=>n+1)} className="spak-primary-button mt-5">إعادة المحاولة</button>
+          </div>
+        ):(
+          <>
+            {mode!=='videos'&&(
+              <section>
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold tracking-[0.16em] text-[#86a4fc]">CREATORS</p>
+                    <h2 className="mt-1 text-lg font-bold">{search?'المبدعون المطابقون':'تعرّف على المبدعين'}</h2>
+                  </div>
+                  <span className="rounded-full bg-white/[.07] px-3 py-1 text-xs text-white/60">{creators.length}</span>
                 </div>
-                <p className="text-sm font-semibold text-white text-right">#{item.tag}</p>
-                <p className="text-xs text-white/50 text-right">{item.posts} منشور</p>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* Live Now */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-[#3155ff] animate-live-pulse" />
-              <h2 className="text-lg font-bold text-white">مباشر الآن</h2>
-            </div>
-            <button className="text-sm text-[#ffffff] flex items-center gap-1">
-              عرض الكل
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide">
-            {mockLiveStreams.map((stream) => (
-              <button
-                key={stream.id}
-                className="relative flex-shrink-0 w-32 press-effect"
-              >
-                <div className="aspect-[3/4] rounded-xl overflow-hidden relative">
-                  <img
-                    src={stream.thumbnailUrl || "/placeholder.svg"}
-                    alt={stream.title}
-                    className="w-full h-full object-cover"
-                    crossOrigin="anonymous"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                  
-                  {/* Live Badge */}
-                  <div className="absolute top-2 left-2 flex items-center gap-1">
-                    <div className="px-1.5 py-0.5 rounded bg-[#3155ff] text-[8px] font-bold text-white flex items-center gap-1 animate-live-pulse">
-                      <div className="w-1 h-1 rounded-full bg-white" />
-                      LIVE
-                    </div>
+                {creators.length?(
+                  <div className="space-y-2.5">
+                    {creators.map((person,i)=>(
+                      <article key={person.id} className="spak-creator-card flex items-center gap-3 p-3">
+                        <button onClick={()=>onUserClick(person.id)} className={cn('flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br',avatarColors[i%avatarColors.length])} aria-label={'فتح ملف '+person.username}>
+                          {person.avatar?<img src={person.avatar} alt="" loading="lazy" className="size-full object-cover"/>:<span className="text-xl font-bold">{person.displayName.slice(0,1).toUpperCase()}</span>}
+                        </button>
+                        <button onClick={()=>onUserClick(person.id)} className="min-w-0 flex-1 text-right">
+                          <p className="truncate text-sm font-bold">{person.displayName}</p>
+                          <p className="mt-0.5 truncate text-xs text-white/45" dir="ltr">@{person.username}</p>
+                          <p className="mt-1 truncate text-[11px] text-white/35">{count(person.followers)} متابع</p>
+                        </button>
+                        <button type="button" disabled={busy===person.id} onClick={()=>void follow(person)}
+                          aria-label={person.isFollowing?'إلغاء متابعة '+person.username:'متابعة '+person.username}
+                          className={cn('inline-flex min-w-[94px] items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-semibold transition',
+                            person.isFollowing?'border border-white/15 bg-white/[.06] text-white':'bg-[#7e9dff] text-[#08152f] hover:bg-[#aac0ff]')}>
+                          {person.isFollowing?<Check className="size-3.5"/>:<UserPlus className="size-3.5"/>}
+                          {person.isFollowing?'متابَع':'متابعة'}
+                        </button>
+                      </article>
+                    ))}
                   </div>
+                ):<div className="spak-empty-shell"><Users className="mx-auto mb-3 size-8 text-[#91aafb]"/><p className="font-semibold">لم نجد مبدعين بعد</p><p className="mt-2 text-xs text-white/45">سيظهر هنا أصحاب الحسابات الحقيقيون عند انضمامهم.</p></div>}
+              </section>
+            )}
 
-                  {/* Viewers */}
-                  <div className="absolute top-2 right-2 glass-light rounded-full px-1.5 py-0.5 flex items-center gap-1">
-                    <Users className="w-2.5 h-2.5 text-white" />
-                    <span className="text-[9px] text-white">{formatNumber(stream.viewers)}</span>
+            {mode!=='people'&&(
+              <section>
+                <div className="mb-4 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold tracking-[0.16em] text-[#86a4fc]">WATCH</p>
+                    <h2 className="mt-1 text-lg font-bold">{search?'نتائج الفيديو':'أحدث الفيديوهات'}</h2>
                   </div>
-
-                  {/* Info */}
-                  <div className="absolute bottom-0 left-0 right-0 p-2">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <img
-                        src={stream.user.avatar || "/placeholder.svg"}
-                        alt={stream.user.displayName}
-                        className="w-5 h-5 rounded-full border border-[#3155ff] object-cover"
-                        crossOrigin="anonymous"
-                      />
-                      <span className="text-[10px] text-white font-semibold truncate">{stream.user.username}</span>
-                    </div>
-                  </div>
+                  <span className="rounded-full bg-white/[.07] px-3 py-1 text-xs text-white/60">{videos.length}</span>
                 </div>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* Suggested Creators */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-[#ffffff]" />
-              <h2 className="text-lg font-bold text-white">مبدعون مقترحون</h2>
-            </div>
-            <button className="text-sm text-[#ffffff] flex items-center gap-1">
-              عرض الكل
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex gap-3 overflow-x-auto scrollbar-hide">
-            {visibleUsers.map((user) => (
-              <article
-                key={user.id}
-                className="glass-card rounded-xl p-4 flex-shrink-0 w-36 text-center"
-              >
-                <div className="relative w-16 h-16 mx-auto mb-3">
-                  <div className="w-full h-full rounded-full p-[2px] bg-gradient-to-tr from-[#ffffff] via-[#ffffff] to-[#3155ff]">
-                    <img
-                      src={user.avatar || "/placeholder.svg"}
-                      alt={user.displayName}
-                      className="w-full h-full rounded-full object-cover"
-                      crossOrigin="anonymous"
-                    />
+                {videos.length?(
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    {videos.map(video=>(
+                      <button key={video.id} onClick={()=>onVideoClick(video.id)}
+                        className="spak-clip-card group relative aspect-[3/4] overflow-hidden rounded-[22px] text-right">
+                        {video.thumbnailUrl?
+                          <img src={video.thumbnailUrl} alt="" loading="lazy" className="size-full object-cover transition duration-500 group-hover:scale-105"/>:
+                          <div className="flex size-full items-center justify-center bg-gradient-to-br from-[#182a58] via-[#131e37] to-[#060913]"><Film className="size-12 text-[#7b97ed]/60"/></div>}
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#070b17] via-transparent to-transparent"/>
+                        <div className="absolute inset-x-3 bottom-3">
+                          <p className="line-clamp-2 text-xs font-semibold text-white">{video.caption||'فيديو جديد'}</p>
+                          <div className="mt-2 flex items-center justify-between text-[11px] text-white/70">
+                            <span dir="ltr" className="max-w-[70%] truncate">@{video.username}</span>
+                            <span className="flex items-center gap-1"><Eye className="size-3"/>{count(video.views)}</span>
+                          </div>
+                        </div>
+                        <ArrowUpRight className="absolute left-3 top-3 size-4 text-white/80"/>
+                      </button>
+                    ))}
                   </div>
-                  {user.isVerified && (
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-[#ffffff] flex items-center justify-center border-2 border-[#0a0a14]">
-                      <Sparkles className="w-2.5 h-2.5 text-black" />
-                    </div>
-                  )}
-                </div>
-                <h4 className="text-sm font-semibold text-white truncate">{user.displayName}</h4>
-                <p className="text-xs text-white/50 mb-3">{formatNumber(user.followers)} متابع</p>
-                <button
-                  type="button"
-                  onClick={() => onUserClick(user.id)}
-                  className="w-full py-1.5 rounded-lg glass-light text-white text-xs font-semibold press-effect"
-                >
-                  عرض الملف
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFollowedUsers((current) => current.includes(user.id) ? current.filter((id) => id !== user.id) : [...current, user.id])}
-                  className={cn(
-                    "w-full mt-2 py-1.5 rounded-lg text-xs font-semibold press-effect",
-                    followedUsers.includes(user.id) ? "bg-[#ffffff]/15 text-[#ffffff]" : "bg-gradient-to-r from-[#3155ff] to-[#ffffff] text-white"
-                  )}
-                >
-                  {followedUsers.includes(user.id) ? 'متابَع' : 'متابعة'}
-                </button>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        {/* Trending Videos */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-[#ffffff]" />
-              <h2 className="text-lg font-bold text-white">فيديوهات رائجة</h2>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {visibleVideos.map((video, index) => (
-              <button
-                key={video.id}
-                onClick={() => onVideoClick(video.id)}
-                className={cn(
-                  "relative rounded-xl overflow-hidden press-effect",
-                  index === 0 && "col-span-2"
+                ):(
+                  <div className="spak-empty-shell">
+                    <Film className="mx-auto mb-3 size-9 text-[#8ba7ff]"/>
+                    <p className="font-semibold">لا توجد فيديوهات منشورة بعد</p>
+                    <p className="mt-2 text-xs leading-6 text-white/45">تظهر الفيديوهات هنا بعد رفعها ومراجعتها. لا نعرض مقاطع تجريبية كأنها من المستخدمين.</p>
+                  </div>
                 )}
-              >
-                <div className={cn(
-                  "relative",
-                  index === 0 ? "aspect-video" : "aspect-[3/4]"
-                )}>
-                  <img
-                    src={video.thumbnailUrl || "/placeholder.svg"}
-                    alt={video.caption}
-                    className="w-full h-full object-cover"
-                    crossOrigin="anonymous"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
-                  
-                  {/* Play Icon */}
-                  <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                    <div className="w-12 h-12 rounded-full glass flex items-center justify-center">
-                      <Play className="w-6 h-6 text-white ml-0.5" fill="white" />
-                    </div>
-                  </div>
-
-                  {/* Stats */}
-                  <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
-                    <div className="flex items-center gap-1">
-                      <Play className="w-3 h-3 text-white" fill="white" />
-                      <span className="text-xs text-white font-medium">{formatNumber(video.views)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={video.user.avatar || "/placeholder.svg"}
-                        alt={video.user.displayName}
-                        className="w-5 h-5 rounded-full border border-white/30 object-cover"
-                        crossOrigin="anonymous"
-                      />
-                      <span className="text-xs text-white font-medium">@{video.user.username}</span>
-                    </div>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {/* Near You */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-[#3155ff]" />
-              <h2 className="text-lg font-bold text-white">قريب منك</h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => setLocationEnabled((enabled) => !enabled)}
-              className="text-sm text-[#ffffff] flex items-center gap-1 press-effect"
-            >
-              {locationEnabled ? 'إخفاء الخريطة' : 'عرض الخريطة'}
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="glass-card rounded-2xl p-4">
-            <div className="relative aspect-[2/1] rounded-xl overflow-hidden bg-[#101525] mb-3">
-              <div className="absolute inset-0 opacity-50 bg-[linear-gradient(25deg,transparent_48%,rgba(255,255,255,.12)_49%,transparent_51%),linear-gradient(115deg,transparent_48%,rgba(255,59,48,.12)_49%,transparent_51%)] bg-[length:54px_54px]" />
-              {['الرياض', 'جدة', 'دبي'].map((place, index) => (
-                <button
-                  key={place}
-                  type="button"
-                  onClick={() => setSelectedPlace(place)}
-                  className={cn(
-                    'absolute flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold text-white glass-light press-effect',
-                    index === 0 ? 'left-[18%] top-[24%]' : index === 1 ? 'right-[16%] bottom-[22%]' : 'left-[52%] top-[54%]',
-                    selectedPlace === place && 'ring-2 ring-[#ffffff] bg-[#ffffff]/25'
-                  )}
-                >
-                  <span className="size-1.5 rounded-full bg-[#ffffff] animate-live-pulse" />
-                  {place}
-                </button>
-              ))}
-              <div className="absolute bottom-2 right-2 rounded-lg bg-black/45 px-2 py-1 text-[10px] text-white/70">{selectedPlace} · 24 قصة قريبة</div>
-            </div>
-            <div className="flex items-center justify-between gap-3 mb-3">
-              <div>
-                <p className="text-sm font-semibold text-white">وضع التخفي</p>
-                <p className="text-[11px] text-white/45">لا تشارك موقعك الدقيق</p>
-              </div>
-              <button
-                type="button"
-                aria-pressed={ghostMode}
-                onClick={() => setGhostMode((enabled) => !enabled)}
-                className={cn('relative h-7 w-12 rounded-full transition-colors press-effect', ghostMode ? 'bg-[#ffffff]' : 'bg-white/15')}
-              >
-                <span className={cn('absolute top-1 size-5 rounded-full bg-white transition-transform', ghostMode ? 'translate-x-1' : 'translate-x-6')} />
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => setLocationEnabled((enabled) => !enabled)}
-              className={cn("w-full py-2.5 rounded-xl text-white font-semibold text-sm press-effect", locationEnabled ? "bg-[#ffffff]/15 text-[#ffffff]" : "glass-light")}
-            >
-              {locationEnabled ? 'إيقاف الموقع' : 'تفعيل الموقع واكتشاف القريب'}
-            </button>
-          </div>
-        </section>
-      </div>
+              </section>
+            )}
+            {!creators.length&&!videos.length&&search&&<p className="text-center text-sm text-white/40">جرّب مصطلح بحث آخر</p>}
+          </>
+        )}
+        <div className="flex items-center justify-center gap-2 pb-2 text-xs text-white/30"><Sparkles className="size-3.5"/> اكتشف محتوى حقيقيًا، بلا أرقام وهمية</div>
+      </main>
     </div>
   )
 }
