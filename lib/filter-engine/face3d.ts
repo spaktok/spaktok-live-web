@@ -8,6 +8,7 @@
  */
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js'
 import { FaceLandmarker } from '@mediapipe/tasks-vision'
 import type {FaceGeometry} from './renderer'
 import type {FaceFxId,MakeupOverrides} from './params'
@@ -31,6 +32,7 @@ export const isFace3DId=(id:string):id is Face3DId=>face3DPresets.some(x=>x.id==
 // No untrusted remote model URLs or arbitrary asset data can be supplied.
 const MODEL_ASSETS:Partial<Record<Face3DId,string>>={
  '3d-crystal':'/face-assets/spaktok-crystal.glb',
+ '3d-gold-crown':'/face-assets/spaktok-royal-couture.glb',
 }
 const clamp=(n:number,low:number,high:number)=>Math.min(high,Math.max(low,n))
 export interface Face3DFrame{
@@ -223,6 +225,9 @@ export class FaceMesh3DEngine{
  private height:number
  private lastFrame=-1
  private lensReady=false
+ /** HD: an actual authored GLB; fallback: geometric preview asset. */
+ modelQuality:'hd'|'fallback'|'none'='none'
+ private studioEnvironment:THREE.WebGLRenderTarget|null=null
  private lastSourceW=0
  private lastSourceH=0
  private lastMirror=false
@@ -275,10 +280,25 @@ export class FaceMesh3DEngine{
   // Keep identical projection convention after size changes (Y downward).
   resizeVideoAlignedCamera(this.camera,w,h)
  }
+ private setupStudioEnvironment(){
+  if(this.studioEnvironment)return
+  try{
+   const pmrem=new THREE.PMREMGenerator(this.renderer)
+   const room=new RoomEnvironment()
+   this.studioEnvironment=pmrem.fromScene(room,.04)
+   this.scene.environment=this.studioEnvironment.texture
+   room.dispose()
+   pmrem.dispose()
+  }catch{
+   // Older mobile GPUs keep the original light rig rather than losing camera.
+   this.scene.environment=null
+  }
+ }
  async setLens(id:Face3DId):Promise<boolean>{
   if(this.current===id)return this.lensReady
   this.current=id
   this.lensReady=false
+  this.modelQuality='none'
   const token=++this.request
   if(this.model){this.mount.remove(this.model);disposeObject(this.model);this.model=null}
   if(!this.alive)return false
@@ -286,9 +306,19 @@ export class FaceMesh3DEngine{
   try{
    const asset=MODEL_ASSETS[id]
    if(asset){
-    const parsed=await this.loader.loadAsync(asset)
-    root=parsed.scene
+    try{
+     const parsed=await this.loader.loadAsync(asset)
+     root=parsed.scene
+     this.modelQuality='hd'
+     if(id==='3d-gold-crown')this.setupStudioEnvironment()
+    }catch{
+     // Keep the camera operational if the production GLB has not arrived
+     // or a browser cannot decode it. Never claim this is the HD model.
+     root=makePremiumAccessory(id)??new THREE.Group()
+     this.modelQuality='fallback'
+    }
    }else{
+    this.modelQuality='fallback'
     root=isMakeupLook(id)?new THREE.Group():
        makePremiumAccessory(id) ?? (id==='3d-lux-glasses'?makeGlasses():
        id==='3d-gold-crown'?makeCrown():
@@ -386,6 +416,9 @@ export class FaceMesh3DEngine{
   this.alive=false;this.request++
   if(this.model){this.mount.remove(this.model);disposeObject(this.model)}
   this.makeup.dispose()
+  this.studioEnvironment?.dispose()
+  this.studioEnvironment=null
+  this.scene.environment=null
   this.depthMesh.geometry.dispose()
   ;(this.depthMesh.material as THREE.Material).dispose()
   this.renderer.dispose()
