@@ -103,6 +103,7 @@ export const faceFxCatalog = [
   { id: '3d-space-visor', name: 'خوذة فضاء', icon: '🪐', group: '3d' },
   { id: '3d-metal-cap', name: 'قبعة معدنية', icon: '🧢', group: '3d' },
   { id: '3d-crystal', name: 'جوهرة ثلاثية', icon: '💎', group: '3d' },
+  { id: '3d-expression', name: 'قناع التعبيرات', icon: '🎭', group: '3d' },
 ] as const
 export type FaceFxId = (typeof faceFxCatalog)[number]['id']
 export const faceFxCode = (id: FaceFxId) => Math.max(0, faceFxCatalog.findIndex(x=>x.id===id))

@@ -18,6 +18,7 @@ export const face3DPresets = [
  {id:'3d-space-visor',name:'خوذة فضاء',icon:'🪐',group:'3d'},
  {id:'3d-metal-cap',name:'قبعة معدنية',icon:'🧢',group:'3d'},
  {id:'3d-crystal',name:'جوهرة ثلاثية',icon:'💎',group:'3d'},
+ {id:'3d-expression',name:'قناع التعبيرات',icon:'🎭',group:'3d'},
 ] as const
 export type Face3DId = (typeof face3DPresets)[number]['id']
 export const isFace3DId=(id:string):id is Face3DId=>face3DPresets.some(x=>x.id===id)
@@ -139,6 +140,26 @@ function makeCap():THREE.Group{
  badge.rotation.x=-.15
  return group
 }
+function makeExpressionMask():THREE.Group{
+ const group=new THREE.Group()
+ const cobalt=new THREE.MeshStandardMaterial({color:0x6fccef,metalness:.67,roughness:.21,
+   emissive:0x042738})
+ const pink=new THREE.MeshStandardMaterial({color:0xe9579b,metalness:.28,roughness:.25,
+   emissive:0x2b0715})
+ for(const [index,x] of [[0,-.27],[1,.27]] as const){
+  const ring=attach(group,new THREE.TorusGeometry(.20,.028,10,32),cobalt,x,0,.24)
+  ring.name=index===0?'EyeLeft':'EyeRight'
+  const lens=attach(group,new THREE.SphereGeometry(.095,20,12),pink,x,0,.30)
+  lens.name=index===0?'PupilLeft':'PupilRight'
+  const brow=attach(group,new THREE.BoxGeometry(.36,.04,.045),cobalt,x,-.25,.24)
+  brow.name=index===0?'BrowLeft':'BrowRight'
+ }
+ const mouth=attach(group,new THREE.TorusGeometry(.12,.023,10,30),pink,0,.53,.30)
+ mouth.name='MouthRing'
+ const jaw=attach(group,new THREE.CapsuleGeometry(.055,.18,6,14),cobalt,0,.68,.20)
+ jaw.name='Jaw'
+ return group
+}
 function disposeObject(node:THREE.Object3D){
  node.traverse(child=>{
   if(child instanceof THREE.Mesh){
@@ -233,7 +254,8 @@ export class FaceMesh3DEngine{
    }else{
     root=id==='3d-lux-glasses'?makeGlasses():
        id==='3d-gold-crown'?makeCrown():
-       id==='3d-space-visor'?makeVisor():makeCap()
+       id==='3d-space-visor'?makeVisor():
+       id==='3d-expression'?makeExpressionMask():makeCap()
    }
    if(!this.alive||token!==this.request){disposeObject(root);return}
    this.model=root
@@ -280,6 +302,16 @@ export class FaceMesh3DEngine{
   this.mount.scale.setScalar(pose.width)
   this.mount.rotation.set(pose.pitch*.7,pose.yaw*.75,pose.roll)
   if(this.model){
+   const expr=frame.geometry.expression
+   const mouth=clamp(frame.blendshapes?.jawOpen??expr?.mouthOpen??0,0,1)
+   const blinkL=clamp(frame.blendshapes?.eyeBlinkLeft??(1-(expr?.leftEyeOpen??1)),0,1)
+   const blinkR=clamp(frame.blendshapes?.eyeBlinkRight??(1-(expr?.rightEyeOpen??1)),0,1)
+   const browUp=clamp(frame.blendshapes?.browInnerUp??0,0,1)
+   for(const name of ['EyeLeft','PupilLeft']){const node=this.model.getObjectByName(name);if(node)node.scale.y=Math.max(.15,1-blinkL*.85)}
+   for(const name of ['EyeRight','PupilRight']){const node=this.model.getObjectByName(name);if(node)node.scale.y=Math.max(.15,1-blinkR*.85)}
+   for(const name of ['BrowLeft','BrowRight']){const node=this.model.getObjectByName(name);if(node)node.position.y=-.25-browUp*.12}
+   const ring=this.model.getObjectByName('MouthRing');if(ring)ring.scale.y=.45+mouth*2.5
+   const jaw=this.model.getObjectByName('Jaw');if(jaw)jaw.position.y=.68+mouth*.22
    this.model.traverse(child=>{
     if(child instanceof THREE.Mesh){
       if(child.morphTargetDictionary&&child.morphTargetInfluences){
