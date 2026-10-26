@@ -14,6 +14,47 @@ const tabs:{id:Category;label:string}[]=[
 const STORAGE_KEY='spaktok.face-ar.favorites.v1'
 
 
+/** Scalable true SVG thumbnail (not a font emoji). The actual lens uses a
+ * physically based 3D GLB/WebGL renderer inside the viewer's SVG surface. */
+function RoyalCrownSvg(){
+ return <svg viewBox="0 0 72 72" className="size-11" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+   <linearGradient id="spak-crown-svg-gold" x1="0" y1="0" x2=".85" y2="1">
+    <stop stopColor="#fff6b9"/><stop offset=".30" stopColor="#e6ad56"/>
+    <stop offset=".57" stopColor="#b46b39"/><stop offset=".82" stopColor="#ffdc8a"/>
+    <stop offset="1" stopColor="#8f4e35"/>
+   </linearGradient>
+   <linearGradient id="spak-crown-svg-gem" x1="0" y1="0" x2="1" y2="1">
+    <stop stopColor="#f9d2ff"/><stop offset=".22" stopColor="#00ecff"/>
+    <stop offset=".46" stopColor="#9958f8"/><stop offset=".72" stopColor="#ff6aa7"/>
+    <stop offset="1" stopColor="#ffe689"/>
+   </linearGradient>
+   <radialGradient id="spak-crown-svg-light">
+    <stop stopColor="#fff" stopOpacity=".98"/><stop offset=".4" stopColor="#ffe6a0" stopOpacity=".75"/>
+    <stop offset="1" stopColor="#ffe6a0" stopOpacity="0"/>
+   </radialGradient>
+  </defs>
+  <path d="M6 49 L10 21 Q14 31 20 32 Q22 20 29 21 L36 7 L43 21 Q50 20 52 32 Q58 31 62 21 L66 49 Z"
+   fill="url(#spak-crown-svg-gold)" stroke="#fff1a3" strokeWidth="1.3" strokeLinejoin="round"/>
+  <path d="M8 48 Q17 35 24 42 Q18 27 26 25 Q36 37 36 39 Q36 37 46 25 Q54 27 48 42 Q55 35 64 48"
+   stroke="#fee2a2" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+  <path d="M10 49 Q36 56 62 49 L62 55 Q36 61 10 55 Z" fill="#bf8149" stroke="#ffdb91" strokeWidth="1.4"/>
+  <path d="M36 20 L49 33 L43 49 L36 54 L29 49 L23 33 Z" fill="url(#spak-crown-svg-gem)"
+   stroke="#ffeed7" strokeWidth="2" strokeLinejoin="round"/>
+  <path d="M36 20 L36 54 L23 33 Z" fill="#fff" fillOpacity=".13"/>
+  <path d="M36 20 L49 33 L36 40 L23 33 Z" fill="#fff" fillOpacity=".24"/>
+  <path d="M23 33 L36 40 L29 49 Z M49 33 L36 40 L43 49 Z" fill="#431a97" fillOpacity=".30"/>
+  {[[11,26],[20,34],[51,34],[61,26],[17,48],[55,48],[36,11],[18,54],[54,54]].map(([x,y],i)=>
+   <g key={i}>
+    <circle cx={x} cy={y} r={i===6?4.2:2.4} fill="#f2f9ff" stroke="#d7a870" strokeWidth="1"/>
+    <path d={`M${x-1.1} ${y} L${x+1.2} ${y} M${x} ${y-1.2} L${x} ${y+1.2}`}
+      stroke="#ffffff" strokeWidth=".55"/>
+   </g>)}
+  <circle cx="43" cy="25" r="9" fill="url(#spak-crown-svg-light)"/>
+  <path d="M42 18 L42 29 M37 23 L47 23" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round"/>
+ </svg>
+}
+
 function MakeupPreview({id}:{id:MakeupLookId}){
  const p=getMakeupPalette(id)
  return <svg viewBox="0 0 64 64" className="size-11" aria-hidden="true">
@@ -120,7 +161,7 @@ export function FaceMaskTray({value,onChange,visible,onToggle}:{
               <button type="button" className="flex w-full flex-col items-center gap-1" onClick={()=>onChange({...value,id:mask.id,strength:Math.max(.85,value.strength)})}
                 aria-label={'تفعيل '+mask.name} aria-pressed={value.id===mask.id}>
                 <span className="flex size-10 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#34456f]/50 to-[#101626]/40 text-[26px]" aria-hidden="true">
-                   {mask.group==='makeup'?<MakeupPreview id={mask.id as MakeupLookId}/>:mask.icon}
+                   {mask.id==='3d-gold-crown'?<RoyalCrownSvg/>:mask.group==='makeup'?<MakeupPreview id={mask.id as MakeupLookId}/>:mask.icon}
                  </span>
                 <span className="h-7 w-full overflow-hidden text-center text-[9px] leading-[14px] text-white/85">{mask.name}</span>
               </button>
