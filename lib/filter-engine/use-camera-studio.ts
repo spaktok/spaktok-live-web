@@ -5,6 +5,7 @@ import { FilterRenderer, type FaceGeometry } from './renderer'
 import { isFace3DSelected, needsFaceTracking, needsFaceFxTracking, needsSegmentation, neutralBeauty, neutralColor, neutralEffects, neutralFaceFx, resolveColor, type StudioState } from './params'
 import { loadFaceLandmarker, recoverFaceLandmarkerOnCpu, configureFace3DExtras, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
 import { drawFaceMask, drawCoverFrame } from './face-overlay'
+import {faceSvgPose,svgPoseTransform,paintSvgAccents} from './svg-ar-overlay'
 import {trackingIntervalMs,updatedMean} from './vision-scheduler'
 import type {FaceMesh3DEngine,Face3DFrame} from './face3d'
 import {stabilizeFaceMesh,hasFreshFace} from './face3d-tracking'
@@ -44,6 +45,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const threeCanvasRef=useRef<HTMLCanvasElement|null>(null)
+  const svgSurfaceRef=useRef<SVGSVGElement|null>(null)
+  const svgDecorRef=useRef<SVGGElement|null>(null)
   const threeEngineRef=useRef<FaceMesh3DEngine|null>(null)
   const face3DRef=useRef<Face3DFrame|null>(null)
   const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -231,6 +234,14 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
         ctx.save();ctx.globalAlpha=Math.max(0,Math.min(1,stateRef.current.face.strength))
         ctx.drawImage(threeCanvasRef.current,0,0,surface.width,surface.height)
         ctx.restore()
+        if(stateRef.current.face.id==='3d-gold-crown'){
+          const fresh=face3DRef.current
+          if(fresh&&hasFreshFace(fresh.timestamp,performance.now())){
+            const pose=faceSvgPose(faceRef.current,video.videoWidth,video.videoHeight,
+              surface.width,surface.height,mode==='user')
+            if(pose)paintSvgAccents(ctx,pose,stateRef.current.face.strength,performance.now()/1000)
+          }
+        }
       }
     }
     return true
@@ -362,6 +373,21 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
               video.videoWidth,video.videoHeight,overlay.width,overlay.height,
               facing==='user',now/1000)
           }
+        }
+        const decoration=svgDecorRef.current
+        if(decoration){
+          const surface=svgSurfaceRef.current
+          const fresh=face3DRef.current
+          const show=current.face.id==='3d-gold-crown' && !original && current.face.strength>0 &&
+            Boolean(threeEngineRef.current) && Boolean(fresh&&hasFreshFace(fresh.timestamp,now))
+          const pose=show&&surface?
+            faceSvgPose(faceRef.current,video.videoWidth,video.videoHeight,
+              surface.clientWidth,surface.clientHeight,facing==='user'):null
+          if(pose){
+            decoration.setAttribute('transform',svgPoseTransform(pose))
+            decoration.setAttribute('opacity',String(Math.max(0,Math.min(1,current.face.strength))))
+            decoration.style.display=''
+          }else decoration.style.display='none'
         }
         if(isFace3DSelected(current.face.id)&&threeEngineRef.current){
           try{
@@ -526,6 +552,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     canvasRef,
     arCanvasRef,
     threeCanvasRef,
+    svgSurfaceRef,
+    svgDecorRef,
     threeStatus,
     gpuAvailable,
     status,
