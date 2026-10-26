@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { FilterRenderer, type FaceGeometry } from './renderer'
-import { isFace3DSelected, needsFaceTracking, needsFaceFxTracking, needsSegmentation, neutralBeauty, neutralColor, neutralEffects, neutralFaceFx, resolveColor, type StudioState } from './params'
+import { isFace3DSelected, neutralBeauty, neutralColor, neutralEffects, neutralFaceFx, resolveColor, type StudioState } from './params'
+import { composeRealityFrame } from './reality-compositor'
+import { createRealityExecutionPlan } from './reality-pipeline'
 import { loadFaceLandmarker, recoverFaceLandmarkerOnCpu, configureFace3DExtras, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
-import { drawFaceMask, drawCoverFrame } from './face-overlay'
+import { drawFaceMask } from './face-overlay'
 import {trackingIntervalMs,updatedMean} from './vision-scheduler'
 import type {FaceMesh3DEngine,Face3DFrame} from './face3d'
 import {stabilizeFaceMesh,hasFreshFace} from './face3d-tracking'
@@ -47,9 +49,10 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const threeEngineRef=useRef<FaceMesh3DEngine|null>(null)
   const face3DRef=useRef<Face3DFrame|null>(null)
   const compositeCanvasRef = useRef<HTMLCanvasElement | null>(null)
-  const recordingNativeArRef=useRef(false)
-  const usingNativeArRef=useRef(false)
+  const recordingCompositeRef=useRef(false)
+  const compositeArRef=useRef(false)
   const rendererRef = useRef<FilterRenderer | null>(null)
+  const filteredFrameReadyRef = useRef(false)
   const streamRef = useRef<MediaStream | null>(null)
   const stateRef = useRef(state)
   const faceRef = useRef<FaceGeometry | null>(null)
@@ -80,10 +83,11 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
 
   stateRef.current = state
   activeRef.current = !paused
-  usingNativeArRef.current = needsFaceFxTracking(state.face)
+  const executionPlan = createRealityExecutionPlan(state)
+  compositeArRef.current = executionPlan.faceOverlay
 
-  const needsFace = needsFaceTracking(state.beauty) || needsFaceFxTracking(state.face)
-  const needsMask = needsSegmentation(state.effects)
+  const needsFace = executionPlan.trackFace
+  const needsMask = executionPlan.trackPerson
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop())
@@ -164,6 +168,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       ??{width:Math.round(chooseOutputHeight()*aspect),height:chooseOutputHeight()}
     canvas.height=initial.height
     canvas.width=initial.width
+    filteredFrameReadyRef.current = false
     try {
       rendererRef.current = new FilterRenderer(canvas)
       setGpuAvailable(true)
@@ -200,6 +205,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       window.removeEventListener('resize',onViewportChange)
       rendererRef.current?.dispose()
       rendererRef.current = null
+      filteredFrameReadyRef.current = false
       compositeCanvasRef.current = null
     }
   }, [aspect])
@@ -221,21 +227,18 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     }
   }, [needsFace, needsMask])
 
+  /** All photo/video/live outputs composite the SAME graded GPU frame + AR layers. */
   const drawCompositeFrame = (video:HTMLVideoElement, mode:Facing, layer:HTMLCanvasElement|null)=>{
-    const surface=compositeCanvasRef.current
-    const ctx=surface?.getContext('2d',{alpha:false})
-    if(!ctx||!surface)return false
-    if(!drawCoverFrame(ctx,video,surface.width,surface.height,mode==='user'))return false
-    if(!compareRef.current){
-      if(layer)ctx.drawImage(layer,0,0,surface.width,surface.height)
-      if(isFace3DSelected(stateRef.current.face.id)&&threeEngineRef.current&&threeCanvasRef.current){
-        ctx.save();ctx.globalAlpha=Math.max(0,Math.min(1,stateRef.current.face.strength))
-        ctx.drawImage(threeCanvasRef.current,0,0,surface.width,surface.height)
-        ctx.restore()
-
-      }
-    }
-    return true
+    return composeRealityFrame({
+      target:compositeCanvasRef.current,
+      video,
+      filtered:filteredFrameReadyRef.current?canvasRef.current:null,
+      overlay:layer,
+      face3d:isFace3DSelected(stateRef.current.face.id)?threeCanvasRef.current:null,
+      mirror:mode==='user',
+      showEffects:!compareRef.current,
+      effectOpacity:stateRef.current.face.strength,
+    })
   }
 
   useEffect(()=>{
@@ -269,8 +272,9 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       // Serialize ML inference and keep WebGL rendering independent.
       if (visionBusyRef.current || document.hidden) return
       const current = stateRef.current
-      const wantsFace = needsFaceTracking(current.beauty) || needsFaceFxTracking(current.face)
-      const wantsMask = needsSegmentation(current.effects)
+      const plan = createRealityExecutionPlan(current)
+      const wantsFace = plan.trackFace
+      const wantsMask = plan.trackPerson
       if (!wantsFace && !wantsMask) return
       const cores=navigator.hardwareConcurrency||4
       const memory=(navigator as Navigator & {deviceMemory?:number}).deviceMemory
@@ -360,7 +364,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
         const overlayCtx=overlay?.getContext('2d')
         if(overlayCtx && overlay){
           overlayCtx.clearRect(0,0,overlay.width,overlay.height)
-          if(usingNativeArRef.current && !original){
+          if(compositeArRef.current && !original){
             drawFaceMask(overlayCtx,faceRef.current,current.face,
               video.videoWidth,video.videoHeight,overlay.width,overlay.height,
               facing==='user',now/1000)
@@ -379,25 +383,33 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
             setThreeStatus('unavailable')
           }
         }
-        if(usingNativeArRef.current){
-          // Native video is composited by the browser for the preview; do not
-          // re-upload every face frame to WebGL on mobile graphics drivers.
-          if(recordingNativeArRef.current) drawCompositeFrame(video,facing,overlay)
-        }else if(rendererRef.current){
+        // Always render the graded/beautified camera frame, even with an AR
+        // lens selected. Otherwise selecting a crown silently disables color
+        // grading and face beauty. The 2D/3D layers remain above this base.
+        if(rendererRef.current){
           try{
-            rendererRef.current.render({
-              source: video,
-              color: original ? neutralColor : resolveColor(current),
-              beauty: original ? neutralBeauty : current.beauty,
-              effects: original ? neutralEffects : current.effects,
-              faceFx: neutralFaceFx,
-              mirror: facing === 'user',
-              face: faceRef.current,
-              mask: maskRef.current,
-              time: now / 1000,
-            })
-          }catch{setGpuAvailable(false)}
+            filteredFrameReadyRef.current=rendererRef.current.render({
+              source:video,
+              color:original?neutralColor:resolveColor(current),
+              beauty:original?neutralBeauty:current.beauty,
+              effects:original?neutralEffects:current.effects,
+              faceFx:neutralFaceFx,
+              mirror:facing==='user',
+              face:faceRef.current,
+              mask:maskRef.current,
+              time:now/1000,
+            })===true
+          }catch{
+            // Preserve camera usability when a mobile WebGL context fails.
+            filteredFrameReadyRef.current=false
+            rendererRef.current?.dispose()
+            rendererRef.current=null
+            setGpuAvailable(false)
+          }
         }
+        // Compose AFTER the latest GPU draw: recorded output and photo
+        // captures must include the same color grade, makeup and 3D effect.
+        if(recordingCompositeRef.current)drawCompositeFrame(video,facing,overlay)
         const fps=fpsRef.current
         fps.frames+=1
         if(fps.last===0)fps.last=now
@@ -451,7 +463,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   }, [])
 
   const capturePhoto = useCallback((quality=0.95)=>{
-    if(usingNativeArRef.current){
+    if(compositeArRef.current){
       const video=videoRef.current
       if(video?.videoWidth){
         drawCompositeFrame(video,facing,arCanvasRef.current)
@@ -459,7 +471,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       }
       return null
     }
-    if(!rendererRef.current && videoRef.current?.videoWidth){
+    if(!filteredFrameReadyRef.current && videoRef.current?.videoWidth){
       drawCompositeFrame(videoRef.current,facing,null)
       return compositeCanvasRef.current?.toDataURL('image/jpeg',quality)??null
     }
@@ -480,7 +492,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
 
   /** Filtered output stream (canvas video + mic audio) — used for recording and live broadcast. */
   const getOutputStream = useCallback(() => {
-    const canvas = usingNativeArRef.current||!rendererRef.current?
+    const canvas = compositeArRef.current||!filteredFrameReadyRef.current?
       compositeCanvasRef.current:canvasRef.current
     if (!canvas) return null
     if(canvas===compositeCanvasRef.current && videoRef.current?.videoWidth)
@@ -491,9 +503,9 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   }, [facing])
 
   const startRecording = useCallback(() => {
-    recordingNativeArRef.current = usingNativeArRef.current||!rendererRef.current
+    recordingCompositeRef.current = compositeArRef.current||!filteredFrameReadyRef.current
     const output = getOutputStream()
-    if (!output || typeof MediaRecorder === 'undefined') { recordingNativeArRef.current=false; return false }
+    if (!output || typeof MediaRecorder === 'undefined') { recordingCompositeRef.current=false; return false }
     const mimeType = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find((type) =>
       MediaRecorder.isTypeSupported(type),
     )
@@ -515,7 +527,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
           return
         }
         recorder.onstop = () => {
-          recordingNativeArRef.current=false
+          recordingCompositeRef.current=false
           setRecording(false)
           resolve(new Blob(chunksRef.current, { type: recorder.mimeType || 'video/webm' }))
         }

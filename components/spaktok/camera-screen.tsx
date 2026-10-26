@@ -231,10 +231,10 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
           aria-label="معاينة الكاميرا الحقيقية"/>
         <canvas ref={camera.canvasRef}
           className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity duration-200',
-            camera.status==='ready'&&camera.gpuAvailable&&studio.face.id==='none'?'opacity-100':'opacity-0')}
+            camera.status==='ready'&&camera.gpuAvailable?'opacity-100':'opacity-0')}
           aria-hidden="true"/>
-        {/* The native camera and transparent 2D/3D canvases share
-            identical CSS object-fit cover bounds: no SVG foreignObject. */}
+        {/* GPU-graded camera stays below the 2D/3D AR passes. All surfaces
+            share the same crop, viewport dimensions and selfie mirroring. */}
         <canvas ref={camera.arCanvasRef}
           className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover',
             studio.face.id==='none'?'opacity-0':'opacity-100')}
