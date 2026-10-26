@@ -382,7 +382,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     const output = canvas.captureStream(30)
     streamRef.current?.getAudioTracks().forEach((track) => output.addTrack(track))
     return output
-  }, [])
+  }, [facing])
 
   const startRecording = useCallback(() => {
     recordingNativeArRef.current = usingNativeArRef.current||!rendererRef.current
