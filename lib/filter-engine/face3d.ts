@@ -178,6 +178,21 @@ function disposeObject(node:THREE.Object3D){
 }
 function disposeShared(){ /* fixed shared PBR materials are kept while the module lives */ }
 
+/** Camera pixel convention: X right, Y down. Shared by constructor, resize,
+ * and regression tests so a future refactor cannot reintroduce a flipped face. */
+export function createVideoAlignedCamera(width:number,height:number){
+ const camera=new THREE.OrthographicCamera(0,width,0,height,.1,2400)
+ camera.position.set(0,0,1200)
+ camera.lookAt(0,0,0)
+ camera.updateMatrixWorld(true)
+ return camera
+}
+export function resizeVideoAlignedCamera(camera:THREE.OrthographicCamera,width:number,height:number){
+ camera.left=0;camera.right=width;camera.top=0;camera.bottom=height
+ camera.updateProjectionMatrix()
+ camera.updateMatrixWorld(true)
+}
+
 export class FaceMesh3DEngine{
  readonly renderer:THREE.WebGLRenderer
  readonly scene=new THREE.Scene()
@@ -213,8 +228,7 @@ export class FaceMesh3DEngine{
   // Canvas, CSS object-fit and MediaPipe all use Y increasing DOWN.
   // OrthographicCamera(left,right,top,bottom): top MUST be 0 and bottom H.
   // The previous (0,width,height,0) inverted the entire face overlay vertically.
-  this.camera=new THREE.OrthographicCamera(0,width,0,height,.1,2400)
-  this.camera.position.set(0,0,1200);this.camera.lookAt(0,0,0)
+  this.camera=createVideoAlignedCamera(width,height)
   this.scene.add(new THREE.HemisphereLight(0xe7f3ff,0x5a6d8e,2.1))
   const main=new THREE.DirectionalLight(0xffefd8,3.1)
   main.position.set(-250,-400,800);this.scene.add(main)
@@ -246,8 +260,7 @@ export class FaceMesh3DEngine{
   this.width=w;this.height=h
   this.renderer.setSize(w,h,false)
   // Keep identical projection convention after size changes (Y downward).
-  this.camera.left=0;this.camera.right=w;this.camera.top=0;this.camera.bottom=h
-  this.camera.updateProjectionMatrix()
+  resizeVideoAlignedCamera(this.camera,w,h)
  }
  async setLens(id:Face3DId):Promise<boolean>{
   if(this.current===id)return this.lensReady

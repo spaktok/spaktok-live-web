@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest'
 import * as THREE from 'three'
 import {FaceLandmarker} from '@mediapipe/tasks-vision'
-import {face3DPresets,isFace3DId,viewportCrop,getHeadPose,trianglesFromConnections} from './face3d'
+import {face3DPresets,isFace3DId,viewportCrop,getHeadPose,trianglesFromConnections,createVideoAlignedCamera,resizeVideoAlignedCamera} from './face3d'
 import type {Face3DFrame} from './face3d'
 import {faceFxCatalog} from './params'
 const geometry={
@@ -38,9 +38,7 @@ describe('SpakTok tracked 3D lenses',()=>{
  it('projects 3D vertices to the same unflipped Y as the camera video',()=>{
    // Regression for the upside-down floating phantom face on Android.
    const width=360,height=640
-   const camera=new THREE.OrthographicCamera(0,width,0,height,.1,2400)
-   camera.position.set(0,0,1200);camera.lookAt(0,0,0)
-   camera.updateMatrixWorld(true)
+   const camera=createVideoAlignedCamera(width,height)
    const toScreen=(x:number,y:number)=>{
      const ndc=new THREE.Vector3(x,y,18).project(camera)
      return {x:(ndc.x+1)*width/2,y:(1-ndc.y)*height/2}
@@ -53,6 +51,10 @@ describe('SpakTok tracked 3D lenses',()=>{
    // The selfie mirror only reflects X; never Y.
    expect(toScreen(width-120,510).x).toBeCloseTo(width-120)
    expect(toScreen(width-120,510).y).toBeCloseTo(510)
+   resizeVideoAlignedCamera(camera,720,1280)
+   const projected=new THREE.Vector3(120,1020,18).project(camera)
+   expect((1-projected.y)*1280/2).toBeCloseTo(1020)
+   expect((projected.x+1)*720/2).toBeCloseTo(120)
  })
  it('rejects invalid face geometry and incomplete tracked meshes',()=>{
    expect(viewportCrop(0,720,360,640)).toBeNull()
