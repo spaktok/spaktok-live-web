@@ -21,6 +21,8 @@ export interface FaceGeometry {
   rightBlush: Point
   mouthWidth: number
   width: number
+  /** On-device, dimensionless expressions (0..1); never persisted. */
+  expression?: { mouthOpen:number; leftEyeOpen:number; rightEyeOpen:number }
 }
 
 export interface RenderInput {

@@ -109,6 +109,18 @@ export function toFaceGeometry(landmarks: Landmark[], aspect: number): FaceGeome
     rightBlush: pt(landmarks[425]),
     mouthWidth: Math.hypot((landmarks[291].x - landmarks[61].x) * aspect, landmarks[291].y - landmarks[61].y),
     width: Math.hypot(dx, dy),
+    expression: {
+      mouthOpen: Math.min(1,Math.max(0,(
+        Math.hypot((landmarks[13].x-landmarks[14].x)*aspect,landmarks[13].y-landmarks[14].y)/
+        Math.max(0.01, Math.hypot((landmarks[61].x-landmarks[291].x)*aspect,landmarks[61].y-landmarks[291].y))
+        -0.045)*3.5)),
+      leftEyeOpen: Math.min(1,Math.max(0,
+        Math.hypot((landmarks[159].x-landmarks[145].x)*aspect,landmarks[159].y-landmarks[145].y)/
+        Math.max(0.01,Math.hypot((landmarks[33].x-landmarks[133].x)*aspect,landmarks[33].y-landmarks[133].y)) / 0.23)),
+      rightEyeOpen: Math.min(1,Math.max(0,
+        Math.hypot((landmarks[386].x-landmarks[374].x)*aspect,landmarks[386].y-landmarks[374].y)/
+        Math.max(0.01,Math.hypot((landmarks[362].x-landmarks[263].x)*aspect,landmarks[362].y-landmarks[263].y)) / 0.23)),
+    },
   }
 }
 
@@ -119,7 +131,14 @@ export function smoothFace(previous: FaceGeometry | null, next: FaceGeometry, t 
   if (!previous) return next
   const out = { ...next }
   for (const key of Object.keys(next) as (keyof FaceGeometry)[]) {
-    if (key === 'width' || key === 'mouthWidth') out[key] = previous[key] + (next[key] - previous[key]) * t
+    if (key === 'expression') {
+      if(previous.expression && next.expression) out.expression={
+        mouthOpen:previous.expression.mouthOpen*(1-t)+next.expression.mouthOpen*t,
+        leftEyeOpen:previous.expression.leftEyeOpen*(1-t)+next.expression.leftEyeOpen*t,
+        rightEyeOpen:previous.expression.rightEyeOpen*(1-t)+next.expression.rightEyeOpen*t,
+      }
+    }
+    else if (key === 'width' || key === 'mouthWidth') out[key] = previous[key] + (next[key] - previous[key]) * t
     else out[key] = lerpPoint(previous[key] as Point, next[key] as Point, t) as never
   }
   return out
