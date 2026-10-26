@@ -15,6 +15,7 @@ import type {FaceFxId,MakeupOverrides} from './params'
 import {makeupLooks,isMakeupLook} from './makeup3d'
 import {FaceMakeupLayer} from './makeup3d-render'
 import {makePremiumAccessory} from './face3d-premium'
+import {prepareUploadedCrown,UPLOADED_CROWN_MOBILE} from './crown-uploaded-asset'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -32,7 +33,7 @@ export const isFace3DId=(id:string):id is Face3DId=>face3DPresets.some(x=>x.id==
 // No untrusted remote model URLs or arbitrary asset data can be supplied.
 const MODEL_ASSETS:Partial<Record<Face3DId,string>>={
  '3d-crystal':'/face-assets/spaktok-crystal.glb',
- '3d-gold-crown':'/face-assets/spaktok-royal-couture.glb?v=20261026-tiara-3',
+ '3d-gold-crown':UPLOADED_CROWN_MOBILE,
 }
 const clamp=(n:number,low:number,high:number)=>Math.min(high,Math.max(low,n))
 export interface Face3DFrame{
@@ -183,10 +184,14 @@ function disposeObject(node:THREE.Object3D){
  node.traverse(child=>{
   if(child instanceof THREE.Mesh){
    child.geometry.dispose()
-   // Shared production materials are reusable; dispose only loaded model materials.
+   // Release imported model textures on lens switch to avoid leaking GPU memory.
    const materials=Array.isArray(child.material)?child.material:[child.material]
-   for(const m of materials) if(![CHROME,GOLD,BLACK,GLASS].includes(m as never)){
-      m.dispose()
+   for(const m of materials)if(![CHROME,GOLD,BLACK,GLASS].includes(m as never)){
+     for(const key of ['map','normalMap','roughnessMap','metalnessMap','alphaMap','emissiveMap','aoMap'] as const){
+       const t=(m as THREE.MeshStandardMaterial)[key]
+       if(t instanceof THREE.Texture)t.dispose()
+     }
+     m.dispose()
    }
   }
  })
@@ -337,8 +342,13 @@ export class FaceMesh3DEngine{
     try{
      const parsed=await this.loader.loadAsync(asset)
      root=parsed.scene
+     if(id==='3d-gold-crown'){
+       // The owner GLB is in meters, +Y up; screen landmarks use +Y down.
+       // Align to headband first, then attach to tracked forehead landmark 10.
+       prepareUploadedCrown(root)
+       this.setupStudioEnvironment()
+     }
      this.modelQuality='hd'
-     if(id==='3d-gold-crown')this.setupStudioEnvironment()
     }catch{
      // Keep the camera operational if the production GLB has not arrived
      // or a browser cannot decode it. Never claim this is the HD model.
