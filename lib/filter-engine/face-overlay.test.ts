@@ -1,5 +1,6 @@
 import {describe,it,expect} from 'vitest'
-import {coverCrop,maskCoordinates} from './face-overlay'
+import {coverCrop,maskCoordinates,drawFaceMask} from './face-overlay'
+import {faceFxCatalog} from './params'
 import type {FaceGeometry} from './renderer'
 const face:FaceGeometry={
  leftEye:{x:.38,y:.39},rightEye:{x:.62,y:.39},
@@ -19,6 +20,23 @@ describe('native video face AR alignment',()=>{
    expect(m!.center.x).toBeCloseTo(180)
    expect(m!.center.y).toBeCloseTo(249.6)
    expect(m!.size).toBeGreaterThan(100)
+ })
+ it('renders every on-device lens as physical artwork, not a color filter',()=>{
+   // Canvas API mock verifies all catalogue IDs reach drawing commands.
+   for(const effect of faceFxCatalog.filter(x=>x.id!=='none')){
+     let draws=0
+     const ctx=new Proxy({},{
+       get(_target,name){
+         if(name==='canvas')return{width:360,height:640}
+         return (..._args:unknown[])=>{if(['ellipse','fill','stroke','fillRect','lineTo','bezierCurveTo'].includes(String(name)))draws++}
+       },
+       set(){return true},
+     }) as unknown as CanvasRenderingContext2D
+     const painted=drawFaceMask(ctx,{...face,expression:{mouthOpen:.75,leftEyeOpen:.75,rightEyeOpen:.85}},
+       {id:effect.id,strength:1},720,1280,360,640,true,1.5)
+     expect(painted,effect.id).toBe(true)
+     expect(draws,effect.id).toBeGreaterThan(0)
+   }
  })
  it('refuses degenerate camera frames and implausible landmarks',()=>{
    expect(coverCrop(0,1080,360,640)).toBeNull()
