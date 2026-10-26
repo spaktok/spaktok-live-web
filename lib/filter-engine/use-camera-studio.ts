@@ -5,6 +5,7 @@ import { FilterRenderer, type FaceGeometry } from './renderer'
 import { needsFaceTracking, needsFaceFxTracking, needsSegmentation, neutralBeauty, neutralColor, neutralEffects, neutralFaceFx, resolveColor, type StudioState } from './params'
 import { loadFaceLandmarker, recoverFaceLandmarkerOnCpu, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
 import { drawFaceMask, drawCoverFrame } from './face-overlay'
+import {trackingIntervalMs,updatedMean} from './vision-scheduler'
 
 export type Facing = 'user' | 'environment'
 export type CameraStatus = 'idle' | 'starting' | 'ready' | 'denied' | 'unsupported' | 'error'
@@ -48,6 +49,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const faceRef = useRef<FaceGeometry | null>(null)
   const maskRef = useRef<{ data: Uint8Array; width: number; height: number } | null>(null)
   const lastVisionRef = useRef(0)
+  const inferenceMsRef = useRef(0)
   const visionBusyRef = useRef(false)
   const activeRef = useRef(!paused)
   const fpsRef = useRef({last:0,frames:0})
@@ -211,7 +213,10 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       const wantsFace = needsFaceTracking(current.beauty) || needsFaceFxTracking(current.face)
       const wantsMask = needsSegmentation(current.effects)
       if (!wantsFace && !wantsMask) return
-      if (now - lastVisionRef.current < (wantsMask ? 150 : 90)) return
+      const cores=navigator.hardwareConcurrency||4
+      const memory=(navigator as Navigator & {deviceMemory?:number}).deviceMemory
+      const interval=trackingIntervalMs(inferenceMsRef.current,cores,memory,wantsMask)
+      if(now-lastVisionRef.current<interval)return
       lastVisionRef.current = now
       visionBusyRef.current = true
       try {
@@ -254,7 +259,10 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
           maskRef.current = { data: bytes, width: mask.width, height: mask.height }
         })
       }
-      } finally { visionBusyRef.current = false }
+      } finally {
+        inferenceMsRef.current=updatedMean(inferenceMsRef.current,performance.now()-now)
+        visionBusyRef.current=false
+      }
     }
 
     const draw = () => {
