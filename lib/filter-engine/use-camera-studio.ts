@@ -8,6 +8,7 @@ import { drawFaceMask, drawCoverFrame } from './face-overlay'
 import {trackingIntervalMs,updatedMean} from './vision-scheduler'
 import type {FaceMesh3DEngine,Face3DFrame} from './face3d'
 import {stabilizeFaceMesh,hasFreshFace} from './face3d-tracking'
+import {cameraSurfaceDimensions} from './preview-surface'
 
 export type Facing = 'user' | 'environment'
 export type CameraStatus = 'idle' | 'starting' | 'ready' | 'denied' | 'unsupported' | 'error'
@@ -156,9 +157,12 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const height = chooseOutputHeight()
-    canvas.height = height
-    canvas.width = Math.round(height * aspect)
+    const video=videoRef.current
+    const rect=video?.getBoundingClientRect()
+    const initial=cameraSurfaceDimensions(rect?.width??0,rect?.height??0,chooseOutputHeight())
+      ??{width:Math.round(chooseOutputHeight()*aspect),height:chooseOutputHeight()}
+    canvas.height=initial.height
+    canvas.width=initial.width
     try {
       rendererRef.current = new FilterRenderer(canvas)
       setGpuAvailable(true)
@@ -172,7 +176,27 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     const composition=document.createElement('canvas')
     composition.width=canvas.width;composition.height=canvas.height
     compositeCanvasRef.current=composition
+    const resizeToActualViewport=()=>{
+      const videoRect=video?.getBoundingClientRect()
+      const desired=cameraSurfaceDimensions(videoRect?.width??0,videoRect?.height??0,chooseOutputHeight())
+      if(!desired)return
+      if(Math.abs(canvas.width-desired.width)<2&&canvas.height===desired.height)return
+      canvas.width=desired.width;canvas.height=desired.height
+      if(overlay){overlay.width=desired.width;overlay.height=desired.height}
+      if(composition){composition.width=desired.width;composition.height=desired.height}
+      if(threeCanvasRef.current){
+        if(threeEngineRef.current)threeEngineRef.current.resize(desired.width,desired.height)
+        else{threeCanvasRef.current.width=desired.width;threeCanvasRef.current.height=desired.height}
+      }
+    }
+    const resizeObserver=typeof ResizeObserver!=='undefined' ? new ResizeObserver(resizeToActualViewport) : null
+    if(video)resizeObserver?.observe(video)
+    const onViewportChange=()=>resizeToActualViewport()
+    window.addEventListener('resize',onViewportChange,{passive:true})
+    resizeToActualViewport()
     return () => {
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize',onViewportChange)
       rendererRef.current?.dispose()
       rendererRef.current = null
       compositeCanvasRef.current = null
