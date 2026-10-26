@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js'
+import {mergeGeometries,mergeVertices} from 'three/addons/utils/BufferGeometryUtils.js'
 /**
  * Original, authored 3D accessory geometry with PBR materials.
  * Fabric seams, curved arms, lens curvature, metal bezels and micro-gems
@@ -108,13 +108,13 @@ function jewelSetting(g:THREE.Group,x:number,y:number,z:number,w:number,h:number
  const gemMaterials=g.userData.gemMaterials as Map<number,THREE.Material>|undefined
  let colored=gemMaterials?.get(color)
  if(!colored){colored=jewelMaterial(color);gemMaterials?.set(color,colored)}
- const bezel=mesh(g,new THREE.SphereGeometry(1,20,14),gold,x,y,z-.036)
+ const bezel=mesh(g,new THREE.SphereGeometry(1,12,8),gold,x,y,z-.036)
  bezel.scale.set(w*1.14,h*1.12,.055)
- const gem=mesh(g,jewelCut(w,h,.09,16),colored,x,y,z+.058)
+ const gem=mesh(g,jewelCut(w,h,.09,12),colored,x,y,z+.058)
  gem.rotation.y=.05
  // Four prongs hold the jewel into its real raised metal setting.
  for(const sx of [-1,1])for(const sy of [-1,1]){
-  const prong=mesh(g,new THREE.SphereGeometry(.013,8,6),gold,
+  const prong=mesh(g,new THREE.SphereGeometry(.013,6,4),gold,
    x+sx*w*.60,y+sy*h*.59,z+.11)
   prong.scale.set(1.2,1.1,.8)
  }
@@ -161,7 +161,10 @@ function combineStaticGeometry(group:THREE.Group):THREE.Group{
   const merged=mergeGeometries(list,false)
   list.forEach(geo=>geo.dispose())
   if(!merged)throw new Error('crown_batch_failed')
-  const batch=new THREE.Mesh(merged,material)
+  // Weld equal vertices after batching to reduce GLB and GPU memory.
+  const welded=mergeVertices(merged,1e-5)
+  merged.dispose()
+  const batch=new THREE.Mesh(welded,material)
   batch.frustumCulled=false
   group.add(batch)
  }
