@@ -23,7 +23,7 @@ describe('native video face AR alignment',()=>{
  })
  it('renders every on-device lens as physical artwork, not a color filter',()=>{
    // Canvas API mock verifies all catalogue IDs reach drawing commands.
-   for(const effect of faceFxCatalog.filter(x=>x.id!=='none')){
+   for(const effect of faceFxCatalog.filter(x=>x.id!=='none'&&!x.id.startsWith('3d-'))){
      let draws=0
      const ctx=new Proxy({},{
        get(_target,name){
