@@ -114,6 +114,14 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
           video.muted = true
           await video.play().catch(() => undefined)
         }
+        // Never show a black, apparently-ready camera when the WebGL face shader
+        // is unsupported or failed to compile on this device.
+        if (!rendererRef.current) {
+          setStatus('error')
+          stream.getTracks().forEach(track=>track.stop())
+          streamRef.current=null
+          return
+        }
         setStatus('ready')
 
         navigator.mediaDevices
