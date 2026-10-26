@@ -98,11 +98,17 @@ export const faceFxCatalog = [
   { id: 'space-helmet', name: 'خوذة فضاء', icon: '🧑‍🚀', group: 'fantasy' },
   { id: 'clown-nose', name: 'أنف مهرج', icon: '🤡', group: 'fun' },
   { id: 'lightning-bolt', name: 'برق الوجه', icon: '⚡', group: 'fun' },
+  { id: '3d-lux-glasses', name: 'نظارات ثلاثية', icon: '🥽', group: '3d' },
+  { id: '3d-gold-crown', name: 'تاج ثلاثي', icon: '👑', group: '3d' },
+  { id: '3d-space-visor', name: 'خوذة فضاء', icon: '🪐', group: '3d' },
+  { id: '3d-metal-cap', name: 'قبعة معدنية', icon: '🧢', group: '3d' },
+  { id: '3d-crystal', name: 'جوهرة ثلاثية', icon: '💎', group: '3d' },
 ] as const
 export type FaceFxId = (typeof faceFxCatalog)[number]['id']
 export const faceFxCode = (id: FaceFxId) => Math.max(0, faceFxCatalog.findIndex(x=>x.id===id))
 export type FaceFxParams = { id: FaceFxId; strength: number }
 export const neutralFaceFx: FaceFxParams = { id: 'none', strength: 0.85 }
+export const isFace3DSelected = (id:FaceFxId) => id.startsWith('3d-')
 export const needsFaceFxTracking = (face: FaceFxParams) => face.id !== 'none' && face.strength > 0
 
 export interface StudioState {
