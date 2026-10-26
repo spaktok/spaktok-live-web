@@ -62,23 +62,147 @@ function luxGlasses():THREE.Group{
  path(g,[[-.081,-.057,.288],[0,-.11,.316],[.081,-.057,.288]],.007,paleGold,22)
  return g
 }
+/** Faceted gemstone mesh: point-cut, intentionally non-spherical faces to
+ * produce realistic angular specular highlights under the mobile PBR lights.
+ * All polygon faces have flat normals rather than smoothly rounded shading.
+ */
+function jewelCut(width:number,height:number,depth:number,steps=14){
+ const vertices:number[]=[]
+ const midpoint=(x:number,y:number,z:number)=>[x,y,z]
+ const rings: number[][]=[]
+ for(let i=0;i<steps;i++){
+  const a=i*Math.PI*2/steps
+  // Pointed teardrop/marquise silhouette. Narrow tips at the two ends.
+  const x=width*Math.sin(a)*Math.pow(Math.abs(Math.sin(a)),.26)
+  const y=height*Math.cos(a)
+  rings.push([x,y,depth*.13])
+ }
+ const pushFace=(a:number[],b:number[],c:number[])=>vertices.push(...a,...b,...c)
+ const front=midpoint(0,0,depth),back=midpoint(0,0,-depth*.66)
+ for(let i=0;i<steps;i++){
+  const j=(i+1)%steps
+  const a=rings[i],b=rings[j]
+  const insetA=midpoint(a[0]*.73,a[1]*.73,depth*.73)
+  const insetB=midpoint(b[0]*.73,b[1]*.73,depth*.73)
+  pushFace(a,b,insetB);pushFace(a,insetB,insetA)
+  pushFace(insetA,insetB,front)
+  pushFace(b,a,back)
+ }
+ const geometry=new THREE.BufferGeometry()
+ geometry.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3))
+ geometry.computeVertexNormals()
+ return geometry
+}
+function jewelMaterial(color:number){
+ return new THREE.MeshPhysicalMaterial({
+  color,metalness:.06,roughness:.075,clearcoat:1,
+  clearcoatRoughness:.045,transmission:.12,thickness:.38,
+  ior:2.0,iridescence:.68,iridescenceIOR:1.36,
+  emissive:new THREE.Color(color).multiplyScalar(.095),
+  side:THREE.DoubleSide,
+ })
+}
+function jewelSetting(g:THREE.Group,x:number,y:number,z:number,w:number,h:number,color:number){
+ const gold=metal(0xd99069,.17)
+ const bezel=mesh(g,new THREE.SphereGeometry(1,20,14),gold,x,y,z-.036)
+ bezel.scale.set(w*1.14,h*1.12,.055)
+ const gem=mesh(g,jewelCut(w,h,.09,16),jewelMaterial(color),x,y,z+.058)
+ gem.rotation.y=.05
+ // Four prongs hold the jewel into its real raised metal setting.
+ for(const sx of [-1,1])for(const sy of [-1,1]){
+  const prong=mesh(g,new THREE.SphereGeometry(.013,8,6),gold,
+   x+sx*w*.60,y+sy*h*.59,z+.11)
+  prong.scale.set(1.2,1.1,.8)
+ }
+ return gem
+}
+function spiral(g:THREE.Group,cx:number,cy:number,z:number,scale:number,material:THREE.Material,flip=1){
+ const points:number[][]=[]
+ for(let i=0;i<=38;i++){
+  const t=i/38,phi=t*Math.PI*2.05+.25
+  const radius=scale*(1-.87*t)
+  points.push([cx+flip*radius*Math.cos(phi),cy+radius*Math.sin(phi),z+.025*Math.sin(phi)])
+ }
+ path(g,points,.009,material,40)
+}
 function coutureCrown():THREE.Group{
- const g=new THREE.Group(),gold=metal(0xe4af43,.21),rose=metal(0xf4c5aa,.2)
- const stone=metal(0xc6deef,.17)
- mesh(g,new THREE.CylinderGeometry(.44,.48,.17,56),gold,0,-.6,0)
- for(const y of [-.69,-.57,-.51]){
-  mesh(g,new THREE.TorusGeometry(.46,.019,10,56),y===-.57?rose:gold,0,y,.0).rotation.x=Math.PI/2
+ // Three-dimensional, open-filigree royal tiara designed for the user's
+ // gemstone crown reference, rather than an emoji or a flat sprite.
+ const g=new THREE.Group()
+ g.name='SpakTokRoyalCoutureCrown'
+ const roseGold=metal(0xe6a17c,.18)
+ const platinum=metal(0xc7c8e1,.19)
+ const fineGold=metal(0xf6d1a3,.14)
+ const darkMetal=metal(0x794c51,.24)
+ // Light curved frame fitting the skull, NOT a solid opaque cylinder.
+ for(const y of [-.59,-.55,-.51]){
+  const curve:number[][]=[]
+  for(let i=0;i<=48;i++){
+   const x=(i/48-.5)*.99
+   const back=.045-.20*Math.pow(Math.abs(x)/.50,2)
+   curve.push([x,y-.025*Math.cos(x*2),back])
+  }
+  path(g,curve,y===-.55?.017:.009,y===-.55?roseGold:fineGold,48)
  }
- for(let i=0;i<9;i++){
-  const x=(i-4)*.1
-  const peak=-.83-.16*(1-Math.abs(i-4)/4)
-  path(g,[[x-.06,-.54,.11],[x-.045,-.70,.12],[x,peak,.11],[x+.045,-.7,.12],[x+.06,-.54,.11]],.012,gold,24)
-  mesh(g,new THREE.SphereGeometry(.04,14,10),rose,x,peak-.009,.13)
-  if(i%2===0)gemstone(g,x,-.61,.20,i%4===0?0x4eafff:0xe356a9,.049)
+ // Gracefully arched, symmetric support structures with miniature scrolls.
+ for(const flip of [-1,1]){
+  for(let tier=0;tier<3;tier++){
+   const x=flip*(.17+tier*.125)
+   const crestY=-.80+tier*.068
+   path(g,[
+     [flip*.045,-.53,.11],
+     [flip*(.11+tier*.025),-.68,.12],
+     [x,crestY,.13],
+     [x+flip*.08,crestY-.06,.075],
+     [x+flip*.12,crestY+.04,.075],
+     [x+flip*.02,-.57,.12],
+   ],tier===0?.014:.010,roseGold,34)
+   spiral(g,x+flip*.047,crestY+.025,.11,.072-tier*0,platinum,flip)
+  }
+  // Upper tall arches, raised beyond the crown's central stone.
+  path(g,[[flip*.02,-.62,.11],[flip*.10,-.92,.08],
+    [flip*.20,-1.10,.04],[flip*.28,-.90,.05],
+    [flip*.43,-.73,.08],[flip*.49,-.55,.05]],.012,roseGold,46)
+  path(g,[[flip*.045,-.57,.14],[flip*.18,-.78,.11],
+    [flip*.29,-.88,.08],[flip*.38,-.68,.1]],.008,fineGold,28)
+  jewelSetting(g,flip*.27,-.89,.13,.035,.063,0x77cbff)
+  jewelSetting(g,flip*.40,-.73,.145,.031,.048,0xf2b2ef)
  }
- gemstone(g,0,-.59,.21,0x46e5f8,.088)
- for(const x of [-.21,.21])gemstone(g,x,-.61,.20,0xf34d82,.056)
- for(const i of [-2,-1,0,1,2])mesh(g,new THREE.SphereGeometry(.015,10,8),stone,i*.13,-.73,.13)
+ // Detailed central gold framework and raised central marquise crystal.
+ path(g,[[-.16,-.56,.14],[-.20,-.88,.13],[-.10,-1.13,.08],
+  [0,-1.19,.08],[.10,-1.13,.08],[.20,-.88,.13],[.16,-.56,.14]],.013,roseGold,65)
+ for(const side of [-1,1]){
+  path(g,[[0,-.55,.15],[side*.10,-.68,.14],
+    [side*.16,-.82,.15],[side*.08,-.99,.12],[0,-1.02,.12]],.007,platinum,32)
+  spiral(g,side*.25,-.69,.12,.079,roseGold,side)
+ }
+ jewelSetting(g,0,-.92,.23,.135,.232,0xe276ed)
+ jewelSetting(g,0,-1.22,.12,.039,.064,0x76c9ff)
+ jewelSetting(g,-.115,-1.17,.14,.027,.040,0xfbbae9)
+ jewelSetting(g,.115,-1.17,.14,.027,.040,0xf3ccff)
+ // Alternating rubies and sapphires along the full head-fitting band.
+ for(let i=-10;i<=10;i++){
+  const x=i*.047
+  const z=.11-.11*Math.pow(Math.abs(x)/.55,2)
+  if(Math.abs(i)<=2){continue}
+  const color=i%3===0?0x54c8ff:i%3===1?0xe972bd:0xb9d7ff
+  jewelSetting(g,x,-.56-.008*Math.cos(i*.6),z+.025,
+    .016+(i%2===0?.004:0),.025,color)
+ }
+ // Micro-diamonds in a real arc following each ornament flourish.
+ const gemColors=[0xe5d8ff,0x8bdcfe,0xff8ecf,0xffe7af]
+ for(const side of [-1,1])for(let k=0;k<11;k++){
+  const t=k/10
+  const x=side*(.12+.31*t)
+  const y=-.78+.18*t+.025*Math.sin(t*3.1)
+  const z=.15-.08*t
+  jewelSetting(g,x,y,z,.009,.014,gemColors[(k+(side===-1?1:0))%4])
+ }
+ // Reflection glints must remain restrained: actual geometry catches PBR light.
+ for(const x of [-.48,-.36,-.19,.19,.36,.48]){
+  const spec=mesh(g,new THREE.SphereGeometry(.014,10,8),fineGold,x,-.57,.18)
+  spec.scale.set(.9,1.5,.7)
+ }
  return g
 }
 function cyberHelmet():THREE.Group{
