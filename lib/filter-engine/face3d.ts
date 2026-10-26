@@ -32,7 +32,7 @@ export const isFace3DId=(id:string):id is Face3DId=>face3DPresets.some(x=>x.id==
 // No untrusted remote model URLs or arbitrary asset data can be supplied.
 const MODEL_ASSETS:Partial<Record<Face3DId,string>>={
  '3d-crystal':'/face-assets/spaktok-crystal.glb',
- '3d-gold-crown':'/face-assets/spaktok-royal-couture.glb',
+ '3d-gold-crown':'/face-assets/spaktok-royal-couture.glb?v=20261026-royal-2',
 }
 const clamp=(n:number,low:number,high:number)=>Math.min(high,Math.max(low,n))
 export interface Face3DFrame{
@@ -208,6 +208,16 @@ export function resizeVideoAlignedCamera(camera:THREE.OrthographicCamera,width:n
  camera.updateMatrixWorld(true)
 }
 
+/** The authored GLB's physical base band: shared pose and test coordinate. */
+export const CROWN_BASE_LOCAL_Y=-0.55
+export function crownMountPosition(
+ pose:{x:number;y:number;width:number;roll:number;yaw:number;pitch:number},
+ forehead:{x:number;y:number},
+){
+ const rotated=new THREE.Vector3(0,CROWN_BASE_LOCAL_Y*pose.width,0).applyEuler(
+  new THREE.Euler(pose.pitch*.7,pose.yaw*.75,pose.roll))
+ return new THREE.Vector3(forehead.x-rotated.x,forehead.y-rotated.y-pose.width*.018,18)
+}
 /** Pose-dependent, feathered contact shadow directly underneath the crown band. */
 function makeCrownContactShadow(){
  const geometry=new THREE.PlaneGeometry(1.02,.14,24,4)
@@ -397,12 +407,7 @@ export class FaceMesh3DEngine{
   if(id==='3d-gold-crown'){
     const forehead=getForeheadPixel(frame,sourceW,sourceH,this.width,this.height,mirror)
     if(forehead){
-      // Gold tiara's base is at local Y=-0.56 of the face-width scale.
-      // Solve the world-space translation AFTER applying head yaw/roll/pitch.
-      const localBase=new THREE.Vector3(0,-.56*pose.width,0)
-        .applyEuler(this.mount.rotation)
-      this.mount.position.x=forehead.x-localBase.x
-      this.mount.position.y=forehead.y-localBase.y-pose.width*.018
+      this.mount.position.copy(crownMountPosition(pose,forehead))
     }
   }
   if(this.model){
