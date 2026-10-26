@@ -81,9 +81,9 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
     }
     const blob = captured.blob
     const mimeType = blob.type.split(';')[0] || 'video/webm'
-    if (!['video/mp4', 'video/webm', 'video/quicktime'].includes(mimeType) ||
-        blob.size < 1024 || blob.size > 100 * 1024 * 1024) {
-      setUploadMessage('الملف غير مدعوم أو أكبر من 100 ميغابايت.')
+    if (!['video/mp4', 'video/webm'].includes(mimeType) ||
+        blob.size < 1024 || blob.size > 20 * 1024 * 1024) {
+      setUploadMessage('الملف غير مدعوم أو أكبر من 20 ميغابايت.')
       return
     }
     const controller = new AbortController()
@@ -112,11 +112,11 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
       const data = await res.json() as { uploadURL: string; reservationId: string }
       await uploadVideoDirect(data.uploadURL, blob, setUploadProgress, controller.signal)
       setUploadCompleted(true)
-      setUploadMessage('اكتمل إرسال الفيديو للمعالجة الخاصة. لم يُنشر علنًا بعد.')
+      setUploadMessage('تم حفظ الفيديو كمسودة خاصة في Cloudflare R2. لن يظهر للمشاهدين قبل المراجعة.')
     } catch (error) {
       if (!controller.signal.aborted) {
         const msg = error instanceof Error ? error.message : ''
-        setUploadMessage(msg === 'daily_limit' ? 'وصلت إلى الحد اليومي: 5 محاولات رفع.'
+        setUploadMessage(msg === 'daily_limit' ? 'وصلت إلى الحد اليومي التجريبي: 5 محاولات رفع.'
           : msg === 'unauthorized' ? 'يجب تسجيل الدخول لرفع الفيديو.'
           : 'تعذر رفع الفيديو. احفظه وحاول مجددًا لاحقًا.')
       }
