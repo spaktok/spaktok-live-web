@@ -210,7 +210,10 @@ export class FaceMesh3DEngine{
   this.renderer.outputColorSpace=THREE.SRGBColorSpace
   this.renderer.toneMapping=THREE.ACESFilmicToneMapping
   this.renderer.toneMappingExposure=1.15
-  this.camera=new THREE.OrthographicCamera(0,width,height,0,.1,2400)
+  // Canvas, CSS object-fit and MediaPipe all use Y increasing DOWN.
+  // OrthographicCamera(left,right,top,bottom): top MUST be 0 and bottom H.
+  // The previous (0,width,height,0) inverted the entire face overlay vertically.
+  this.camera=new THREE.OrthographicCamera(0,width,0,height,.1,2400)
   this.camera.position.set(0,0,1200);this.camera.lookAt(0,0,0)
   this.scene.add(new THREE.HemisphereLight(0xe7f3ff,0x5a6d8e,2.1))
   const main=new THREE.DirectionalLight(0xffefd8,3.1)
@@ -242,6 +245,7 @@ export class FaceMesh3DEngine{
   if(this.width===w&&this.height===h)return
   this.width=w;this.height=h
   this.renderer.setSize(w,h,false)
+  // Keep identical projection convention after size changes (Y downward).
   this.camera.left=0;this.camera.right=w;this.camera.top=0;this.camera.bottom=h
   this.camera.updateProjectionMatrix()
  }

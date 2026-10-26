@@ -1,4 +1,5 @@
 import {describe,expect,it} from 'vitest'
+import * as THREE from 'three'
 import {FaceLandmarker} from '@mediapipe/tasks-vision'
 import {face3DPresets,isFace3DId,viewportCrop,getHeadPose,trianglesFromConnections} from './face3d'
 import type {Face3DFrame} from './face3d'
@@ -33,6 +34,25 @@ describe('SpakTok tracked 3D lenses',()=>{
    expect(unmirrored.x+mirrored.x).toBeCloseTo(360)
    expect(unmirrored.y).toBeCloseTo(mirrored.y)
    expect(mirrored.width).toBeGreaterThan(100)
+ })
+ it('projects 3D vertices to the same unflipped Y as the camera video',()=>{
+   // Regression for the upside-down floating phantom face on Android.
+   const width=360,height=640
+   const camera=new THREE.OrthographicCamera(0,width,0,height,.1,2400)
+   camera.position.set(0,0,1200);camera.lookAt(0,0,0)
+   camera.updateMatrixWorld(true)
+   const toScreen=(x:number,y:number)=>{
+     const ndc=new THREE.Vector3(x,y,18).project(camera)
+     return {x:(ndc.x+1)*width/2,y:(1-ndc.y)*height/2}
+   }
+   // Eye/cheek lower down must stay lower down, not jump to the ceiling.
+   expect(toScreen(120,510).y).toBeCloseTo(510)
+   expect(toScreen(120,510).x).toBeCloseTo(120)
+   expect(toScreen(190,580).y).toBeGreaterThan(toScreen(190,360).y)
+   expect(toScreen(120,510).y).not.toBeCloseTo(130)
+   // The selfie mirror only reflects X; never Y.
+   expect(toScreen(width-120,510).x).toBeCloseTo(width-120)
+   expect(toScreen(width-120,510).y).toBeCloseTo(510)
  })
  it('rejects invalid face geometry and incomplete tracked meshes',()=>{
    expect(viewportCrop(0,720,360,640)).toBeNull()
