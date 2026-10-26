@@ -13,11 +13,23 @@ import { backgroundCode, fxCode } from './params'
  * with a second CSS filter. The plane is drawn first with depth writes off;
  * face depth, PBR gemstones and makeup then render over it.
  *
- * NOTE: VideoTexture.flipY must be false, matching FilterRenderer's original
- * UNPACK_FLIP_Y_WEBGL=false input. The app orthographic projection has Y down,
- * so the bottom row of PlaneGeometry has uv.y=0 at SCREEN TOP.
+ * The Three.js orthographic camera uses screen-Y DOWN, so PlaneGeometry's
+ * local NEGATIVE-Y edge projects to screen TOP; its uv.y=0 already matches
+ * the legacy shader's top-left origin. Do NOT flip uv.y again.
+ * VideoTexture.flipY=false is likewise intentional.
+ * The video shader grades sRGB samples, then the Three output variant converts
+ * once to Linear-sRGB for standard Three.js color-space output handling.
  */
 export type RealityCameraMask = RenderInput['mask']
+
+/** Prevent repeated GPU allocations when MediaPipe supplies fresh masks
+ * with the same dimensions; re-upload pixel bytes in place instead. */
+export function realityMaskNeedsAllocation(
+  current:Readonly<{width:number;height:number}>,
+  incoming:Readonly<{width:number;height:number}>,
+):boolean {
+  return current.width!==incoming.width||current.height!==incoming.height
+}
 
 export type RealityCrop = Readonly<{
   scaleX: number
@@ -50,6 +62,36 @@ const VECTORS2=[
 const VECTORS3=['uShadowTint','uHighlightTint'] as const
 export const realityCameraUniforms={ floats:FLOATS,vectors2:VECTORS2,vectors3:VECTORS3 }
 
+/** OrthographicCamera top=0 makes +Y point DOWN on screen, so
+ * PlaneGeometry's local -Y edge (uv.y=0) is the SCREEN TOP edge.
+ * This matches the original filter shader's vUv.y=0 at screen top.
+ */
+export const realityGpuCameraVertexShader=`varying vec2 vUv;
+void main(){
+  vUv=uv;
+  gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);
+}`
+
+/** Keep the legacy color-grading calculations in display/sRGB space for
+ * parameter parity, but hand linear RGB to Three's output color conversion.
+ * This adds only one transfer-function conversion at the very end: doing it
+ * on each video sample would multiply the cost of blur/beauty effects.
+ */
+const gpuLinearize=`vec3 spaktokSrgbToLinear(vec3 c){
+  vec3 low=c/12.92;
+  vec3 high=pow((c+0.055)/1.055,vec3(2.4));
+  return mix(low,high,step(vec3(0.04045),c));
+}`
+const LEGACY_OUTPUT='gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);'
+if (!realityColorFragmentShader.includes(LEGACY_OUTPUT) ||
+    !realityColorFragmentShader.includes('void main() {')) {
+  throw Error('reality_color_shader_layout_changed')
+}
+export const realityGpuColorFragmentShader=realityColorFragmentShader
+  .replace('void main() {',gpuLinearize+'\nvoid main() {')
+  .replace(LEGACY_OUTPUT,
+    'gl_FragColor = vec4(spaktokSrgbToLinear(clamp(color, 0.0, 1.0)), 1.0);\n#include <colorspace_fragment>')
+
 type Uniforms=Record<string,THREE.IUniform>
 function emptyUniforms(video:THREE.Texture,mask:THREE.Texture):Uniforms {
   const result:Uniforms={uVideo:{value:video},uMask:{value:mask}}
@@ -66,6 +108,10 @@ export class RealityGpuCameraLayer {
   private readonly uniforms:Uniforms
   private maskTexture:THREE.DataTexture
   private lastMask:RealityCameraMask=null
+  private maskAllocations=0
+  /** Number of GPU mask texture allocations (including the 1x1 default).
+   * Reading this value does not cause a GPU readback. */
+  get allocatedMaskTextures(){return this.maskAllocations}
   private width:number
   private height:number
   constructor(private readonly scene:THREE.Scene,video:HTMLVideoElement,width:number,height:number){
@@ -84,19 +130,13 @@ export class RealityGpuCameraLayer {
     this.maskTexture.magFilter=THREE.LinearFilter
     this.maskTexture.generateMipmaps=false
     this.maskTexture.needsUpdate=true
+    this.maskAllocations=1
 
     this.uniforms=emptyUniforms(this.videoTexture,this.maskTexture)
     this.material=new THREE.ShaderMaterial({
       uniforms:this.uniforms,
-      // OrthographicCamera(0,width,0,height) projects world Y down.
-      // PlaneGeometry uv.y=0 is consequently SCREEN TOP, just as the
-      // original FilterRenderer used when uploading unflipped video.
-      vertexShader:`varying vec2 vUv;
-void main(){
-  vUv=uv;
-  gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);
-}`,
-      fragmentShader:realityColorFragmentShader,
+      vertexShader:realityGpuCameraVertexShader,
+      fragmentShader:realityGpuColorFragmentShader,
       depthTest:false,depthWrite:false,transparent:false,
       toneMapped:false,side:THREE.DoubleSide,
     })
@@ -137,16 +177,25 @@ void main(){
       this.n('uHasMask',0);return
     }
     if(mask!==this.lastMask){
-      const next=new THREE.DataTexture(mask.data,mask.width,mask.height,THREE.RedFormat)
-      next.flipY=false
-      next.unpackAlignment=1
-      next.minFilter=THREE.LinearFilter
-      next.magFilter=THREE.LinearFilter
-      next.generateMipmaps=false
-      next.needsUpdate=true
-      this.maskTexture.dispose()
-      this.maskTexture=next
-      this.uniforms.uMask.value=next
+      const image=this.maskTexture.image
+      if(realityMaskNeedsAllocation(image,mask)){
+        const next=new THREE.DataTexture(mask.data,mask.width,mask.height,THREE.RedFormat)
+        next.flipY=false
+        next.unpackAlignment=1
+        next.minFilter=THREE.LinearFilter
+        next.magFilter=THREE.LinearFilter
+        next.generateMipmaps=false
+        next.needsUpdate=true
+        this.maskTexture.dispose()
+        this.maskTexture=next
+        this.uniforms.uMask.value=next
+        this.maskAllocations++
+      }else{
+        // A new MediaPipe result generally changes the data, not dimensions.
+        // Reupload to the SAME texture; avoid GPU allocations every ~100ms.
+        image.data=mask.data
+        this.maskTexture.needsUpdate=true
+      }
       this.lastMask=mask
     }
     this.n('uHasMask',1)

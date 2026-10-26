@@ -20,3 +20,10 @@ Open your Vercel deployment's camera URL with `?realityGpu=2`, select a 3D lens 
 - The world does not yet have real scene-depth sensing, reliable hair/hand occlusion, realistic calibrated scene lighting, or a measured photorealistic gemstone refraction result. MeshPhysicalMaterial can use in-scene background when transmission is supported; check actual visuals before making a claim.
 - Face processing remains single-person with the MediaPipe 478 points.
 - Direct video capture is subject to mobile WebGL driver and MediaRecorder behavior; check recorded first/last frames and audio sync.
+
+## QA hardening — orientation, output color, and segmentation allocations
+- Verified and locked the top-left video UV convention mathematically: the Y-down Three orthographic camera maps PlaneGeometry local -Y / UV 0 to screen top. A second UV flip would invert the video; the existing shader orientation is retained and regression-tested.
+- GPU2 runs the same creative sRGB grading, then converts the final graded color into the linear working space before `#include <colorspace_fragment>`. This avoids double gamma correction and allows physically based scene rendering to interpret the background consistently; real-device comparisons remain mandatory.
+- Face tracking with an invalid head pose now hides the mesh, crown and makeup rather than leaving a stale object visible.
+- MediaPipe mask updates reuse the existing GPU texture while width/height are unchanged, avoiding repeated texture creation per segmentation result.
+- The unit tests cover correct UV handedness, sRGB/linear round-trip invariants, and shader variant separation.

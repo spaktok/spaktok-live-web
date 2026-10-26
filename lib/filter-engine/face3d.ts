@@ -407,7 +407,17 @@ export class FaceMesh3DEngine{
    }
   })
   const pose=getHeadPose(frame,sourceW,sourceH,this.width,this.height,mirror)
-  if(!pose){if(integrated)this.renderer.render(this.scene,this.camera);else this.renderer.clear();return}
+  if(!pose){
+   // Invalid geometry must NEVER reproject a previous user's face or stale
+   // makeup into the current camera frame.
+   this.depthMesh.visible=false
+   this.mount.visible=false
+   this.crownContact.visible=false
+   this.makeup.setStyle(id,false)
+   if(integrated)this.renderer.render(this.scene,this.camera)
+   else this.renderer.clear()
+   return
+  }
   this.depthMesh.visible=true
   this.makeup.setStyle(id,this.lensReady,makeup)
   // Update 478 surface vertices only on a *new* inference, not 30-60 times/sec.
