@@ -231,14 +231,45 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
           className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity duration-200',
             camera.status==='ready'&&camera.gpuAvailable&&studio.face.id==='none'?'opacity-100':'opacity-0')}
           aria-hidden="true"/>
-        <canvas ref={camera.arCanvasRef}
-          className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover',
-            studio.face.id==='none'?'opacity-0':'opacity-100')}
-          aria-label="قناع الواقع المعزز يتبع الوجه" role="img"/>
-        <canvas ref={camera.threeCanvasRef}
-          className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover',
-            studio.face.id.startsWith('3d-')?'opacity-100':'opacity-0')}
-          aria-label="قناع واقع معزز ثلاثي الأبعاد" role="img"/>
+        {/* All viewer-facing AR layers share an SVG presentation surface.
+            Canvas/WebGL are embedded (NOT converted to pure-vector SVG). */}
+        <svg ref={camera.svgSurfaceRef} xmlns="http://www.w3.org/2000/svg"
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          aria-label="طبقة عرض المؤثرات SVG والواقع المعزز" role="img">
+          <foreignObject x="0" y="0" width="100%" height="100%">
+            <div className="relative h-full w-full">
+              <canvas ref={camera.arCanvasRef}
+                className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover',
+                  studio.face.id==='none'?'opacity-0':'opacity-100')}
+                aria-hidden="true"/>
+              <canvas ref={camera.threeCanvasRef}
+                className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover',
+                  studio.face.id.startsWith('3d-')?'opacity-100':'opacity-0')}
+                aria-hidden="true"/>
+            </div>
+          </foreignObject>
+          <defs>
+            <radialGradient id="spaktok-gem-glint">
+              <stop offset="0" stopColor="#ffffff" stopOpacity="1"/>
+              <stop offset=".38" stopColor="#fff1c7" stopOpacity=".9"/>
+              <stop offset="1" stopColor="#b98bff" stopOpacity="0"/>
+            </radialGradient>
+          </defs>
+          {/* Real SVG vectors; their transform follows the head pose each frame. */}
+          <g ref={camera.svgDecorRef} style={{display:'none'}} aria-hidden="true">
+            {[
+              {x:-.48,y:-.86,r:.052},{x:.53,y:-.74,r:.073},
+              {x:0,y:-1.15,r:.08},{x:-.22,y:-.65,r:.036},{x:.28,y:-.95,r:.044},
+            ].map(({x,y,r},i)=>(
+              <g key={i} transform={`translate(${x} ${y})`}>
+                <circle r={r*1.8} fill="url(#spaktok-gem-glint)" opacity=".56"/>
+                <path d={`M ${-r} 0 L ${r} 0 M 0 ${-r} L 0 ${r}`}
+                  fill="none" stroke="#fffbe6" strokeWidth=".007" strokeLinecap="round"/>
+                <circle r=".008" fill="#ffffff"/>
+              </g>
+            ))}
+          </g>
+        </svg>
 
         {camera.status !== 'ready' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
