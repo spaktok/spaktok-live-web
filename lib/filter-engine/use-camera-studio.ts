@@ -215,7 +215,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     if(!isFace3DSelected(state.face.id)){setThreeStatus('idle');return}
     let cancelled=false
     setThreeStatus('loading')
-    import('./face3d').then(async({FaceMesh3DEngine})=>{
+    import('./face3d').then(async({FaceMesh3DEngine,isFace3DId})=>{
+      if(!isFace3DId(state.face.id))return
       if(cancelled)return
       const layer=threeCanvasRef.current,base=canvasRef.current
       if(!layer||!base)return
