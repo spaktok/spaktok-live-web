@@ -11,6 +11,8 @@ export interface RealityEffectLoader<Node> {
   loadAuthoredGLB(uri:string):Promise<Node>
   createProceduralPreview(effect:RealityEffectManifest):Node
   calibrateAuthored(node:Node,effect:RealityEffectManifest):void
+  /** Optional cleanup after calibration fails to avoid leaking GPU assets. */
+  disposeFailedAuthored?(node:Node):void
 }
 export type RealityEffectInstance<Node>=Readonly<{
   node:Node
@@ -33,11 +35,16 @@ export class RealityEffectRuntime<Node> {
       return {node:this.loader.createProceduralPreview(effect),quality:'fallback',
         source:'tracked-surface',definition:effect}
     if(effect.asset){
+      let loaded:Node|undefined
       try{
-        const node=await this.loader.loadAuthoredGLB(effect.asset.uri)
-        this.loader.calibrateAuthored(node,effect)
-        return {node,quality:'hd',source:'authored-glb',definition:effect}
-      }catch{/* A model/decoder/transform failure must not shut down the camera. */}
+        loaded=await this.loader.loadAuthoredGLB(effect.asset.uri)
+        this.loader.calibrateAuthored(loaded,effect)
+        return {node:loaded,quality:'hd',source:'authored-glb',definition:effect}
+      }catch{
+        // Free partially loaded assets if calibration rejects the GLB;
+        // never leave GPU allocations behind when falling back.
+        if(loaded!==undefined)this.loader.disposeFailedAuthored?.(loaded)
+      }
     }
     return {node:this.loader.createProceduralPreview(effect),quality:'fallback',
       source:'procedural-preview',definition:effect}

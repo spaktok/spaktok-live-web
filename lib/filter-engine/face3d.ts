@@ -363,6 +363,7 @@ export class FaceMesh3DEngine{
       this.setupStudioEnvironment()
      }
     },
+    disposeFailedAuthored:node=>disposeObject(node),
    })
    const instance=await runtime.instantiate(definition)
    root=instance.node

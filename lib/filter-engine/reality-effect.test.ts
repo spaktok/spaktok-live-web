@@ -59,6 +59,19 @@ describe('SpakTok universal Reality Effect contract',()=>{
   expect(load).toHaveBeenCalledOnce()
   expect(create).not.toHaveBeenCalled()
  })
+ it('releases a partially loaded GLB if pivot calibration fails',async()=>{
+  const dispose=vi.fn()
+  const runtime=new RealityEffectRuntime({
+    loadAuthoredGLB:async()=>({id:1}),
+    calibrateAuthored:()=>{throw Error('invalid authoring scale')},
+    disposeFailedAuthored:dispose,
+    createProceduralPreview:()=>({id:2}),
+  })
+  const result=await runtime.instantiate(getRealityEffect('3d-gold-crown')!)
+  expect(result.source).toBe('procedural-preview')
+  expect(dispose).toHaveBeenCalledOnce()
+  expect(dispose).toHaveBeenCalledWith({id:1})
+ })
  it('degrades gracefully when an authored GLB is unavailable',async()=>{
   const runtime=new RealityEffectRuntime({
    loadAuthoredGLB:async()=>{throw Error('offline')},
