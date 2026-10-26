@@ -223,6 +223,10 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
           className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover',
             studio.face.id==='none'?'opacity-0':'opacity-100')}
           aria-label="قناع الواقع المعزز يتبع الوجه" role="img"/>
+        <canvas ref={camera.threeCanvasRef}
+          className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover',
+            studio.face.id.startsWith('3d-')?'opacity-100':'opacity-0')}
+          aria-label="قناع واقع معزز ثلاثي الأبعاد" role="img"/>
 
         {camera.status !== 'ready' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
@@ -334,7 +338,9 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
           <div className="pointer-events-none absolute inset-x-0 top-[max(4.75rem,env(safe-area-inset-top))] z-10 flex justify-center px-3">
             <span className={cn('max-w-[92%] rounded-full border px-3 py-1.5 text-center text-[11px] font-semibold backdrop-blur-md',
               camera.vision==='tracking'?'border-emerald-400/35 bg-[#061d20]/80 text-emerald-200':'border-amber-200/25 bg-[#1a1c29]/80 text-amber-100')}>
-              {visionMessage}
+              {camera.threeStatus==='unavailable'&&studio.face.id.startsWith('3d-')
+                ?'الرسومات ثلاثية الأبعاد غير متاحة — جرّب قناعًا آخر'
+                :visionMessage}
             </span>
           </div>
         )}
