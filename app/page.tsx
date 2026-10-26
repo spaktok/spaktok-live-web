@@ -26,6 +26,7 @@ export default function SpakTok() {
   const isAuthenticated = !!session
   const [activeTab, setActiveTab] = useState<TabType>('home')
   const [feedType, setFeedType] = useState<'forYou' | 'following' | 'live'>('forYou')
+  const [focusedVideoId, setFocusedVideoId] = useState<string | null>(null)
   const [showCamera, setShowCamera] = useState(false)
   const [viewingStory, setViewingStory] = useState<string | null>(null)
   const [viewingProfile, setViewingProfile] = useState<string | null>(null)
@@ -36,7 +37,12 @@ export default function SpakTok() {
   const [paymentStatus, setPaymentStatus] = useState<'success' | 'cancelled' | null>(null)
 
   useEffect(() => {
-    const status = new URLSearchParams(window.location.search).get('payment')
+    const params=new URLSearchParams(window.location.search)
+    const user=params.get('user'),video=params.get('video')
+    const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    if(user&&uuid.test(user)){setViewingProfile(user);setActiveTab('profile')}
+    else if(video&&uuid.test(video)){setFocusedVideoId(video);setFeedType('forYou');setActiveTab('home')}
+    const status = params.get('payment')
     if (status === 'success' || status === 'cancelled') {
       setPaymentStatus(status)
       window.history.replaceState({}, '', window.location.pathname)
@@ -47,12 +53,19 @@ export default function SpakTok() {
     if (tab === 'create') {
       setShowCamera(true)
     } else {
+      setFocusedVideoId(null)
       setActiveTab(tab)
       setViewingProfile(null)
       setShowNotifications(false)
       setShowShop(false)
       setShowSettings(false)
     }
+  }
+
+  const handleVideoClick = (videoId:string) => {
+    setFocusedVideoId(videoId)
+    setFeedType('forYou')
+    setActiveTab('home')
   }
 
   const handleUserClick = (userId: string) => {
@@ -185,7 +198,7 @@ export default function SpakTok() {
               <LiveGrid onLiveClick={handleLiveClick} onBack={() => setFeedType('forYou')} />
             ) : (
               <div className="absolute inset-0">
-                <VideoFeed key={feedType} feedType={feedType} onUserClick={handleUserClick} />
+                <VideoFeed key={feedType + (focusedVideoId || '')} feedType={feedType} initialVideoId={focusedVideoId} onUserClick={handleUserClick} onCreate={() => setShowCamera(true)} onDiscover={() => handleTabChange('discover')} />
               </div>
             )}
           </div>
@@ -196,10 +209,7 @@ export default function SpakTok() {
             onUserClick={handleUserClick}
             onShopClick={() => setShowShop(true)}
             onNotificationsClick={() => setShowNotifications(true)}
-            onVideoClick={(videoId) => {
-              setFeedType('forYou')
-              setActiveTab('home')
-            }}
+            onVideoClick={handleVideoClick}
           />
         )}
 
@@ -216,6 +226,7 @@ export default function SpakTok() {
             userId={viewingProfile || undefined}
             isOwnProfile={!viewingProfile}
             onSettingsClick={() => setShowSettings(true)}
+            onVideoClick={handleVideoClick}
             onBack={viewingProfile ? () => setViewingProfile(null) : undefined}
           />
         )}

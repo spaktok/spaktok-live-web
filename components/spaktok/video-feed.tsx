@@ -2,15 +2,19 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { VideoCard } from './video-card'
+import { Clapperboard, Compass, RefreshCw } from 'lucide-react'
 import type { Video, FeedType } from '@/lib/types'
 import { summarizePlayback, type PlaybackMetric } from '@/lib/video/playback-qa'
 
 interface VideoFeedProps {
   onUserClick: (userId: string) => void
   feedType: Extract<FeedType, 'forYou' | 'following'>
+  initialVideoId?: string | null
+  onCreate?: () => void
+  onDiscover?: () => void
 }
 
-export function VideoFeed({ onUserClick, feedType }: VideoFeedProps) {
+export function VideoFeed({ onUserClick, feedType, initialVideoId, onCreate, onDiscover }: VideoFeedProps) {
   const [activeIndex, setActiveIndex] = useState(0)
   const [preloadNext, setPreloadNext] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -57,7 +61,7 @@ export function VideoFeed({ onUserClick, feedType }: VideoFeedProps) {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`/api/feed?limit=12&source=${feedType}`, { cache: 'no-store', signal: controller.signal })
+    fetch(`/api/feed?limit=12&source=${feedType}${initialVideoId ? `&videoId=${encodeURIComponent(initialVideoId)}` : ''}`, { cache: 'no-store', signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error('Feed unavailable')
         return response.json() as Promise<{ videos?: Video[]; nextCursor?: string | null }>
@@ -76,7 +80,7 @@ export function VideoFeed({ onUserClick, feedType }: VideoFeedProps) {
         if (!controller.signal.aborted) setIsFeedLoading(false)
       })
     return () => controller.abort()
-  }, [feedType])
+  }, [feedType, initialVideoId])
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || isLoadingMore || loadMoreError || isFeedLoading) return
@@ -205,9 +209,33 @@ export function VideoFeed({ onUserClick, feedType }: VideoFeedProps) {
         </div>
       )}
       {!isFeedLoading && videos.length === 0 && (
-        <div className="flex h-full flex-col items-center justify-center gap-2 px-8 text-center text-sm text-white/70" dir="rtl" role="status">
-          <span>{feedError ? 'تعذر تحميل الخلاصة حالياً.' : feedType === 'following' ? 'لا توجد فيديوهات من الحسابات التي تتابعها.' : 'لا توجد ريلز منشورة بعد.'}</span>
-          <span className="text-xs text-white/45">{feedError ? 'تحقق من الاتصال وحاول مجدداً.' : feedType === 'following' ? 'تابع بعض المبدعين لتظهر فيديوهاتهم هنا.' : 'كن أول من يشارك فيديو.'}</span>
+        <div className="relative flex h-full flex-col items-center justify-center overflow-hidden px-6 text-center text-white" dir="rtl" role="status">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_50%_34%,rgba(58,92,207,.32),transparent_50%)]"/>
+          <div className="relative mb-7 flex size-24 items-center justify-center rounded-[30px] border border-[#9db6ff]/25 bg-gradient-to-br from-[#263d80] to-[#0c132c] shadow-[0_18px_60px_rgba(48,90,218,.24)]">
+            <Clapperboard className="size-10 text-[#c4d3ff]"/>
+          </div>
+          <p className="relative text-[10px] font-bold uppercase tracking-[.23em] text-[#91aeff]">YOUR NEXT STORY STARTS HERE</p>
+          <h2 className="relative mt-3 max-w-xs text-2xl font-extrabold leading-relaxed">
+            {feedError?'تعذّر تحميل المحتوى':initialVideoId?'هذا الفيديو غير متاح':
+              feedType==='following'?'عالمك يبدأ بمن تتابع':'المشهد الأول لم يُنشر بعد'}
+          </h2>
+          <p className="relative mt-3 max-w-xs text-sm leading-7 text-white/55">
+            {feedError?'تأكد من اتصالك بالشبكة ثم أعد المحاولة.':
+              initialVideoId?'ربما لم تتم الموافقة عليه أو أُزيل.':
+              feedType==='following'?'اكتشف مبدعين جددًا، وستظهر فيديوهاتهم هنا.':
+              'كن من أوائل المبدعين في SpakTok. تظهر المقاطع بعد مراجعتها.'}
+          </p>
+          <div className="relative mt-8 flex gap-3">
+            <button type="button" onClick={onDiscover} className="rounded-2xl border border-white/15 bg-white/10 px-5 py-3 text-sm font-semibold text-white">
+              <Compass className="ml-2 inline size-4"/> اكتشف
+            </button>
+            {!feedError&&!initialVideoId&&<button type="button" onClick={onCreate} className="rounded-2xl bg-[#8faaff] px-5 py-3 text-sm font-semibold text-[#0b1530]">
+              <Clapperboard className="ml-2 inline size-4"/> إنشاء محتوى
+            </button>}
+            {feedError&&<button type="button" onClick={()=>window.location.reload()} className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-black">
+              <RefreshCw className="ml-2 inline size-4"/> إعادة المحاولة
+            </button>}
+          </div>
         </div>
       )}
       {videos.map((video, index) => {

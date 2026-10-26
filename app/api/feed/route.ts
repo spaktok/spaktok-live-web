@@ -10,6 +10,8 @@ media_url:string;thumbnail_url:string|null;description:string|null;music:string|
 like_count:number;comment_count:number;share_count:number;created_at:string;liked:number;bookmarked:number;followed:number}
 export async function GET(req:NextRequest){
   const source=req.nextUrl.searchParams.get('source')||'forYou'
+  const featuredId=req.nextUrl.searchParams.get('videoId')
+  if(featuredId&&!validId(featuredId))return json({error:'invalid_video_id'},400)
   if(source!=='forYou'&&source!=='following')return json({error:'invalid_source'},400)
   let cursor:ReturnType<typeof decodeFeedKey>|undefined
   try {
@@ -28,10 +30,11 @@ export async function GET(req:NextRequest){
         EXISTS(SELECT 1 FROM follows f WHERE f.following_id=v.user_id AND f.follower_id=?) AS followed
       FROM videos v JOIN profiles p ON p.id=v.user_id
       WHERE v.status='published'
+        AND (? IS NULL OR v.id=?)
         AND (?='forYou' OR EXISTS(SELECT 1 FROM follows f WHERE f.following_id=v.user_id AND f.follower_id=?))
         AND (? IS NULL OR v.created_at<? OR (v.created_at=? AND v.id<?))
       ORDER BY v.created_at DESC,v.id DESC LIMIT ?`,
-      [viewer,viewer,viewer,source,viewer,cursor?.createdAt??null,cursor?.createdAt??null,cursor?.createdAt??null,cursor?.id??null,limit+1])
+      [viewer,viewer,viewer,featuredId??null,featuredId??null,source,viewer,cursor?.createdAt??null,cursor?.createdAt??null,cursor?.createdAt??null,cursor?.id??null,featuredId?1:limit+1])
     const page=rows.slice(0,limit),last=page.at(-1)
     return json({videos:page.map(r=>({
       id:r.id,
@@ -42,7 +45,7 @@ export async function GET(req:NextRequest){
       caption:r.description||'',music:r.music?{name:r.music,artist:'',coverUrl:''}:undefined,
       likes:r.like_count,comments:r.comment_count,shares:r.share_count,views:r.view_count,
       isLiked:Boolean(r.liked),isBookmarked:Boolean(r.bookmarked),tags:[],createdAt:r.created_at,
-    })),nextCursor:rows.length>limit && last?encodeFeedKey({createdAt:last.created_at,id:last.id}):null})
+    })),nextCursor:!featuredId && rows.length>limit && last?encodeFeedKey({createdAt:last.created_at,id:last.id}):null})
   }catch{return json({error:'feed_unavailable'},503)}
 }
 export async function POST(req:NextRequest){

@@ -408,3 +408,59 @@ input[type="number"]::-webkit-outer-spin-button {
   -webkit-appearance: none;
   margin: 0;
 }
+
+
+/* SpakTok 2026 — cinematic, accessible navigation & content surfaces. */
+.spak-discover {
+  background:
+    radial-gradient(ellipse at 20% -10%, rgba(49,85,255,.15),transparent 38%),
+    radial-gradient(ellipse at 95% 25%,rgba(54,110,208,.09),transparent 37%),
+    #070b15;
+}
+.spak-icon-control {
+  display:inline-flex;align-items:center;justify-content:center;
+  width:42px;height:42px;border-radius:15px;
+  background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.10);
+  color:rgba(255,255,255,.88);transition:background .18s,transform .18s;
+}
+.spak-icon-control:hover {background:rgba(150,178,255,.14)}
+.spak-icon-control:active {transform:scale(.95)}
+.spak-search-field {
+  background:rgba(150,175,255,.065);
+  border:1px solid rgba(150,178,255,.18);
+  border-radius:19px;
+  box-shadow:inset 0 1px rgba(255,255,255,.045),0 8px 28px rgba(0,0,0,.15);
+}
+.spak-search-field:focus-within {border-color:rgba(166,193,255,.6);box-shadow:0 0 0 3px rgba(128,160,255,.12)}
+.spak-creator-card {
+  background:linear-gradient(125deg,rgba(255,255,255,.065),rgba(255,255,255,.025));
+  border:1px solid rgba(255,255,255,.095);border-radius:21px;
+  box-shadow:0 12px 28px rgba(0,0,0,.12);
+}
+.spak-clip-card {border:1px solid rgba(255,255,255,.09);background:#111c33}
+.spak-clip-card:focus-visible,.spak-creator-card button:focus-visible {
+  outline:2px solid #9fb7ff;outline-offset:3px;
+}
+.spak-empty-shell {
+  padding:52px 25px;text-align:center;
+  border-radius:28px;border:1px dashed rgba(139,170,255,.26);
+  background:radial-gradient(ellipse at top,rgba(83,115,218,.11),transparent 65%),rgba(255,255,255,.018);
+}
+.spak-primary-button {
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:46px;border:0;border-radius:14px;
+  padding:11px 19px;font-size:14px;font-weight:700;
+  color:#07132e;background:linear-gradient(135deg,#b7c9ff,#7596ff);
+  box-shadow:0 9px 24px rgba(77,112,228,.22);
+}
+.spak-primary-button:disabled {opacity:.55}
+.spak-profile-hero {background:linear-gradient(180deg,rgba(45,66,145,.2),rgba(8,12,23,0) 80%)}
+.spak-profile-glow {background:radial-gradient(ellipse at 50% 0,rgba(58,94,209,.22),transparent 65%)}
+.spak-bottom-bar {
+  background:rgba(10,15,30,.90);
+  -webkit-backdrop-filter:blur(25px);backdrop-filter:blur(25px);
+  box-shadow:0 -8px 40px rgba(0,0,0,.4),inset 0 1px rgba(255,255,255,.05);
+}
+@media (prefers-reduced-motion:reduce){
+  .spak-icon-control,.spak-clip-card img,.spak-primary-button {transition:none!important;animation:none!important}
+}

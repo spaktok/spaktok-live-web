@@ -370,7 +370,7 @@ export function VideoCard({ video, isActive, shouldPrecache = false, saveData = 
           onClick={async () => {
             onShare(video.id)
             try {
-              const status = await shareExternally({ title: video.caption, text: `@${video.user.username}`, url: window.location.href })
+              const status = await shareExternally({ title: video.caption, text: `@${video.user.username}`, url: new URL(`/?video=${encodeURIComponent(video.id)}`,window.location.origin).toString() })
               setShareStatus(status === 'copied' ? 'تم نسخ الرابط' : status === 'shared' ? 'تمت المشاركة' : 'المشاركة غير متاحة')
             } catch {
               setShareStatus('أُلغيت المشاركة')
