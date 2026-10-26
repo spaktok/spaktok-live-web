@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js'
 /**
  * Original, authored 3D accessory geometry with PBR materials.
  * Fabric seams, curved arms, lens curvature, metal bezels and micro-gems
@@ -103,10 +104,13 @@ function jewelMaterial(color:number){
  })
 }
 function jewelSetting(g:THREE.Group,x:number,y:number,z:number,w:number,h:number,color:number){
- const gold=metal(0xd99069,.17)
+ const gold=g.userData.settingMetal as THREE.Material || metal(0xd99069,.17)
+ const gemMaterials=g.userData.gemMaterials as Map<number,THREE.Material>|undefined
+ let colored=gemMaterials?.get(color)
+ if(!colored){colored=jewelMaterial(color);gemMaterials?.set(color,colored)}
  const bezel=mesh(g,new THREE.SphereGeometry(1,20,14),gold,x,y,z-.036)
  bezel.scale.set(w*1.14,h*1.12,.055)
- const gem=mesh(g,jewelCut(w,h,.09,16),jewelMaterial(color),x,y,z+.058)
+ const gem=mesh(g,jewelCut(w,h,.09,16),colored,x,y,z+.058)
  gem.rotation.y=.05
  // Four prongs hold the jewel into its real raised metal setting.
  for(const sx of [-1,1])for(const sy of [-1,1]){
@@ -125,11 +129,55 @@ function spiral(g:THREE.Group,cx:number,cy:number,z:number,scale:number,material
  }
  path(g,points,.009,material,40)
 }
+
+/** Merge all static crown ornaments by shared PBR material.
+ * This converts hundreds of child meshes into a small number of GPU draw
+ * calls. Preserve independent surface materials, faceted normals and depth.
+ */
+function combineStaticGeometry(group:THREE.Group):THREE.Group{
+ const groups=new Map<THREE.Material,THREE.BufferGeometry[]>()
+ const oldMeshes:THREE.Mesh[]=[]
+ group.updateMatrixWorld(true)
+ group.traverse(item=>{
+  if(!(item instanceof THREE.Mesh))return
+  const mats=Array.isArray(item.material)?item.material:[item.material]
+  if(mats.length!==1)return
+  const material=mats[0] as THREE.Material
+  let geo=item.geometry.index?item.geometry.toNonIndexed():item.geometry.clone()
+  for(const key of Object.keys(geo.attributes)){
+   if(key!=='position'&&key!=='normal')geo.deleteAttribute(key)
+  }
+  if(!geo.getAttribute('normal'))geo.computeVertexNormals()
+  geo.applyMatrix4(item.matrixWorld)
+  const entries=groups.get(material)||[]
+  entries.push(geo);groups.set(material,entries)
+  oldMeshes.push(item)
+ })
+ for(const item of oldMeshes){
+  item.parent?.remove(item)
+  item.geometry.dispose()
+ }
+ for(const [material,list] of groups){
+  const merged=mergeGeometries(list,false)
+  list.forEach(geo=>geo.dispose())
+  if(!merged)throw new Error('crown_batch_failed')
+  const batch=new THREE.Mesh(merged,material)
+  batch.frustumCulled=false
+  group.add(batch)
+ }
+ group.userData.batchCount=groups.size
+ delete group.userData.settingMetal
+ delete group.userData.gemMaterials
+ return group
+}
+
 function coutureCrown():THREE.Group{
  // Three-dimensional, open-filigree royal tiara designed for the user's
  // gemstone crown reference, rather than an emoji or a flat sprite.
  const g=new THREE.Group()
  g.name='SpakTokRoyalCoutureCrown'
+ g.userData.settingMetal=metal(0xd99069,.17)
+ g.userData.gemMaterials=new Map<number,THREE.Material>()
  const roseGold=metal(0xe6a17c,.18)
  const platinum=metal(0xc7c8e1,.19)
  const fineGold=metal(0xf6d1a3,.14)
@@ -203,7 +251,7 @@ function coutureCrown():THREE.Group{
   const spec=mesh(g,new THREE.SphereGeometry(.014,10,8),fineGold,x,-.57,.18)
   spec.scale.set(.9,1.5,.7)
  }
- return g
+ return combineStaticGeometry(g)
 }
 function cyberHelmet():THREE.Group{
  const g=new THREE.Group(),carbon=matte(0x131924,.39),silver=metal(0xa1b6d2,.17),dark=metal(0x182534,.23)
