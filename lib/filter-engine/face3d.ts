@@ -67,6 +67,19 @@ export function getHeadPose(frame:Face3DFrame,sourceW:number,sourceH:number,outW
  return {x:mirror?outW-eye.x:eye.x,y:eye.y,width,
   roll,yaw:mirror?-yaw:yaw,pitch}
 }
+/** Place a crown on the top-forehead landmark (10), not an assumed
+ * absolute offset from the eyes. The anchor uses the same object-fit crop and
+ * selfie mirror as the native camera and all 478 facial vertices.
+ */
+export function getForeheadPixel(frame:Face3DFrame,sourceW:number,sourceH:number,
+  outW:number,outH:number,mirror:boolean){
+ const crop=viewportCrop(sourceW,sourceH,outW,outH)
+ const forehead=frame.landmarks[10]
+ if(!crop||!forehead||!Number.isFinite(forehead.x)||!Number.isFinite(forehead.y))return null
+ const x=crop.x+forehead.x*crop.width
+ return {x:mirror?outW-x:x,y:crop.y+forehead.y*crop.height}
+}
+
 /** Tessellation graph -> deterministic triangles, once per renderer instance. */
 export function trianglesFromConnections(
  edges:ReadonlyArray<{start:number;end:number}>, count:number,
@@ -331,6 +344,17 @@ export class FaceMesh3DEngine{
   this.mount.position.set(pose.x,pose.y,18)
   this.mount.scale.setScalar(pose.width)
   this.mount.rotation.set(pose.pitch*.7,pose.yaw*.75,pose.roll)
+  if(id==='3d-gold-crown'){
+    const forehead=getForeheadPixel(frame,sourceW,sourceH,this.width,this.height,mirror)
+    if(forehead){
+      // Gold tiara's base is at local Y=-0.56 of the face-width scale.
+      // Solve the world-space translation AFTER applying head yaw/roll/pitch.
+      const localBase=new THREE.Vector3(0,-.56*pose.width,0)
+        .applyEuler(this.mount.rotation)
+      this.mount.position.x=forehead.x-localBase.x
+      this.mount.position.y=forehead.y-localBase.y-pose.width*.018
+    }
+  }
   if(this.model){
    const expr=frame.geometry.expression
    const mouth=clamp(frame.blendshapes?.jawOpen??expr?.mouthOpen??0,0,1)
