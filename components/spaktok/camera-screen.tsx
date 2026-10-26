@@ -204,6 +204,18 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
       camera.vision === 'no-face' ? s('noFace') :
       camera.vision === 'unavailable' ? s('visionUnavailable') : null
 
+  // Do not permanently cover the crown with a misleading "loading" banner.
+  // Once 3D is visibly rendering, use silent status unless tracking fails.
+  const faceHint = !faceArSelected || camera.status !== 'ready' ? null :
+    camera.threeStatus === 'unavailable' && studio.face.id.startsWith('3d-')
+      ? 'تعذّر تحميل المجسم ثلاثي الأبعاد'
+      : camera.vision === 'unavailable'
+        ? 'تتبع الوجه غير متاح — تحقق من إذن الكاميرا'
+        : camera.vision === 'no-face'
+          ? 'اقترب قليلًا من الكاميرا مع إضاءة واضحة'
+          : camera.vision === 'loading' && camera.threeStatus !== 'ready'
+            ? 'جارٍ تجهيز تتبع الوجه…' : null
+
   const formatTime = (total: number) => `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 
   return (
@@ -334,13 +346,10 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
         {!camera.recording && !captured && !showPanel && !isLive && mode!=='live' &&
           <FaceMaskTray value={studio.face} onChange={face=>setStudio(prev=>({...prev,face}))}
             visible={showFaceTray} onToggle={()=>setShowFaceTray(v=>!v)}/>}
-        {faceArSelected&&camera.status==='ready'&&(
+        {faceHint&&(
           <div className="pointer-events-none absolute inset-x-0 top-[max(4.75rem,env(safe-area-inset-top))] z-10 flex justify-center px-3">
-            <span className={cn('max-w-[92%] rounded-full border px-3 py-1.5 text-center text-[11px] font-semibold backdrop-blur-md',
-              camera.vision==='tracking'?'border-emerald-400/35 bg-[#061d20]/80 text-emerald-200':'border-amber-200/25 bg-[#1a1c29]/80 text-amber-100')}>
-              {camera.threeStatus==='unavailable'&&studio.face.id.startsWith('3d-')
-                ?'الرسومات ثلاثية الأبعاد غير متاحة — جرّب قناعًا آخر'
-                :visionMessage}
+            <span role="status" className="max-w-[85%] rounded-full border border-amber-200/25 bg-[#1a1c29]/80 px-3 py-1.5 text-center text-[11px] font-semibold text-amber-100 backdrop-blur-md">
+              {faceHint}
             </span>
           </div>
         )}
