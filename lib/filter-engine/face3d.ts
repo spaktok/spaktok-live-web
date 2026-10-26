@@ -208,6 +208,22 @@ export function resizeVideoAlignedCamera(camera:THREE.OrthographicCamera,width:n
  camera.updateMatrixWorld(true)
 }
 
+/** Pose-dependent, feathered contact shadow directly underneath the crown band. */
+function makeCrownContactShadow(){
+ const geometry=new THREE.PlaneGeometry(1.02,.14,24,4)
+ const material=new THREE.ShaderMaterial({
+  transparent:true,depthTest:false,depthWrite:false,side:THREE.DoubleSide,
+  toneMapped:false,
+  vertexShader:'varying vec2 vUv; void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+  fragmentShader:'precision mediump float; varying vec2 vUv; void main(){vec2 p=(vUv-.5)*2.;float falloff=exp(-p.x*p.x*1.7-p.y*p.y*3.5);gl_FragColor=vec4(.10,.052,.065,falloff*.20);}',
+ })
+ const mesh=new THREE.Mesh(geometry,material)
+ mesh.position.set(0,-.51,.005)
+ mesh.renderOrder=0
+ mesh.visible=false
+ mesh.frustumCulled=false
+ return mesh
+}
 export class FaceMesh3DEngine{
  readonly renderer:THREE.WebGLRenderer
  readonly scene=new THREE.Scene()
@@ -216,6 +232,7 @@ export class FaceMesh3DEngine{
  readonly depthMesh:THREE.Mesh
  readonly depthPositions:THREE.BufferAttribute
  readonly makeup:FaceMakeupLayer
+ readonly crownContact=makeCrownContactShadow()
  private readonly loader=new GLTFLoader()
  private model:THREE.Object3D|null=null
  private current:Face3DId|null=null
@@ -242,17 +259,18 @@ export class FaceMesh3DEngine{
   this.renderer.setClearColor(0x000000,0)
   this.renderer.outputColorSpace=THREE.SRGBColorSpace
   this.renderer.toneMapping=THREE.ACESFilmicToneMapping
-  this.renderer.toneMappingExposure=1.15
+  this.renderer.toneMappingExposure=1.05
   // Canvas, CSS object-fit and MediaPipe all use Y increasing DOWN.
   // OrthographicCamera(left,right,top,bottom): top MUST be 0 and bottom H.
   // The previous (0,width,height,0) inverted the entire face overlay vertically.
   this.camera=createVideoAlignedCamera(width,height)
-  this.scene.add(new THREE.HemisphereLight(0xe7f3ff,0x5a6d8e,2.1))
-  const main=new THREE.DirectionalLight(0xffefd8,3.1)
+  this.scene.add(new THREE.HemisphereLight(0xfff1e6,0x6a607b,1.35))
+  const main=new THREE.DirectionalLight(0xffdfc2,2.3)
   main.position.set(-250,-400,800);this.scene.add(main)
-  const rim=new THREE.DirectionalLight(0x679dff,1.6)
+  const rim=new THREE.DirectionalLight(0x719fff,.7)
   rim.position.set(350,50,450);this.scene.add(rim)
   this.scene.add(this.mount)
+  this.mount.add(this.crownContact)
   // MediaPipe exposes a triangle tessellation of the REAL tracked face.
   const edges=FaceLandmarker.FACE_LANDMARKS_TESSELATION
   const triangles=trianglesFromConnections(edges,478)
@@ -340,6 +358,7 @@ export class FaceMesh3DEngine{
   if(!this.alive)return
   if(!isFace3DId(id)||!frame||strength<=0){
    this.depthMesh.visible=false;this.mount.visible=false
+   this.crownContact.visible=false
    this.makeup.setStyle(id,false)
    this.renderer.clear()
    return
@@ -371,6 +390,7 @@ export class FaceMesh3DEngine{
    this.lastFrame=frame.timestamp
    this.lastSourceW=sourceW;this.lastSourceH=sourceH;this.lastMirror=mirror
   }
+  this.crownContact.visible=this.lensReady&&id==='3d-gold-crown'
   this.mount.position.set(pose.x,pose.y,18)
   this.mount.scale.setScalar(pose.width)
   this.mount.rotation.set(pose.pitch*.7,pose.yaw*.75,pose.roll)
@@ -416,6 +436,8 @@ export class FaceMesh3DEngine{
   this.alive=false;this.request++
   if(this.model){this.mount.remove(this.model);disposeObject(this.model)}
   this.makeup.dispose()
+  this.crownContact.geometry.dispose()
+  this.crownContact.material.dispose()
   this.studioEnvironment?.dispose()
   this.studioEnvironment=null
   this.scene.environment=null
