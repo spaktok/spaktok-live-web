@@ -7,6 +7,7 @@ import { createStudioState } from '@/lib/filter-engine/params'
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
 import { StudioPanel } from './studio/studio-panel'
+import { FaceMaskTray } from './studio/face-mask-tray'
 import { StoryComposer } from './stories/story-composer'
 import { uploadVideoDirect } from '@/lib/video/direct-upload-client'
 
@@ -25,7 +26,8 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const { s } = useStudioStrings()
   const [studio, setStudio] = useState(() => createStudioState())
   const [mode, setMode] = useState<CaptureMode>(initialMode)
-  const [showPanel, setShowPanel] = useState(true)
+  const [showPanel, setShowPanel] = useState(false)
+  const [showFaceTray,setShowFaceTray] = useState(true)
   const [timerSeconds, setTimerSeconds] = useState<0 | 3 | 10>(0)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [progress, setProgress] = useState(0)
@@ -206,14 +208,21 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black">
-      <video ref={camera.videoRef} playsInline muted className="pointer-events-none absolute h-px w-px opacity-0" aria-hidden="true" />
+
 
       <div className="relative h-full w-full max-w-[min(100vw,calc(100dvh*9/16))] overflow-hidden bg-black">
-        <canvas
-          ref={camera.canvasRef}
-          className={cn('absolute inset-0 h-full w-full object-cover transition-opacity duration-300', camera.status === 'ready' ? 'opacity-100' : 'opacity-0')}
-          aria-label={s('photo')}
-        />
+        <video ref={camera.videoRef} autoPlay playsInline muted
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          style={{transform:camera.facing==='user'?'scaleX(-1)':undefined}}
+          aria-label="معاينة الكاميرا الحقيقية"/>
+        <canvas ref={camera.canvasRef}
+          className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover transition-opacity duration-200',
+            camera.status==='ready'&&camera.gpuAvailable&&studio.face.id==='none'?'opacity-100':'opacity-0')}
+          aria-hidden="true"/>
+        <canvas ref={camera.arCanvasRef}
+          className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover',
+            studio.face.id==='none'?'opacity-0':'opacity-100')}
+          aria-label="قناع الواقع المعزز يتبع الوجه" role="img"/>
 
         {camera.status !== 'ready' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">
@@ -253,7 +262,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
             </span>
           ) : (
             <div className="flex flex-col items-start gap-1.5">
-              {visionMessage&&<span className="rounded-full bg-black/50 px-3 py-1 text-[11px] text-white/80">{visionMessage}</span>}
+              {!faceArSelected&&visionMessage&&<span className="rounded-full bg-black/50 px-3 py-1 text-[11px] text-white/80">{visionMessage}</span>}
               {camera.previewFps!==null&&
                 <span className="rounded-full border border-[#90aaff]/20 bg-black/55 px-2.5 py-1 font-mono text-[10px] tabular-nums text-[#acc4ff]">
                   {camera.previewFps} FPS • Preview
@@ -288,9 +297,9 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
               </button>
             )}
             <button
-              onClick={() => setShowPanel((value) => !value)}
+              onClick={() => {setShowPanel(value=>!value);setShowFaceTray(false)}}
               className={cn('flex h-10 w-10 items-center justify-center rounded-full backdrop-blur', showPanel ? 'bg-white text-black' : 'bg-black/40 text-white')}
-              aria-label={s('filters')}
+              aria-label="إعدادات الاستوديو المتقدمة"
               aria-pressed={showPanel}
             >
               <SlidersHorizontal className="h-5 w-5" />
@@ -318,6 +327,17 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
           </div>
         )}
 
+        {!camera.recording && !captured && !showPanel && !isLive && mode!=='live' &&
+          <FaceMaskTray value={studio.face} onChange={face=>setStudio(prev=>({...prev,face}))}
+            visible={showFaceTray} onToggle={()=>setShowFaceTray(v=>!v)}/>}
+        {faceArSelected&&camera.status==='ready'&&(
+          <div className="pointer-events-none absolute inset-x-0 top-[max(4.75rem,env(safe-area-inset-top))] z-10 flex justify-center px-3">
+            <span className={cn('max-w-[92%] rounded-full border px-3 py-1.5 text-center text-[11px] font-semibold backdrop-blur-md',
+              camera.vision==='tracking'?'border-emerald-400/35 bg-[#061d20]/80 text-emerald-200':'border-amber-200/25 bg-[#1a1c29]/80 text-amber-100')}>
+              {visionMessage}
+            </span>
+          </div>
+        )}
         <div className="absolute inset-x-0 bottom-0 flex flex-col pb-[env(safe-area-inset-bottom)]">
           {isLive ? (
             <div className="flex flex-col gap-3 bg-gradient-to-t from-black/80 to-transparent p-4">
@@ -334,7 +354,15 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
             </div>
           ) : (
             <>
-              {showPanel && !camera.recording && <StudioPanel state={studio} onChange={setStudio} captureFrame={camera.captureAnalysisFrame} />}
+              {showPanel && !camera.recording &&
+                <div className="max-h-[29dvh] overflow-y-auto rounded-t-3xl border-t border-white/10 bg-[#0b1022]/85 backdrop-blur-xl">
+                  <div className="sticky top-0 z-10 flex justify-between bg-[#0b1022]/95 px-4 py-2 text-xs font-bold text-[#b9c9ff]">
+                    <span>أدوات الاستوديو</span>
+                    <button onClick={()=>{setShowPanel(false);setShowFaceTray(true)}}
+                      className="rounded-full border border-white/15 px-3 py-1 text-white">إغلاق ×</button>
+                  </div>
+                  <StudioPanel state={studio} onChange={setStudio} captureFrame={camera.captureAnalysisFrame}/>
+                </div>}
 
               <div className="flex flex-col gap-4 bg-black/60 px-6 pb-5 pt-4 backdrop-blur-xl">
                 {mode === 'live' && (
