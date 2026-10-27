@@ -9,6 +9,7 @@ import {
  type RealityImageProjection,type XYBounds,
 } from '@/lib/filter-engine/reality-image-projection'
 import {parseCanonicalOBJ} from '@/lib/filter-engine/reality-canonical-retarget'
+import {createSolidExportMesh,assertSolidGlb} from '@/lib/filter-engine/reality-solid-glb-export'
 
 const CANONICAL_FACE='/face-assets/mediapipe-canonical-face-468.obj'
 type ImageInfo=Readonly<{width:number;height:number;format:string;extensionMismatch:boolean}>
@@ -170,12 +171,19 @@ export default function RealityImageReference({file}:{file:File}){
   try{
    const {GLTFExporter}=await import('three/addons/exporters/GLTFExporter.js')
    const exporter=new GLTFExporter()
-   const exported=await new Promise<ArrayBuffer>((resolve,reject)=>{
-    exporter.parse(model,output=>{
-     if(output instanceof ArrayBuffer)resolve(output)
-     else reject(Error('A binary GLB export was expected.'))
-    },reject,{binary:true,onlyVisible:true,maxTextureSize:1536})
-   })
+   // Export a clone with actual surface triangles. The interactive
+   // "show wireframe" toggle must never turn a GLB into glTF LINES.
+   const solid=createSolidExportMesh(model)
+   let exported:ArrayBuffer
+   try{
+    exported=await new Promise<ArrayBuffer>((resolve,reject)=>{
+     exporter.parse(solid.mesh,output=>{
+      if(output instanceof ArrayBuffer)resolve(output)
+      else reject(Error('A binary GLB export was expected.'))
+     },reject,{binary:true,onlyVisible:true,maxTextureSize:1536})
+    })
+    assertSolidGlb(exported)
+   }finally{solid.dispose()}
    const label=file.name.replace(/\.(?:png|jpe?g|webp)$/i,'')
     .replace(/[^\w-]+/g,'-').slice(0,60)||'face-reference'
    download(new Blob([exported],{type:'model/gltf-binary'}),label+'-canonical-preview.glb')
