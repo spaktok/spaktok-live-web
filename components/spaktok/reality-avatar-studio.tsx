@@ -87,8 +87,22 @@ export default function RealityAvatarStudio(){
  const [mirror,setMirror]=useState(true)
  const mirrorRef=useRef(mirror)
  const strengthRef=useRef(strength)
- useEffect(()=>{mirrorRef.current=mirror;strengthRef.current=strength},
-  [mirror,strength])
+ const manualPreviewRef=useRef(false)
+ const manualValuesRef=useRef<AvatarExpression>(NEUTRAL_AVATAR_EXPRESSION)
+ const [manualPreview,setManualPreview]=useState(false)
+ const [manualValues,setManualValues]=useState<AvatarExpression>(NEUTRAL_AVATAR_EXPRESSION)
+ const rigControls=[
+  {id:'eyeBlinkLeft' as const,label:'رمش العين اليسرى'},
+  {id:'eyeBlinkRight' as const,label:'رمش العين اليمنى'},
+  {id:'jawOpen' as const,label:'فتح الفم والفك'},
+  {id:'mouthSmileLeft' as const,label:'ابتسامة اليسار'},
+  {id:'mouthSmileRight' as const,label:'ابتسامة اليمين'},
+  {id:'browInnerUp' as const,label:'رفع الحاجبين'},
+  {id:'mouthPucker' as const,label:'ضم الشفتين'},
+ ]
+ useEffect(()=>{mirrorRef.current=mirror;strengthRef.current=strength},[mirror,strength])
+ useEffect(()=>{manualPreviewRef.current=manualPreview},[manualPreview])
+ useEffect(()=>{manualValuesRef.current=manualValues},[manualValues])
 
  const resetTracking=()=>{
   expressionsRef.current=NEUTRAL_AVATAR_EXPRESSION
@@ -148,6 +162,7 @@ export default function RealityAvatarStudio(){
    const factor=strengthRef.current
    const active=performance.now()-lastTrackingRef.current<450
    state.expression=smoothAvatarExpression(state.expression,
+    manualPreviewRef.current?manualValuesRef.current:
     active?expressionsRef.current:NEUTRAL_AVATAR_EXPRESSION,.29)
    state.pose=easeAvatarPose(state.pose,active?poseRef.current:NEUTRAL_AVATAR_HEAD,.3)
    root.rotation.set(state.pose.pitch*factor,state.pose.yaw*factor,
@@ -488,10 +503,41 @@ export default function RealityAvatarStudio(){
        الرجوع إلى نموذج LUXA المختار
       </button>
       <p className="mt-2 text-xs text-slate-400">Morph Targets: {morphCount} · حركات معروفة: {mappedCount}</p>
+      {!!morphCount&&<p className="mt-2 text-[11px] leading-5 text-cyan-200">
+       يمكنك اختبار الحركات واحدة تلو الأخرى من اللوحة التالية، أو إيقاف الاختبار لتتحرك الشخصية مع تتبّع كاميرتك.
+      </p>}
       {!!targetNames.length&&<p className="mt-1 break-words text-xs text-slate-500">المفاتيح: {targetNames.join(' · ')}</p>}
      </div>
+     <div className="rounded-2xl border border-cyan-400/25 bg-slate-900 p-4">
+      <h2 className="font-semibold">3. اختبار القناع الهندسي قبل الكاميرا</h2>
+      <p className="mt-2 text-xs leading-6 text-slate-300">
+       ارفع أحد ملفَّي LUXA GLB، وفعّل الاختبار اليدوي للتأكد من أن الشبكة تتغير هندسيًا. ستُحرّك القيم الفم والعينين والحاجبين حتى إن تعذّر اكتشاف الوجه بالكاميرا.
+      </p>
+      <label className="mt-3 flex items-center gap-2 text-sm font-medium text-cyan-100">
+       <input type="checkbox" checked={manualPreview} onChange={e=>setManualPreview(e.target.checked)}/>
+       تشغيل تحريك القناع اليدوي
+      </label>
+      {manualPreview&&<div className="mt-3 max-h-56 space-y-3 overflow-y-auto">
+       {rigControls.map(control=><label key={control.id} className="block text-xs">
+        <span className="flex items-center justify-between gap-2">
+         <span>{control.label}</span><span>{Math.round(manualValues[control.id]*100)}%</span>
+        </span>
+        <input type="range" min="0" max="1" step=".05"
+         value={manualValues[control.id]}
+         onChange={e=>setManualValues(prev=>({...prev,[control.id]:Number(e.target.value)}))}
+         className="mt-1 w-full accent-cyan-300" aria-label={control.label}/>
+       </label>)}
+       <button type="button" className="rounded-lg bg-white/10 px-3 py-2 text-xs"
+        onClick={()=>setManualValues(NEUTRAL_AVATAR_EXPRESSION)}>
+        إعادة جميع حركات الوجه إلى الصفر
+       </button>
+      </div>}
+      <p className="mt-2 text-[11px] text-slate-400">
+       القناع المستورد يحتاج Morph Targets بنفس الأسماء. هذا الاختبار لا ينشر فيديو ولا يتطلب إذن الكاميرا.
+      </p>
+     </div>
      <div className="rounded-2xl border border-white/10 bg-slate-900 p-4">
-      <h2 className="font-semibold">3. درجة الاستجابة</h2>
+      <h2 className="font-semibold">4. درجة الاستجابة</h2>
       <input type="range" min="0" max="1" step=".05" value={strength}
        onChange={event=>setStrength(Number(event.target.value))}
        className="mt-3 w-full accent-cyan-400" aria-label="شدة حركة الوجه"/>
