@@ -31,6 +31,9 @@ export default function RealityImageReference({file,canExport}:{file:File;canExp
  const [loading,setLoading]=useState(true)
  const [exporting,setExporting]=useState(false)
  const [wire,setWire]=useState(false)
+ const [roughness,setRoughness]=useState(.52)
+ const [clearcoat,setClearcoat]=useState(.42)
+ const [specular,setSpecular]=useState(.5)
  const [referenceUrl,setReferenceUrl]=useState<string|null>(null)
  useEffect(()=>{
   const url=URL.createObjectURL(file)
@@ -111,9 +114,13 @@ export default function RealityImageReference({file,canExport}:{file:File;canExp
     texture.minFilter=THREE.LinearMipmapLinearFilter
     texture.magFilter=THREE.LinearFilter
     texture.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy())
-    const material=new THREE.MeshStandardMaterial({
-     map:texture,roughness:.9,metalness:0,side:THREE.DoubleSide,
-     transparent:true,alphaTest:.05,
+    // Export authored PBR parameters with the canonical UV-aligned mesh.
+    // This adjusts reflectance only; it does not infer unseen skin depth.
+    const material=new THREE.MeshPhysicalMaterial({
+     map:texture,roughness:.52,metalness:0,clearcoat:.42,
+     clearcoatRoughness:.22,
+     specularIntensity:.5,
+     side:THREE.DoubleSide,transparent:true,alphaTest:.05,
     })
     const newMesh=new THREE.Mesh(geometry,material)
     // MediaPipe neutral geometry is authored in CENTIMETERS, never an
@@ -147,7 +154,7 @@ export default function RealityImageReference({file,canExport}:{file:File;canExp
    exportedMesh.current=null;positions.current=null;bounds.current=null
    if(mesh){
     mesh.geometry.dispose()
-    const material=mesh.material as THREE.MeshStandardMaterial
+    const material=mesh.material as THREE.MeshPhysicalMaterial
     material.map?.dispose();material.dispose()
    }
    renderer.dispose();renderer.domElement.remove()
@@ -163,6 +170,14 @@ export default function RealityImageReference({file,canExport}:{file:File;canExp
   const material=exportedMesh.current?.material as THREE.MeshStandardMaterial|undefined
   if(material)material.wireframe=wire
  },[wire,loading])
+ useEffect(()=>{
+  const material=exportedMesh.current?.material
+  if(!(material instanceof THREE.MeshPhysicalMaterial))return
+  material.roughness=roughness
+  material.clearcoat=clearcoat
+  material.specularIntensity=specular
+  material.needsUpdate=true
+ },[roughness,clearcoat,specular,loading])
  const changeProjection=(patch:Partial<RealityImageProjection>)=>
   setProjection(old=>({...old,...patch}))
  const exportPreview=async(toAvatar=false)=>{
@@ -230,6 +245,21 @@ export default function RealityImageReference({file,canExport}:{file:File;canExp
     {slider('تكبير الخامة','zoom',.5,2.5,.05)}
     {slider('الإزاحة الأفقية','shiftX',-.5,.5,.01)}
     {slider('الإزاحة الرأسية','shiftY',-.5,.5,.01)}
+    <label className="block space-y-1 text-xs text-slate-300">
+     خشونة الجلد (PBR): {roughness.toFixed(2)}
+     <input type="range" min=".18" max=".95" step=".01" value={roughness}
+      onChange={e=>setRoughness(Number(e.target.value))} className="w-full accent-cyan-400"/>
+    </label>
+    <label className="block space-y-1 text-xs text-slate-300">
+     اللمعان السطحي (Clearcoat): {clearcoat.toFixed(2)}
+     <input type="range" min="0" max=".95" step=".01" value={clearcoat}
+      onChange={e=>setClearcoat(Number(e.target.value))} className="w-full accent-cyan-400"/>
+    </label>
+    <label className="block space-y-1 text-xs text-slate-300">
+     انعكاس الضوء: {specular.toFixed(2)}
+     <input type="range" min="0" max="1" step=".01" value={specular}
+      onChange={e=>setSpecular(Number(e.target.value))} className="w-full accent-cyan-400"/>
+    </label>
     <label className="flex items-center gap-2 text-xs text-white">
      <input type="checkbox" checked={projection.mirror}
       onChange={e=>changeProjection({mirror:e.target.checked})}/> عكس الخامة أفقيًا
