@@ -13,6 +13,9 @@ import type {TrackedHand} from './reality-hand-physics'
 import {stabilizeFaceMesh,hasFreshFace} from './face3d-tracking'
 import {cameraSurfaceDimensions} from './preview-surface'
 import {cameraMorphForEffect} from './reality-face-morph'
+import {createDenseFaceTopology,type DenseFaceTopology} from './reality-face-topology'
+import {createLiveFaceMeshTemplate,updateLiveFaceMesh,chooseLiveMeshLevel,
+ type LiveMeshTemplate} from './reality-live-personal-mesh'
 
 export type Facing = 'user' | 'environment'
 export type CameraStatus = 'idle' | 'starting' | 'ready' | 'denied' | 'unsupported' | 'error'
@@ -23,6 +26,8 @@ interface Options {
   localPhotoFaceFile?:File|null
   audio?: boolean
   paused?: boolean
+  liveFaceMesh?:boolean
+  liveMeshDebug?:boolean
   /** Output aspect ratio (width / height). Portrait 9:16 matches stories and live. */
   aspect?: number
 }
@@ -44,10 +49,21 @@ const chooseOutputHeight = () => {
  * Face mesh and person segmentation run on-device (MediaPipe) so reshape and
  * background effects follow the face frame-by-frame.
  */
-export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false, paused = false, aspect = 9 / 16 }: Options) {
+export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false }: Options) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const liveMeshCanvasRef=useRef<HTMLCanvasElement|null>(null)
+  const liveMeshEnabledRef=useRef(liveFaceMesh)
+  const liveMeshDebugRef=useRef(liveMeshDebug)
+  const liveTopologyRef=useRef<DenseFaceTopology|null>(null)
+  const liveTemplatesRef=useRef(new Map<number,LiveMeshTemplate>())
+  const liveBufferRef=useRef<Float32Array|null>(null)
+  const liveProjectedRef=useRef<{positions:Float32Array;template:LiveMeshTemplate;timestamp:number}|null>(null)
+  const livePreviousPointsRef=useRef<ReadonlyArray<{x:number;y:number;z:number}>|null>(null)
+  const livePreviousTimestampRef=useRef(0)
+  const liveMeshLastUpdateRef=useRef(0)
+  const liveFpsRef=useRef<number|null>(null)
   const threeCanvasRef=useRef<HTMLCanvasElement|null>(null)
   const threeEngineRef=useRef<FaceMesh3DEngine|null>(null)
   const face3DRef=useRef<Face3DFrame|null>(null)
@@ -84,6 +100,9 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
   const [zoom, setZoomState] = useState(1)
   const [recording, setRecording] = useState(false)
   const [previewFps,setPreviewFps] = useState<number | null>(null)
+  const [liveMeshInfo,setLiveMeshInfo]=useState<{
+    triangleCount:number;vertexCount:number;levels:number;measuredLandmarks:number;tracking:boolean
+  }|null>(null)
   const [gpuAvailable,setGpuAvailable] = useState(true)
   const [gpu2Active,setGpu2Active] = useState(false)
   const [handMode,setHandMode] = useState<'off'|'mounted'|'grabbed'|'returning'>('off')
@@ -96,10 +115,12 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
 
   stateRef.current = state
   activeRef.current = !paused
+  liveMeshEnabledRef.current=liveFaceMesh
+  liveMeshDebugRef.current=liveMeshDebug
   const executionPlan = createRealityExecutionPlan(state)
   compositeArRef.current = executionPlan.faceOverlay
 
-  const needsFace = executionPlan.trackFace
+  const needsFace = executionPlan.trackFace||liveFaceMesh
   const needsMask = executionPlan.trackPerson
 
   useEffect(()=>{
@@ -198,6 +219,8 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
     }
     const overlay=arCanvasRef.current
     if(overlay){overlay.width=canvas.width;overlay.height=canvas.height}
+    const meshCanvas=liveMeshCanvasRef.current
+    if(meshCanvas){meshCanvas.width=canvas.width;meshCanvas.height=canvas.height}
     if(threeCanvasRef.current){threeCanvasRef.current.width=canvas.width;threeCanvasRef.current.height=canvas.height}
     const composition=document.createElement('canvas')
     composition.width=canvas.width;composition.height=canvas.height
@@ -209,6 +232,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
       if(Math.abs(canvas.width-desired.width)<2&&canvas.height===desired.height)return
       canvas.width=desired.width;canvas.height=desired.height
       if(overlay){overlay.width=desired.width;overlay.height=desired.height}
+      if(meshCanvas){meshCanvas.width=desired.width;meshCanvas.height=desired.height}
       if(composition){composition.width=desired.width;composition.height=desired.height}
       if(threeCanvasRef.current){
         if(threeEngineRef.current)threeEngineRef.current.resize(desired.width,desired.height)
@@ -246,6 +270,26 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
       cancelled = true
     }
   }, [needsFace, needsMask])
+
+  useEffect(()=>{
+    if(!liveFaceMesh){
+      liveTopologyRef.current=null
+      liveTemplatesRef.current.clear()
+      liveProjectedRef.current=null
+      livePreviousPointsRef.current=null
+      liveMeshCanvasRef.current?.getContext('2d')?.clearRect(0,0,
+        liveMeshCanvasRef.current.width,liveMeshCanvasRef.current.height)
+      setLiveMeshInfo(null)
+      return
+    }
+    let cancelled=false
+    import('@mediapipe/tasks-vision').then(({FaceLandmarker})=>{
+      if(cancelled)return
+      liveTopologyRef.current=createDenseFaceTopology(
+        FaceLandmarker.FACE_LANDMARKS_TESSELATION,478)
+    }).catch(()=>{if(!cancelled)liveTopologyRef.current=null})
+    return()=>{cancelled=true}
+  },[liveFaceMesh])
 
   useEffect(()=>{
     if(!isFace3DSelected(state.face.id)||!handsRequestedRef.current){
@@ -322,7 +366,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
       if (visionBusyRef.current || document.hidden) return
       const current = stateRef.current
       const plan = createRealityExecutionPlan(current)
-      const wantsFace = plan.trackFace
+      const wantsFace = plan.trackFace||liveMeshEnabledRef.current
       const wantsMask = plan.trackPerson
       if (!wantsFace && !wantsMask) return
       const cores=navigator.hardwareConcurrency||4
@@ -378,8 +422,57 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
             face3DRef.current=null
             faceRef.current=smoothFace(faceRef.current,toFaceGeometry(landmarks,aspectRatio))
           }
+          // Live participant mesh is created from this exact tracked face,
+          // regardless of whether a 3D wearable was selected.
+          if(liveMeshEnabledRef.current&&liveTopologyRef.current){
+            const meshPoints=isFace3DSelected(current.face.id)&&face3DRef.current
+              ?face3DRef.current.landmarks
+              :stabilizeFaceMesh(livePreviousPointsRef.current,
+                landmarks.map(p=>({x:p.x,y:p.y,z:p.z??0})),
+                livePreviousTimestampRef.current?now-livePreviousTimestampRef.current:0,
+                aspectRatio)
+            livePreviousPointsRef.current=meshPoints
+            livePreviousTimestampRef.current=now
+            const canvas=liveMeshCanvasRef.current
+            const out=canvasRef.current
+            if(canvas&&out){
+              const memory=(navigator as Navigator&{deviceMemory?:number}).deviceMemory
+              const cores=navigator.hardwareConcurrency||4
+              const device=cores<=4||(memory!==undefined&&memory<=3)
+                ?'low':cores>=8&&(memory??4)>=6?'high':'mid'
+              const level=chooseLiveMeshLevel(device,liveFpsRef.current,true)
+              let template=liveTemplatesRef.current.get(level)
+              if(!template){
+                template=createLiveFaceMeshTemplate(liveTopologyRef.current,level)
+                liveTemplatesRef.current.set(level,template)
+              }
+              const updated=updateLiveFaceMesh(template,meshPoints,{
+                sourceWidth:video.videoWidth,sourceHeight:video.videoHeight,
+                outputWidth:out.width,outputHeight:out.height,mirror:facing==='user',
+              },liveBufferRef.current?.length===template.vertexCount*3
+                ?liveBufferRef.current:undefined)
+              if(updated){
+                liveBufferRef.current=updated.positions
+                liveProjectedRef.current={positions:updated.positions,template,timestamp:now}
+                if(now-liveMeshLastUpdateRef.current>=500){
+                  liveMeshLastUpdateRef.current=now
+                  setLiveMeshInfo({
+                   triangleCount:updated.triangleCount,vertexCount:updated.vertexCount,
+                   levels:level,measuredLandmarks:478,tracking:true,
+                  })
+                }
+              }else{
+                liveProjectedRef.current=null
+                setLiveMeshInfo(null)
+              }
+            }
+          }
           setVision((value) => (value === 'tracking' ? value : 'tracking'))
         } else if (++lostFrames > 4) {
+          liveProjectedRef.current=null
+          livePreviousPointsRef.current=null
+          livePreviousTimestampRef.current=0
+          setLiveMeshInfo(null)
           faceRef.current = null
           face3DRef.current=null
           setVision((value) => (value === 'no-face' ? value : 'no-face'))
@@ -433,6 +526,31 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
             drawFaceMask(overlayCtx,faceRef.current,current.face,
               video.videoWidth,video.videoHeight,overlay.width,overlay.height,
               facing==='user',now/1000)
+          }
+        }
+        // Optional QA wireframe is screen-only. It never alters transmitted
+        // source pixels, facial identity, makeup or recording frames.
+        const wireCanvas=liveMeshCanvasRef.current
+        const wireContext=wireCanvas?.getContext('2d')
+        if(wireCanvas&&wireContext){
+          wireContext.clearRect(0,0,wireCanvas.width,wireCanvas.height)
+          const mesh=liveProjectedRef.current
+          if(liveMeshDebugRef.current&&liveMeshEnabledRef.current&&mesh&&
+            now-mesh.timestamp<=375&&!original){
+            const {positions,template}=mesh
+            const indices=template.indices
+            const step=Math.max(1,Math.ceil(template.triangleCount/650))
+            wireContext.strokeStyle='rgba(66,230,226,0.52)'
+            wireContext.lineWidth=.7
+            wireContext.beginPath()
+            for(let i=0;i<indices.length;i+=step*3){
+              const a=indices[i]*3,b=indices[i+1]*3,d=indices[i+2]*3
+              wireContext.moveTo(positions[a],positions[a+1])
+              wireContext.lineTo(positions[b],positions[b+1])
+              wireContext.lineTo(positions[d],positions[d+1])
+              wireContext.closePath()
+            }
+            wireContext.stroke()
           }
         }
         // A single Three.js WebGL context handles the camera shader, face
@@ -503,7 +621,9 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
         fps.frames+=1
         if(fps.last===0)fps.last=now
         else if(now-fps.last>=1200){
-          setPreviewFps(Math.round(1000*fps.frames/(now-fps.last)))
+          const actualFps=Math.round(1000*fps.frames/(now-fps.last))
+          liveFpsRef.current=actualFps
+          setPreviewFps(actualFps)
           // CPU submission time and draw calls, not actual GPU execution time.
           setGpu2Metrics(frameUsedGpu2?threeEngineRef.current?.lastGpuStats??null:null)
           setHandMode(handsRequestedRef.current?threeEngineRef.current?.lastHandInteraction?.state??'mounted':'off')
@@ -635,6 +755,8 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
     videoRef,
     canvasRef,
     arCanvasRef,
+    liveMeshCanvasRef,
+    liveMeshInfo,
     threeCanvasRef,
     threeStatus,
     threeQuality,
