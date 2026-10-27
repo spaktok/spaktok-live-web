@@ -29,4 +29,4 @@ jobs:
       - name: Install dependencies using repository lockfile
         run: bun install --frozen-lockfile
       - name: Run Reality Engine and facial anchoring regression tests
-        run: bunx vitest run --config vitest.config.ts lib/filter-engine/reality-effect.test.ts lib/filter-engine/face3d.test.ts lib/filter-engine/reality-pipeline.test.ts lib/filter-engine/reality-gpu2.test.ts lib/filter-engine/lighting3d.test.ts
+        run: bunx vitest run --config vitest.config.ts lib/filter-engine/reality-face-surface.test.ts lib/filter-engine/reality-effect.test.ts lib/filter-engine/face3d.test.ts lib/filter-engine/reality-pipeline.test.ts lib/filter-engine/reality-gpu2.test.ts lib/filter-engine/lighting3d.test.ts

@@ -1,5 +1,6 @@
 import { backgroundModes, faceFxCatalog, filterPresets, fxList, neutralBeauty, type FaceFxId } from './params'
 import { UPLOADED_CROWN_MOBILE } from './crown-asset-url'
+import type {FaceSemanticRegion} from './reality-face-regions'
 
 /** Explicit, versioned effect contracts for the entire camera studio:
  * AR wearables, mesh makeup, legacy masks, color looks, post-FX, background.
@@ -36,6 +37,7 @@ export type RealityEffectManifest = Readonly<{
   anchor: RealityAnchor | null
   occlusion: RealityOcclusion
   asset: RealityAsset | null
+  surfaceBinding?: Readonly<{region:FaceSemanticRegion;targetLandmark:number;normalOffsetPx:number}> | null
   expressionBindings: readonly string[]
   requires: readonly ('face-mesh'|'segmentation')[]
   /** Coordinate convention shared with MediaPipe (top-left screen origin). */
@@ -46,6 +48,7 @@ type ThreeConfig = Readonly<{
   anchor: RealityAnchor
   asset?: RealityAsset
   kind?: 'wearable-3d' | 'expression-3d'
+  surfaceBinding?: RealityEffectManifest['surfaceBinding']
   expressionBindings?: readonly string[]
 }>
 const threeConfigs: Readonly<Record<string, ThreeConfig>> = {
@@ -58,6 +61,7 @@ const threeConfigs: Readonly<Record<string, ThreeConfig>> = {
     anchor:'forehead_center',
     asset:{uri:'/face-assets/spaktok-crystal.glb',format:'glb',
       localAnchor:[0,0,0],calibration:'screen-y-down'},
+    surfaceBinding:{region:'forehead',targetLandmark:10,normalOffsetPx:9},
   },
   '3d-lux-glasses':{anchor:'eyes_center'},
   '3d-space-visor':{anchor:'eyes_center'},
@@ -79,6 +83,7 @@ const faceManifests=faceFxCatalog.filter(x=>x.id!=='none').map((fx):RealityEffec
     anchor:surface?null:three?conf.anchor:null,
     occlusion:surface?'surface-depth':three?'face-depth':'none',
     asset:conf?.asset??null,
+    surfaceBinding:conf?.surfaceBinding??null,
     expressionBindings:conf?.expressionBindings??[],
     requires:['face-mesh'],tracking:surface?'face-surface':three?'head-6dof':'screen-space',
   }
@@ -128,6 +133,13 @@ export function getFaceRealityEffect(id:FaceFxId):RealityEffectManifest|null{
 export function assertRealityEffect(manifest:RealityEffectManifest):void{
  if(manifest.schemaVersion!==1||!manifest.id||!manifest.name)
    throw Error('reality_invalid_manifest')
+ if(manifest.surfaceBinding){
+  const {targetLandmark,normalOffsetPx}=manifest.surfaceBinding
+  if(!Number.isSafeInteger(targetLandmark)||targetLandmark<0||targetLandmark>=468||
+     !Number.isFinite(normalOffsetPx)||normalOffsetPx<0||normalOffsetPx>120||
+     !['wearable-3d','expression-3d'].includes(manifest.kind))
+    throw Error('reality_invalid_surface_attachment')
+ }
  if(manifest.asset){
   const uri=manifest.asset.uri
   if(!/^\/face-assets\/[a-z0-9][a-z0-9-]*\.glb(?:\?v=[a-zA-Z0-9-]+)?$/.test(uri))

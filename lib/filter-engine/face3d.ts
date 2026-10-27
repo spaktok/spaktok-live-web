@@ -22,6 +22,9 @@ import {prepareUploadedCrown} from './crown-uploaded-asset'
 import {getFaceRealityEffect} from './reality-effect-manifest'
 import {RealityEffectRuntime} from './reality-effect-runtime'
 import {resolveRealityAnchor,solveRealityMount} from './reality-effect-anchors'
+import {createDenseFaceTopology,isDenseFaceFrame,type DenseFaceTopology} from './reality-face-topology'
+import {createFaceSemanticAtlas,type FaceSemanticAtlas} from './reality-face-regions'
+import {createRegionSurfaceBinding,evaluateFaceSurfaceBinding,type FaceSurfaceBinding} from './reality-face-surface'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -247,10 +250,15 @@ export class FaceMesh3DEngine{
  readonly depthMesh:THREE.Mesh
  readonly depthPositions:THREE.BufferAttribute
  readonly makeup:FaceMakeupLayer
+ readonly topology:DenseFaceTopology
+ readonly semanticAtlas:FaceSemanticAtlas
+ readonly meshDebug:THREE.Mesh
  readonly crownContact=makeCrownContactShadow()
  private readonly loader=new GLTFLoader()
  private model:THREE.Object3D|null=null
  private current:Face3DId|null=null
+ private surfaceBinding:FaceSurfaceBinding|null=null
+ private surfaceBoundId:Face3DId|null=null
  private request=0
  private alive=true
  private width:number
@@ -295,9 +303,19 @@ export class FaceMesh3DEngine{
   this.scene.add(this.mount)
   this.mount.add(this.crownContact)
   // MediaPipe exposes a triangle tessellation of the REAL tracked face.
-  const edges=FaceLandmarker.FACE_LANDMARKS_TESSELATION
-  const triangles=trianglesFromConnections(edges,478)
-  if(triangles.length<1800)throw Error('face_mesh_connections_unavailable')
+  this.topology=createDenseFaceTopology(FaceLandmarker.FACE_LANDMARKS_TESSELATION,478)
+  this.semanticAtlas=createFaceSemanticAtlas(this.topology,{
+   lips:FaceLandmarker.FACE_LANDMARKS_LIPS,
+   leftEye:FaceLandmarker.FACE_LANDMARKS_LEFT_EYE,
+   rightEye:FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
+   leftEyebrow:FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW,
+   rightEyebrow:FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW,
+   leftIris:FaceLandmarker.FACE_LANDMARKS_LEFT_IRIS,
+   rightIris:FaceLandmarker.FACE_LANDMARKS_RIGHT_IRIS,
+   faceOval:FaceLandmarker.FACE_LANDMARKS_FACE_OVAL,
+  })
+  const triangles=Array.from(this.topology.indices)
+  if(triangles.length<2400)throw Error('face_mesh_connections_unavailable')
   const meshGeo=new THREE.BufferGeometry()
   const buffer=new Float32Array(478*3)
   this.depthPositions=new THREE.BufferAttribute(buffer,3)
@@ -313,6 +331,15 @@ export class FaceMesh3DEngine{
   this.scene.add(this.depthMesh)
   this.makeup=new FaceMakeupLayer(meshGeo,triangles)
   this.scene.add(this.makeup.mesh)
+  // Explicit local QA overlay; never visible to ordinary creators/viewers.
+  this.meshDebug=new THREE.Mesh(meshGeo,new THREE.MeshBasicMaterial({
+   color:0x8749ff,wireframe:true,transparent:true,opacity:.65,
+   depthTest:false,depthWrite:false,side:THREE.DoubleSide,
+  }))
+  this.meshDebug.renderOrder=1000
+  this.meshDebug.frustumCulled=false
+  this.meshDebug.visible=false
+  this.scene.add(this.meshDebug)
  }
  resize(w:number,h:number){
   if(this.width===w&&this.height===h)return
@@ -340,6 +367,8 @@ export class FaceMesh3DEngine{
  async setLens(id:Face3DId):Promise<boolean>{
   if(this.current===id)return this.lensReady
   this.current=id
+  this.surfaceBinding=null
+  this.surfaceBoundId=null
   this.lensReady=false
   this.modelQuality='none'
   const token=++this.request
@@ -429,6 +458,8 @@ export class FaceMesh3DEngine{
   this.renderer.setClearColor(0x000000,integrated?1:0)
   this.canvas.style.opacity=integrated?'1':String(clamp(strength,0,1))
   if(!isFace3DId(id)||!frame||strength<=0){
+   this.surfaceBinding=null
+   this.meshDebug.visible=false
    this.depthMesh.visible=false;this.mount.visible=false
    this.crownContact.visible=false
    this.makeup.setStyle(id,false)
@@ -443,8 +474,11 @@ export class FaceMesh3DEngine{
      x.visible=true
    }
   })
-  const pose=getHeadPose(frame,sourceW,sourceH,this.width,this.height,mirror)
+  const pose=isDenseFaceFrame(frame.landmarks)?
+   getHeadPose(frame,sourceW,sourceH,this.width,this.height,mirror):null
   if(!pose){
+   this.surfaceBinding=null
+   this.meshDebug.visible=false
    // Invalid geometry must NEVER reproject a previous user's face or stale
    // makeup into the current camera frame.
    this.depthMesh.visible=false
@@ -457,6 +491,8 @@ export class FaceMesh3DEngine{
    return
   }
   this.depthMesh.visible=true
+  this.meshDebug.visible=typeof window!=='undefined'&&
+   new URLSearchParams(window.location.search).get('realityMesh')==='1'
   this.makeup.setStyle(id,this.lensReady,makeup)
   // Update 478 surface vertices only on a *new* inference, not 30-60 times/sec.
   if(frame.timestamp!==this.lastFrame||this.lastSourceW!==sourceW||
@@ -504,6 +540,39 @@ export class FaceMesh3DEngine{
   }else this.mount.position.set(pose.x,pose.y,18)
   this.mount.scale.setScalar(pose.width)
   this.mount.rotation.set(pose.pitch*.7,pose.yaw*.75,pose.roll)
+  // Dense surface attachment is in mobile QA until face-pose, mask and GLB
+  // alignment pass real-device tests. Default remains the stable head anchor.
+  if(definition?.surfaceBinding&&typeof window!=='undefined'&&
+     new URLSearchParams(window.location.search).get('realitySurface')==='1'){
+   const spec=definition.surfaceBinding
+   const target=frame.landmarks[spec.targetLandmark]
+   if(!this.surfaceBinding||this.surfaceBoundId!==id){
+    this.surfaceBoundId=id
+    this.surfaceBinding=target?createRegionSurfaceBinding(
+     this.topology,this.semanticAtlas,spec.region,target,frame.landmarks,
+     sourceW/sourceH,
+    ):null
+   }
+   const surface=this.surfaceBinding?evaluateFaceSurfaceBinding(
+    this.surfaceBinding,frame.landmarks,{
+     sourceWidth:sourceW,sourceHeight:sourceH,
+     outputWidth:this.width,outputHeight:this.height,mirror,
+    },spec.normalOffsetPx,
+   ):null
+   if(!surface){
+    // A corrupt/degenerate mesh must never leave a floating, stale wearable.
+    this.mount.visible=false
+    this.crownContact.visible=false
+    this.makeup.setStyle(id,false)
+    if(integrated)this.renderer.render(this.scene,this.camera)
+    else this.renderer.clear()
+    this.finishGpuStats(started,integrated?1:0)
+    return
+   }
+   // Barycentric attachment follows all three live triangle vertices and
+   // uses the local surface normal for safe positive camera-facing offset.
+   this.mount.position.set(surface.x,surface.y,surface.z)
+  }
   if(this.model){
    const expr=frame.geometry.expression
    const mouth=clamp(frame.blendshapes?.jawOpen??expr?.mouthOpen??0,0,1)
@@ -552,6 +621,8 @@ export class FaceMesh3DEngine{
   this.alive=false;this.request++
   if(this.model){this.mount.remove(this.model);disposeObject(this.model)}
   this.makeup.dispose()
+  this.scene.remove(this.meshDebug)
+  ;(this.meshDebug.material as THREE.Material).dispose()
   this.gpuCamera?.dispose()
   this.gpuCamera=null
   this.gpuBlend?.dispose()
