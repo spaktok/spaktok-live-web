@@ -185,7 +185,7 @@ export function buildLiveSculptWarp(
   for(let y=0;y<grid;y++)for(let x=0;x<grid;x++){
    const id=y*grid+x
    let sumX=fieldX[id]*4,sumY=fieldY[id]*4,weight=4
-   for(const [ox,oy] of BLUR_NEIGHBORS{
+   for(const [ox,oy] of BLUR_NEIGHBORS){
     const xx=x+ox,yy=y+oy
     if(xx<0||xx>=grid||yy<0||yy>=grid)continue
     const idx=yy*grid+xx
