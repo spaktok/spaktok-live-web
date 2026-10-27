@@ -271,9 +271,16 @@ export default function RealityCreatorLab(){
     <span className="text-xs font-semibold uppercase tracking-widest text-cyan-300">SpakTok Reality Creator Studio · Local Beta</span>
     <h1 className="text-3xl font-bold">استوديو صناعة المؤثرات ثلاثية الأبعاد</h1>
     <p className="max-w-3xl text-sm leading-7 text-slate-300">استورد مجسم GLB أو OBJ أو صورة PNG/JPEG/WebP، افحص الخامات والهندسة، حدد موضع الارتباط بالوجه ونقاط الإمساك باليد. جميع الملفات تبقى في متصفحك، والتصدير ينتج مسودة تعريف فقط.</p>
-    <a href="/video-studio" className="inline-flex rounded-lg border border-cyan-500 bg-cyan-950/50 px-4 py-3 text-sm font-semibold text-cyan-200">
-     افتح Video 3D Studio — إنشاء مجسمات وتحريكها داخل الفيديو
-    </a>
+    <div className="flex flex-wrap gap-3">
+     <a href="/live-studio-preview"
+      className="inline-flex rounded-lg border border-violet-400 bg-violet-800/30 px-4 py-3 text-sm font-semibold text-white">
+      معاينة اللايف: تنحيف الفك وتعديل العينين والأنف مباشرة بالكاميرا
+     </a>
+     <a href="/video-studio"
+      className="inline-flex rounded-lg border border-cyan-500 bg-cyan-950/50 px-4 py-3 text-sm font-semibold text-cyan-200">
+      افتح Video 3D Studio — إنشاء مجسمات وتحريكها داخل الفيديو
+     </a>
+    </div>
    </header>
    {file&&hasStudioImageExtension(file.name)?
     <div className="mx-auto max-w-7xl space-y-3">

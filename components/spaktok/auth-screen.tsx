@@ -54,6 +54,7 @@ function mapAuthError(message: string): string {
 export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
   const [mode, setMode] = useState<AuthMode>("welcome");
   const [showPassword, setShowPassword] = useState(false);
+  const [showRecoveryCode,setShowRecoveryCode]=useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialError === 'native_auth_not_configured'
     ? 'قاعدة بيانات Cloudflare لم تُربط بعد. التسجيل والدخول سيتاحان بعد إكمال إعداد D1.'
@@ -313,13 +314,23 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
                 )}
                 {mode === 'recover' && (
                   <div className="space-y-1">
-                    <Input
-                      value={formData.recoveryCode}
-                      onChange={(e) => setFormData({ ...formData, recoveryCode: e.target.value })}
-                      placeholder="رمز الاسترداد الذي حفظته عند إنشاء الحساب"
-                      autoComplete="off" dir="ltr" required
-                      className="h-14 rounded-2xl border-0 bg-muted/50 text-left"
-                    />
+                    <div className="relative">
+                      <Input
+                        type={showRecoveryCode?'text':'password'}
+                        value={formData.recoveryCode}
+                        onChange={(e) => setFormData({ ...formData, recoveryCode: e.target.value })}
+                        placeholder="رمز الاسترداد الذي حفظته عند إنشاء الحساب"
+                        autoComplete="off" dir="ltr" required
+                        className="h-14 rounded-2xl border-0 bg-muted/50 pl-12 text-left"
+                        aria-label="رمز الاسترداد"
+                      />
+                      <button type="button"
+                        aria-label={showRecoveryCode?'إخفاء رمز الاسترداد':'عرض رمز الاسترداد'}
+                        onClick={()=>setShowRecoveryCode(v=>!v)}
+                        className="absolute inset-y-0 left-3 flex items-center text-muted-foreground">
+                        {showRecoveryCode?<EyeOff className="h-5 w-5"/>:<Eye className="h-5 w-5"/>}
+                      </button>
+                    </div>
                     <p className="text-right text-xs text-muted-foreground">الاسترداد عبر الرمز، وليس البريد الإلكتروني، حتى يتم تفعيل نظام البريد.</p>
                   </div>
                 )}
@@ -406,6 +417,10 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
 
               </form>
 
+              <a href="/live-studio-preview"
+                className="mt-5 block w-full rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-center text-sm font-semibold text-cyan-300">
+                تجربة كاميرا اللايف والفلاتر محليًا دون تسجيل دخول
+              </a>
               {mode === 'login' && (
                 <button type="button" className="mt-4 w-full text-center text-sm text-primary underline"
                   onClick={() => {setError(null);setMode('recover')}}>

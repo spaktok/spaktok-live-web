@@ -104,7 +104,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const [liveTitle, setLiveTitle] = useState('')
 
   const camera = useCameraStudio({
-   state:studio,localPhotoFaceFile,audio:mode!=='photo',
+   state:studio,localPhotoFaceFile,audio:mode!=='photo'&&mode!=='live',
    paused:Boolean(captured),liveFaceMesh:isLive&&mode==='live',
    liveMeshDebug:liveMeshQa&&isLive,
    liveSculpt:isLive&&liveFaceOptIn?liveSculpt:NEUTRAL_LIVE_SCULPT,
