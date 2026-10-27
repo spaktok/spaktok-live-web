@@ -74,7 +74,7 @@ export function auditRealityEffect(effect: RealityEffectManifest): RealityEffect
       checks.push('face-tracking-and-mirror')
       break
     case 'background':
-      if (effect.requiredModels?.includes('segmentation')) checks.push('segmentation-boundaries')
+      if (effect.requires.includes('segmentation')) checks.push('segmentation-boundaries')
       else checks.push('color-and-gamma')
       break
     case 'color-grade':
