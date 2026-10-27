@@ -31,6 +31,9 @@ export default function LiveStudioPreviewPage(){
     إذا لم يظهر طلب السماح بالكاميرا داخل متصفح التطبيق، افتح هذا الرابط في Chrome،
     ثم اسمح باستخدام الكاميرا من إعدادات الموقع. تحتاج الكاميرا إلى HTTPS.
    </p>
+   <Link href="/avatar-studio" className="block rounded-xl border border-violet-400/40 bg-violet-700/20 px-4 py-3 text-center text-sm font-semibold text-violet-100">
+    Avatar Studio — استيراد شخصية 3D وتحريكها بتعابير الوجه
+   </Link>
    <Link href="/reality-studio" className="block text-center text-sm font-semibold text-cyan-300 underline">
     العودة إلى استوديو المجسمات والمؤثرات
    </Link>
