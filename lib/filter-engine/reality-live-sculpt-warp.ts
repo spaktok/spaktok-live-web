@@ -42,6 +42,7 @@ const dist=(a:Point2,b:Point2,aspect:number)=>
  Math.hypot((a.x-b.x)*aspect,a.y-b.y)
 const avg=(a:Point2,b:Point2):Point2=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2})
 const clamp=(v:number,a:number,b:number)=>Math.max(a,Math.min(b,v))
+const BLUR_NEIGHBORS:readonly (readonly [number,number])[]=[[-1,0],[1,0],[0,-1],[0,1]]
 const triArea=(a:Point2,b:Point2,c:Point2)=>
  (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x)
 
@@ -70,8 +71,8 @@ export function sculptLiveFaceVertices(
  const rJaw=width*.58,rEyes=width*.255,rNose=width*.265
  const eyeDistance=dist(leftEye,rightEye,sourceAspect)
  if(eyeDistance<width*.22||eyeDistance>width*.9)return null
+ if(landmarks.some(p=>!p||![p.x,p.y,p.z].every(Number.isFinite)))return null
  return landmarks.map(p=>{
-  if(![p.x,p.y,p.z].every(Number.isFinite))return {x:p.x,y:p.y}
   let x=p.x,y=p.y
   // Jaw: symmetrically contract only lower facial regions, taper toward
   // cheeks and temples. Screen-left/right reversal is handled by the model.
@@ -184,7 +185,7 @@ export function buildLiveSculptWarp(
   for(let y=0;y<grid;y++)for(let x=0;x<grid;x++){
    const id=y*grid+x
    let sumX=fieldX[id]*4,sumY=fieldY[id]*4,weight=4
-   for(const [ox,oy] of [[-1,0],[1,0],[0,-1],[0,1]]){
+   for(const [ox,oy] of BLUR_NEIGHBORS{
     const xx=x+ox,yy=y+oy
     if(xx<0||xx>=grid||yy<0||yy>=grid)continue
     const idx=yy*grid+xx
