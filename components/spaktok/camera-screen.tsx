@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Download, Radio, RefreshCw, Send, SlidersHorizontal, Timer, X, Zap, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createStudioState } from '@/lib/filter-engine/params'
+import {
+ DEFAULT_REALITY_UNIFIED_CONFIG,resolveUnifiedRealityLook,
+ planRealityMeshBudget,type RealityLook,
+} from '@/lib/filter-engine/reality-unified-profile'
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
 import {inspectPhotoFacePickerFile,photoFacePickerArabicError} from '@/lib/filter-engine/reality-photo-file-picker'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
@@ -27,6 +31,13 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const { s } = useStudioStrings()
   const [studio, setStudio] = useState(() => createStudioState())
   const [mode, setMode] = useState<CaptureMode>(initialMode)
+  // Live stays a local preview until a real broadcast transport is connected.
+  const [liveLook,setLiveLook]=useState<RealityLook>('natural-light')
+  const [liveFaceOptIn,setLiveFaceOptIn]=useState(false)
+  const [liveLookActive,setLiveLookActive]=useState(false)
+  const previewMeshBudget=planRealityMeshBudget({
+   mode:'live-preview',device:'mid',trackingValid:false,quality:'adaptive',
+  })
   const [showPanel, setShowPanel] = useState(false)
   const [showFaceTray,setShowFaceTray] = useState(true)
   const [localPhotoFaceFile,setLocalPhotoFaceFile]=useState<File|null>(null)
@@ -181,6 +192,21 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
       return
     }
     if (mode === 'live') {
+      // One opt-in profile for camera / recording / local live preview.
+      // Lighting is non-geometric. Face geometry is altered only with consent.
+      setStudio(prev=>{
+       const adapted=resolveUnifiedRealityLook({
+        ...DEFAULT_REALITY_UNIFIED_CONFIG,
+        look:liveLook,
+        faceShapeOptIn:liveFaceOptIn,
+        faceMorphStrength:liveFaceOptIn?.24:0,
+        skinSmoothing:liveFaceOptIn?.14:0,
+       },prev)
+       // Existing AR wearable remains selected; never silently swap it.
+       return prev.face.id!=='none'&&prev.face.id!=='face-morph'
+        ? {...adapted,face:prev.face}:adapted
+      })
+      setLiveLookActive(true)
       setIsLive(true)
       setLiveSeconds(0)
       setShowPanel(false)
@@ -502,6 +528,11 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
           {isLive ? (
             <div className="flex flex-col gap-3 bg-gradient-to-t from-black/80 to-transparent p-4">
               <p className="text-xs text-white/70" dir="rtl">معاينة محلية للفلاتر قبل البث. لم تبدأ بثًا عامًا، ولا يوجد مشاهدون.</p>
+              <div dir="rtl" className="rounded-xl border border-cyan-400/20 bg-black/45 p-2.5 text-xs text-white/85">
+                <p className="font-semibold">Reality Unified • {liveLookActive?'تحسين الإضاءة مفعّل في المعاينة':'إضاءة أصلية'}</p>
+                <p className="mt-1 text-white/60">الشبكة ثلاثية الأبعاد متكيّفة حسب الجهاز؛ مليون مثلث ليست كثافة فعلية مؤكدة.</p>
+                <p className="mt-1 text-white/60">معايرة أولية آمنة: {previewMeshBudget.baseTriangles} مثلثًا مرجعيًا؛ دون وجه متتبّع لا نرفع الجودة اصطناعيًا.</p>
+              </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setShowPanel((value) => !value)} className="flex-1 rounded-full bg-white/15 py-2.5 text-sm font-semibold text-white">
                   {s('filters')}
@@ -526,6 +557,22 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
 
               <div className="flex flex-col gap-4 bg-black/60 px-6 pb-5 pt-4 backdrop-blur-xl">
                 {mode === 'live' && (
+                  <div dir="rtl" className="space-y-2 rounded-xl border border-white/15 bg-slate-950/70 p-3">
+                    <label className="block text-xs font-semibold text-white/85">إضاءة البث (لا تغيّر ملامح الوجه)</label>
+                    <select value={liveLook} onChange={e=>setLiveLook(e.target.value as RealityLook)}
+                     disabled={isLive}
+                     className="w-full rounded-lg bg-white/10 p-2 text-sm text-white">
+                      <option value="original" className="bg-slate-900">الصورة الأصلية</option>
+                      <option value="natural-light" className="bg-slate-900">تحسين الإضاءة الطبيعي</option>
+                      <option value="studio-glow" className="bg-slate-900">إضاءة استوديو ناعمة</option>
+                    </select>
+                    <label className="flex items-center gap-2 text-xs">
+                     <input type="checkbox" checked={liveFaceOptIn} disabled={isLive}
+                      onChange={e=>setLiveFaceOptIn(e.target.checked)} />
+                     تغيير بسيط لشكل الوجه بموافقتي (اختياري، لا توجد معايير جمال إجبارية)
+                    </label>
+                    <p className="text-[10px] text-white/50">إذا كان أحد مجسمات الوجه مفعّلًا، يبقى ظاهرًا ولا نستبدله تلقائيًا بفلتر نحت الوجه.</p>
+                  </div>
                   <input
                     value={liveTitle}
                     onChange={(event) => setLiveTitle(event.target.value)}
