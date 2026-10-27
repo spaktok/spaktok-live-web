@@ -65,11 +65,18 @@ function buildDemoAvatar(){
  add(sphere,skin,0,-.08,.64,.15,.25,.15)
  const eyes:THREE.Object3D[]=[]
  for(const x of [-.33,.33]){
-  const eye=add(new THREE.SphereGeometry(1,20,14),white,x,.22,.59,.18,.12,.085)
-  eyes.push(eye)
-  add(new THREE.SphereGeometry(1,16,10),iris,x,.22,.69,.07,.082,.025)
-  add(new THREE.SphereGeometry(1,16,10),dark,x,.22,.715,.028,.038,.015)
-  const brow=add(new THREE.CapsuleGeometry(.035,.23,4,8),dark,x,.47,.57,1,1,1)
+  // Eye, iris and pupil must blink together, not leave floating pupils.
+  const eyeRig=new THREE.Group()
+  eyeRig.position.set(x,.22,.59)
+  root.add(eyeRig);eyes.push(eyeRig)
+  const ball=(m:THREE.Material,z:number,sx:number,sy:number,sz:number)=>{
+   const obj=new THREE.Mesh(new THREE.SphereGeometry(1,20,14),m)
+   obj.position.z=z;obj.scale.set(sx,sy,sz);eyeRig.add(obj)
+  }
+  ball(white,0,.18,.12,.085)
+  ball(iris,.10,.07,.082,.025)
+  ball(dark,.125,.028,.038,.015)
+  const brow=add(new THREE.CapsuleGeometry(.035,.23,4,8),dark,x,.47,.57)
   brow.rotation.z=Math.PI/2
  }
  const mouth=add(new THREE.SphereGeometry(1,26,16),pink,0,-.5,.61,.28,.065,.035)
@@ -96,12 +103,10 @@ export default function RealityAvatarStudio(){
  const [mappedCount,setMappedCount]=useState(0)
  const [strength,setStrength]=useState(.85)
  const [mirror,setMirror]=useState(true)
- const [debug,setDebug]=useState(false)
  const mirrorRef=useRef(mirror)
  const strengthRef=useRef(strength)
- const debugRef=useRef(debug)
- useEffect(()=>{mirrorRef.current=mirror;strengthRef.current=strength;debugRef.current=debug},
-  [mirror,strength,debug])
+ useEffect(()=>{mirrorRef.current=mirror;strengthRef.current=strength},
+  [mirror,strength])
 
  const resetTracking=()=>{
   expressionsRef.current=NEUTRAL_AVATAR_EXPRESSION
@@ -174,7 +179,7 @@ export default function RealityAvatarStudio(){
    }else{
     const eyesAvg=[state.expression.eyeBlinkLeft,state.expression.eyeBlinkRight]
     for(let i=0;i<state.eyes.length;i++){
-     state.eyes[i].scale.y=.12*bound(1-eyesAvg[i]*.9,.1,1)
+     state.eyes[i].scale.y=bound(1-eyesAvg[i]*.92,.08,1)
     }
     if(state.mouth){
      state.mouth.scale.y=.065+state.expression.jawOpen*factor*.21+
@@ -236,7 +241,7 @@ export default function RealityAvatarStudio(){
        poseRef.current=pose
        expressionsRef.current=avatarExpressionFromMediaPipe(coeffs)
        lastTrackingRef.current=now
-       if(!tracking) setTracking(true)
+       setTracking(value=>value||true)
       }else if(now-lastTrackingRef.current>450)setTracking(false)
      }catch{
       // MediaPipe tracking may be temporarily unavailable on some phone GPUs.
