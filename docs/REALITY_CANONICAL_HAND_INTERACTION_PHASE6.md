@@ -75,3 +75,13 @@ with real captured camera clips.
   We currently do not ship an authored hair-physics model or skeletal mesh;
   the animation interface is ready but cannot generate realistic hair alone.
 - This is conservative secondary motion, not collision-solved elastodynamics.
+
+## Prototype local creator studio
+- Visit `/reality-studio` on the app to load a local original GLB.
+- Orbit the mesh, inspect material count and triangle budget, toggle
+  wireframe, choose named face anchor and edit authored pivot/grip XYZ.
+- Export a versioned authoring-draft JSON; this is **not a publication**
+  endpoint. It does not upload the file or alter public R2/D1 assets.
+- The editor currently loads self-contained GLB assets in-browser and has
+  no official review, remote 3D asset ingestion, import permissions, shared
+  scene editing, rig painting or effect marketplace yet.
