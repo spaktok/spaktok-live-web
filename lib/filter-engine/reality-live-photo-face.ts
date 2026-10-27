@@ -28,7 +28,8 @@ export function validateCanonicalVertexOrder(
   }
   const bounds=max.map((x,i)=>x-min[i])
   if(bounds.some(x=>x<1e-6))throw Error('photo_face_invalid_extent')
-  return items.map(p=>p.map((value,i)=>(value-min[i])/bounds[i]) as Point3)
+  return items.map(p=>[(p[0]-min[0])/bounds[0],
+   (p[1]-min[1])/bounds[1],(p[2]-min[2])/bounds[2]] as Point3)
  }
  const v=normalized(points),ref=normalized(canonical)
  let total=0,maxError=0
