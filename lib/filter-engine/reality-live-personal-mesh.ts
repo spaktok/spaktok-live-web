@@ -46,6 +46,11 @@ export function createLiveFaceMeshTemplate(
   topology.indices.length!==topology.triangleCount*3||
   topology.triangleCount<1||topology.triangleCount>1200)
   throw Error('reality_live_mesh_invalid_topology')
+ for(let i=0;i<topology.indices.length;i+=3){
+  const a=topology.indices[i],b=topology.indices[i+1],c=topology.indices[i+2]
+  if(![a,b,c].every(id=>Number.isSafeInteger(id)&&id>=0&&id<topology.vertexCount)||
+   a===b||b===c||a===c)throw Error('reality_live_mesh_corrupt_triangle')
+ }
  const influences:Influences[]=Array.from({length:topology.vertexCount},(_,i)=>original(i))
  let triangles=Array.from(topology.indices)
  for(let level=0;level<levels;level++){
