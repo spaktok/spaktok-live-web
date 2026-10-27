@@ -3,6 +3,7 @@
 import {useEffect,useRef,useState,type ChangeEvent} from 'react'
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
+import {OBJLoader} from 'three/addons/loaders/OBJLoader.js'
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js'
 import {validateAuthoringAsset,type RealityAuthoringAsset} from '@/lib/filter-engine/reality-canonical-head'
 
@@ -11,7 +12,7 @@ const anchors=['eyes_center','forehead_center','head_top','nose_bridge',
  'left_temple','right_temple','chin','jaw_left','jaw_right'] as const
 const categories=['glasses','hair','hat','mask','jewelry','other'] as const
 function safeSlug(name:string){
- return (name.replace(/\.glb$/i,'').toLowerCase().replace(/[^a-z0-9-]/g,'-')
+ return (name.replace(/\.(glb|obj)$/i,'').toLowerCase().replace(/[^a-z0-9-]/g,'-')
   .replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,60)||'my-effect')+'-v1'
 }
 function releaseModel(root:THREE.Object3D){
@@ -37,7 +38,7 @@ export default function RealityCreatorLab(){
  const [anchor,setAnchor]=useState<typeof anchors[number]>('eyes_center')
  const [pivot,setPivot]=useState<Vec3>([0,0,0])
  const [grip,setGrip]=useState<Vec3>([.08,-.03,0])
- const [status,setStatus]=useState('Choose an original GLB model to inspect.')
+ const [status,setStatus]=useState('Choose a GLB effect or an OBJ canonical reference to inspect.')
  const [size,setSize]=useState<Vec3|null>(null)
  const [modelInfo,setModelInfo]=useState({triangles:0,materials:0})
  const [articulated,setArticulated]=useState(false)
@@ -81,10 +82,14 @@ export default function RealityCreatorLab(){
   const observer=new ResizeObserver(resize)
   observer.observe(root);resize()
   if(file){
-   setStatus('Parsing local glTF binary. No file is uploaded.')
-   file.arrayBuffer().then(buffer=>new Promise<THREE.Group>((resolve,reject)=>{
-    new GLTFLoader().parse(buffer,'',gltf=>resolve(gltf.scene),reject)
-   })).then(model=>{
+   const reference=/\.obj$/i.test(file.name)
+   setStatus(reference?'Parsing OBJ reference locally...':'Parsing GLB locally...')
+   const parsed:Promise<THREE.Group>=reference?
+    file.text().then(text=>new OBJLoader().parse(text)):
+    file.arrayBuffer().then(buffer=>new Promise<THREE.Group>((resolve,reject)=>{
+     new GLTFLoader().parse(buffer,'',gltf=>resolve(gltf.scene),reject)
+    }))
+   parsed.then(model=>{
     if(stopped){releaseModel(model);return}
     loaded=model
     holder.add(model)
@@ -111,8 +116,10 @@ export default function RealityCreatorLab(){
     camera.near=Math.max(.001,maxDim*.001)
     camera.far=Math.max(100,maxDim*10)
     camera.updateProjectionMatrix();orbit.update()
-    setStatus('GLB loaded locally. Review its true geometry, UVs, pivots, and materials.')
-   }).catch(error=>{if(!stopped)setStatus('Unable to parse GLB: '+String(error))})
+    setStatus(reference?
+     'OBJ canonical reference loaded. Template triangles/UVs are NOT tracked 3D measurements; convert/retarget before use.':
+     'GLB loaded locally. Review its geometry, UVs, pivots and materials.')
+   }).catch(error=>{if(!stopped)setStatus('Unable to parse model: '+String(error))})
   }
   const animate=()=>{
    if(stopped)return
@@ -143,11 +150,11 @@ export default function RealityCreatorLab(){
  const importGLB=(event:ChangeEvent<HTMLInputElement>)=>{
   const next=event.target.files?.[0]
   if(!next)return
-  if(!/\.glb$/i.test(next.name)||next.size>35*1024*1024){
-   setStatus('Please import a .glb file under 35MB; no remote scripts or models.')
+  if(!/\.(glb|obj)$/i.test(next.name)||next.size>35*1024*1024){
+   setStatus('Please import .glb or .obj under 35 MB; no remote models.')
    return
   }
-  setFile(next);setName(next.name.replace(/\.glb$/i,'').replace(/[_-]/g,' '))
+  setFile(next);setName(next.name.replace(/\.(glb|obj)$/i,'').replace(/[_-]/g,' '))
   setPivot([0,0,0]);setSize(null)
  }
  const numberEditor=(title:string,value:Vec3,apply:(v:Vec3)=>void)=>(
@@ -171,6 +178,10 @@ export default function RealityCreatorLab(){
  )
  const exportDraft=()=>{
   if(!file)return
+  if(/\.obj$/i.test(file.name)){
+   setStatus('OBJ is reference geometry only. Convert and rig as GLB before exporting a publishable effect draft.')
+   return
+  }
   try{
    const slug=safeSlug(file.name)
    const asset:RealityAuthoringAsset={
@@ -207,7 +218,7 @@ export default function RealityCreatorLab(){
    <header className="mx-auto mb-7 max-w-7xl space-y-2">
     <span className="text-xs font-semibold uppercase tracking-widest text-cyan-300">SpakTok Reality Creator Studio · Local Beta</span>
     <h1 className="text-3xl font-bold">استوديو صناعة المؤثرات ثلاثية الأبعاد</h1>
-    <p className="max-w-3xl text-sm leading-7 text-slate-300">استورد مجسم GLB حقيقيًا، افحص الخامات والهندسة، حدد موضع الارتباط بالوجه ونقاط الإمساك باليد. جميع الملفات تبقى في متصفحك، والتصدير ينتج مسودة تعريف فقط.</p>
+    <p className="max-w-3xl text-sm leading-7 text-slate-300">استورد مجسم GLB أو شبكة وجه مرجعية OBJ، افحص الخامات والهندسة، حدد موضع الارتباط بالوجه ونقاط الإمساك باليد. جميع الملفات تبقى في متصفحك، والتصدير ينتج مسودة تعريف فقط.</p>
    </header>
    <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[minmax(0,1fr)_350px]">
     <section className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-950">
@@ -220,8 +231,8 @@ export default function RealityCreatorLab(){
      </div>
     </section>
     <section className="space-y-5 rounded-2xl border border-slate-700 bg-slate-900/70 p-5">
-     <label className="block space-y-2 text-sm font-semibold">ملف المجسم (.glb)
-      <input type="file" accept=".glb,model/gltf-binary" onChange={importGLB}
+     <label className="block space-y-2 text-sm font-semibold">ملف المجسم (.glb أو .obj)
+      <input type="file" accept=".glb,.obj,model/gltf-binary,text/plain" onChange={importGLB}
        className="block w-full rounded-xl border border-dashed border-slate-600 bg-slate-950 px-3 py-4 text-sm font-normal"/>
      </label>
      <label className="block space-y-2 text-sm font-semibold">اسم المؤثر
@@ -252,7 +263,7 @@ export default function RealityCreatorLab(){
       <input type="checkbox" checked={wire} onChange={e=>setWire(e.target.checked)}/>
       عرض الشبكة الهندسية للمجسم
      </label>
-     <button onClick={exportDraft} disabled={!file}
+     <button onClick={exportDraft} disabled={!file||/\.obj$/i.test(file.name)}
       className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
       تصدير مسودة Effect Package
      </button>

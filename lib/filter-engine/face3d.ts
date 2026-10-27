@@ -28,6 +28,8 @@ import {createRegionSurfaceBinding,evaluateFaceSurfaceBinding,type FaceSurfaceBi
 import {RealityHandPhysics,type TrackedHand,type HandInteraction} from './reality-hand-physics'
 import {estimateMetricFaceScale,type MetricCalibration} from './reality-canonical-head'
 import {realityRigActuation} from './reality-prop-rig'
+import {RealityHandMatte} from './reality-hand-matte'
+import {planRealityRenderGraph,type RealityRenderNode} from './reality-render-graph'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -277,6 +279,8 @@ export class FaceMesh3DEngine{
  private studioEnvironment:THREE.WebGLRenderTarget|null=null
  private gpuCamera:RealityGpuCameraLayer|null=null
  private gpuBlend:RealityGpuBlendPass|null=null
+ private handMatte:RealityHandMatte|null=null
+ lastRenderPlan:readonly RealityRenderNode[]=[]
  private lightSampler:HTMLCanvasElement|null=null
  private lastLightUpdate=-Infinity
  private smoothedLight:{brightness:number;warmth:number;side:number}|null=null
@@ -356,6 +360,8 @@ export class FaceMesh3DEngine{
   resizeVideoAlignedCamera(this.camera,w,h)
   this.gpuCamera?.resize(w,h)
   this.gpuBlend?.resize(w,h)
+  this.handMatte?.dispose()
+  this.handMatte=null
  }
  private setupStudioEnvironment(){
   if(this.studioEnvironment)return
@@ -659,21 +665,53 @@ export class FaceMesh3DEngine{
    })
   }
   this.mount.visible=this.lensReady
+  // Segmentation is not delivered by HandLandmarker. Until a true per-pixel
+  // hand model is available we use a conservative landmark-derived matte.
+  // Keep this behind a SECOND QA flag; never fade/cancel the wearable.
+  const allowHandMatte=integrated&&trackedHands!==undefined&&
+   this.lastHandInteraction?.state==='grabbed'&&
+   typeof window!=='undefined'&&new URLSearchParams(window.location.search)
+    .get('realityHandOcclusion')==='1'
+  let handMatte:Readonly<{texture:THREE.Texture;strength:number}>|undefined
+  if(allowHandMatte&&trackedHands?.length){
+   try{
+    if(!this.handMatte)this.handMatte=new RealityHandMatte(this.width,this.height)
+    const valid=this.handMatte.update(trackedHands,{
+     sourceWidth:sourceW,sourceHeight:sourceH,
+     outputWidth:this.width,outputHeight:this.height,
+     mirror,now:started,
+    })
+    if(valid)handMatte={texture:this.handMatte.texture,strength:.9}
+   }catch{
+    this.handMatte?.dispose()
+    this.handMatte=null
+   }
+  }
+  const graph=planRealityRenderGraph({
+   gpuV2:integrated,face:this.lensReady,
+   handOcclusion:Boolean(handMatte),post:true,
+  })
+  this.lastRenderPlan=graph
+  const hasHandPass=graph.some(node=>node.id==='hands')
   let passes=1
-  if(integrated&&needsRealityGpuBlend(strength)&&this.gpuCamera){
+  if(integrated&&(needsRealityGpuBlend(strength)||hasHandPass)&&this.gpuCamera){
    if(!this.gpuBlend)this.gpuBlend=new RealityGpuBlendPass(this.renderer,this.width,this.height)
    this.gpuBlend.render(strength,
     ()=>this.renderer.render(this.scene,this.camera),
     ()=>{
      const oldMount=this.mount.visible,oldDepth=this.depthMesh.visible
-     const oldMakeup=this.makeup.mesh.visible
-     this.mount.visible=false;this.depthMesh.visible=false;this.makeup.mesh.visible=false
+     const oldMakeup=this.makeup.mesh.visible,oldDebug=this.meshDebug.visible
+     const oldContact=this.crownContact.visible
+     this.mount.visible=false;this.depthMesh.visible=false
+     this.makeup.mesh.visible=false;this.meshDebug.visible=false
+     this.crownContact.visible=false
      try{this.renderer.render(this.scene,this.camera)}
      finally{
       this.mount.visible=oldMount;this.depthMesh.visible=oldDepth
-      this.makeup.mesh.visible=oldMakeup
+      this.makeup.mesh.visible=oldMakeup;this.meshDebug.visible=oldDebug
+      this.crownContact.visible=oldContact
      }
-    })
+    },hasHandPass?handMatte:undefined)
    passes=3
   }else this.renderer.render(this.scene,this.camera)
   this.finishGpuStats(started,passes)
@@ -691,6 +729,8 @@ export class FaceMesh3DEngine{
   this.gpuCamera=null
   this.gpuBlend?.dispose()
   this.gpuBlend=null
+  this.handMatte?.dispose()
+  this.handMatte=null
   this.crownContact.geometry.dispose()
   this.crownContact.material.dispose()
   this.studioEnvironment?.dispose()
