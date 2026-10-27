@@ -7,13 +7,15 @@ import {OBJLoader} from 'three/addons/loaders/OBJLoader.js'
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js'
 import {validateAuthoringAsset,type RealityAuthoringAsset} from '@/lib/filter-engine/reality-canonical-head'
 import {buildCanonicalRetarget,parseCanonicalOBJ} from '@/lib/filter-engine/reality-canonical-retarget'
+import {hasStudioImageExtension} from '@/lib/filter-engine/reality-image-projection'
+import RealityImageReference from './reality-image-reference'
 
 type Vec3=readonly [number,number,number]
 const anchors=['eyes_center','forehead_center','head_top','nose_bridge',
  'left_temple','right_temple','chin','jaw_left','jaw_right'] as const
 const categories=['glasses','hair','hat','mask','jewelry','other'] as const
 function safeSlug(name:string){
- return (name.replace(/\.(glb|obj)$/i,'').toLowerCase().replace(/[^a-z0-9-]/g,'-')
+ return (name.replace(/\.(glb|obj|png|jpe?g|webp)$/i,'').toLowerCase().replace(/[^a-z0-9-]/g,'-')
   .replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,60)||'my-effect')+'-v1'
 }
 function releaseModel(root:THREE.Object3D){
@@ -51,7 +53,7 @@ export default function RealityCreatorLab(){
  useEffect(()=>{wireRef.current=wire},[wire])
  useEffect(()=>{
   const root=stage.current
-  if(!root)return
+  if(!root||file&&hasStudioImageExtension(file.name))return
   let stopped=false,handle=0,loaded:THREE.Object3D|null=null
   const scene=new THREE.Scene()
   scene.background=new THREE.Color(0x101725)
@@ -153,11 +155,13 @@ export default function RealityCreatorLab(){
  const importGLB=(event:ChangeEvent<HTMLInputElement>)=>{
   const next=event.target.files?.[0]
   if(!next)return
-  if(!/\.(glb|obj)$/i.test(next.name)||next.size>35*1024*1024){
-   setStatus('Please import .glb or .obj under 35 MB; no remote models.')
+  const image=hasStudioImageExtension(next.name)
+  if((!image&&!/\.(glb|obj)$/i.test(next.name))||
+     next.size>(image?12:35)*1024*1024){
+   setStatus('Choose GLB or OBJ up to 35 MB, or PNG/JPEG/WebP up to 12 MB.')
    return
   }
-  setFile(next);setName(next.name.replace(/\.(glb|obj)$/i,'').replace(/[_-]/g,' '))
+  setFile(next);setName(next.name.replace(/\.(glb|obj|png|jpe?g|webp)$/i,'').replace(/[_-]/g,' '))
   setPivot([0,0,0]);setSize(null)
  }
  const numberEditor=(title:string,value:Vec3,apply:(v:Vec3)=>void)=>(
@@ -220,6 +224,10 @@ export default function RealityCreatorLab(){
  }
  const exportDraft=()=>{
   if(!file)return
+  if(hasStudioImageExtension(file.name)){
+   setStatus('Use the texture-mapping panel to export the experimental 3D face GLB.')
+   return
+  }
   if(/\.obj$/i.test(file.name)){
    setStatus('OBJ is reference geometry only. Convert and rig as GLB before exporting a publishable effect draft.')
    return
@@ -260,8 +268,17 @@ export default function RealityCreatorLab(){
    <header className="mx-auto mb-7 max-w-7xl space-y-2">
     <span className="text-xs font-semibold uppercase tracking-widest text-cyan-300">SpakTok Reality Creator Studio · Local Beta</span>
     <h1 className="text-3xl font-bold">استوديو صناعة المؤثرات ثلاثية الأبعاد</h1>
-    <p className="max-w-3xl text-sm leading-7 text-slate-300">استورد مجسم GLB أو شبكة وجه مرجعية OBJ، افحص الخامات والهندسة، حدد موضع الارتباط بالوجه ونقاط الإمساك باليد. جميع الملفات تبقى في متصفحك، والتصدير ينتج مسودة تعريف فقط.</p>
+    <p className="max-w-3xl text-sm leading-7 text-slate-300">استورد مجسم GLB أو OBJ أو صورة PNG/JPEG/WebP، افحص الخامات والهندسة، حدد موضع الارتباط بالوجه ونقاط الإمساك باليد. جميع الملفات تبقى في متصفحك، والتصدير ينتج مسودة تعريف فقط.</p>
    </header>
+   {file&&hasStudioImageExtension(file.name)?
+    <div className="mx-auto max-w-7xl space-y-3">
+     <RealityImageReference key={file.name+'-'+file.size+'-'+file.lastModified} file={file}/>
+     <label className="block rounded-xl border border-slate-700 bg-slate-900 p-4 text-sm">
+      استبدال الصورة أو استيراد صورة أخرى
+      <input type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
+       onChange={importGLB} className="mt-2 block w-full"/>
+     </label>
+    </div>:
    <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[minmax(0,1fr)_350px]">
     <section className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-950">
      <div ref={stage} className="h-[390px] w-full sm:h-[620px]" aria-label="3D object inspector"/>
@@ -273,8 +290,8 @@ export default function RealityCreatorLab(){
      </div>
     </section>
     <section className="space-y-5 rounded-2xl border border-slate-700 bg-slate-900/70 p-5">
-     <label className="block space-y-2 text-sm font-semibold">ملف المجسم (.glb أو .obj)
-      <input type="file" accept=".glb,.obj,model/gltf-binary,text/plain" onChange={importGLB}
+     <label className="block space-y-2 text-sm font-semibold">ملف المجسم أو الصورة (.glb / .obj / .png / .jpg / .webp)
+      <input type="file" accept=".glb,.obj,.png,.jpg,.jpeg,.webp,model/gltf-binary,image/*" onChange={importGLB}
        className="block w-full rounded-xl border border-dashed border-slate-600 bg-slate-950 px-3 py-4 text-sm font-normal"/>
      </label>
      <label className="block space-y-2 text-sm font-semibold">اسم المؤثر
@@ -325,7 +342,7 @@ export default function RealityCreatorLab(){
      </button>
      <p className="text-xs leading-6 text-slate-400">لا يتم رفع الملفات ولا نشرها. لإنتاج مؤثر واقعي يجب تصميم UV/PBR وRig بجودة جيدة، ثم رفع الأصل إلى مستودع SpakTok ومراجعته واختباره على الهاتف.</p>
     </section>
-   </div>
+   </div>}
   </main>
  )
 }
