@@ -10,6 +10,7 @@ import {
 } from '@/lib/filter-engine/reality-image-projection'
 import {parseCanonicalOBJ} from '@/lib/filter-engine/reality-canonical-retarget'
 import {createSolidExportMesh,assertSolidGlb} from '@/lib/filter-engine/reality-solid-glb-export'
+import {saveLocalStudioGlb,REALITY_HANDOFF_MAX_BYTES} from '@/lib/filter-engine/reality-local-asset-handoff'
 
 const CANONICAL_FACE='/face-assets/mediapipe-canonical-face-468.obj'
 type ImageInfo=Readonly<{width:number;height:number;format:string;extensionMismatch:boolean}>
@@ -19,7 +20,7 @@ const download=(blob:Blob,name:string)=>{
  link.href=url;link.download=name;link.click()
  window.setTimeout(()=>URL.revokeObjectURL(url),3000)
 }
-export default function RealityImageReference({file}:{file:File}){
+export default function RealityImageReference({file,canExport}:{file:File;canExport:boolean}){
  const mount=useRef<HTMLDivElement|null>(null)
  const exportedMesh=useRef<THREE.Mesh|null>(null)
  const positions=useRef<Float32Array|null>(null)
@@ -164,9 +165,13 @@ export default function RealityImageReference({file}:{file:File}){
  },[wire,loading])
  const changeProjection=(patch:Partial<RealityImageProjection>)=>
   setProjection(old=>({...old,...patch}))
- const exportPreview=async()=>{
+ const exportPreview=async(toAvatar=false)=>{
   const model=exportedMesh.current
   if(!model||exporting)return
+  if(!canExport){
+   setError('راجع حقوق استخدام الصورة وأكّد ملكيتها أو الترخيص أولًا في لوحة الإنتاج.')
+   return
+  }
   setExporting(true);setError(null)
   try{
    const {GLTFExporter}=await import('three/addons/exporters/GLTFExporter.js')
@@ -186,7 +191,13 @@ export default function RealityImageReference({file}:{file:File}){
    }finally{solid.dispose()}
    const label=file.name.replace(/\.(?:png|jpe?g|webp)$/i,'')
     .replace(/[^\w-]+/g,'-').slice(0,60)||'face-reference'
-   download(new Blob([exported],{type:'model/gltf-binary'}),label+'-canonical-preview.glb')
+   const assetName=label+'-canonical-preview.glb'
+   if(toAvatar){
+    if(exported.byteLength>REALITY_HANDOFF_MAX_BYTES)
+     throw Error('ملف GLB أكبر من 15MB، لا يمكن تسليمه إلى الأفاتار.')
+    await saveLocalStudioGlb(assetName,exported)
+    window.location.assign('/avatar-studio')
+   }else download(new Blob([exported],{type:'model/gltf-binary'}),assetName)
   }catch(e){
    setError('GLB export failed: '+String(e))
   }finally{setExporting(false)}
@@ -227,10 +238,15 @@ export default function RealityImageReference({file}:{file:File}){
      <input type="checkbox" checked={wire}
       onChange={e=>setWire(e.target.checked)}/> عرض مثلثات المجسم
     </label>
-    <button type="button" disabled={loading||exporting||!!error}
+    <button type="button" disabled={loading||exporting||!canExport}
      className="rounded-lg bg-cyan-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-40"
-     onClick={exportPreview}>
-     {exporting?'يتم تصدير GLB...':'تصدير نموذج GLB تجريبي'}
+     onClick={()=>void exportPreview(false)}>
+     {exporting?'يتم تجهيز GLB...':'تصدير نموذج GLB تجريبي'}
+    </button>
+    <button type="button" disabled={loading||exporting||!canExport}
+     className="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40"
+     onClick={()=>void exportPreview(true)}>
+     نقل هذا الوجه المرجعي إلى Avatar Studio
     </button>
    </div>
    <p className="text-xs leading-6 text-slate-300">
@@ -242,7 +258,8 @@ export default function RealityImageReference({file}:{file:File}){
    <p className="text-xs leading-6 text-amber-200">
     هذه صورة مسطحة أُسقطت على نموذج وجه قياسي؛ ملف GLB الناتج يحتوي على مجسم فعلي
     لكنه ليس مسحًا ثلاثي الأبعاد للوجه الظاهر بالصورة ولا يملك حركة الرموش أو الشعر.
-    الصور ذات العلامات المائية تتطلب إذن استخدام قبل النشر التجاري. الملفات تبقى داخل متصفحك.
+    الصور ذات العلامات المائية أو حقوق النشر تتطلب إذن استخدام، ولا تصبح خالية من الحقوق بالتحويل أو تعديل الألوان.
+    لن تتحرك تعابير الوجه أو شعره في GLB المرجعي دون تجهيز Rig / Morph Targets، وسيبقى الملف محليًا.
    </p>
   </div>
  )
