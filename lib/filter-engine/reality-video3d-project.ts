@@ -1,6 +1,7 @@
 /** Local-first video 3D authoring. Models and video never enter this JSON contract.
  * A project draft references local file names only; not a published effect.
  */
+import {filterPresets} from './params'
 export const VIDEO_3D_PROJECT_VERSION=1 as const
 export const VIDEO_3D_MAX_DURATION_MS=120_000
 export const VIDEO_3D_MAX_VIDEO_BYTES=250*1024*1024
@@ -28,6 +29,7 @@ export type Video3DSource=Readonly<{
 export type Video3DProject=Readonly<{
  format:'SpakTokVideo3DProject';version:1
  name:string;source:Video3DSource|null
+ colorPresetId:string
  layers:readonly Video3DLayer[]
  published:false
 }>
@@ -44,7 +46,7 @@ export const DEFAULT_VIDEO_3D_FRAME:Video3DFrame={
 }
 export function createVideo3DProject():Video3DProject{
  return {format:'SpakTokVideo3DProject',version:1,
-  name:'SpakTok Video 3D',source:null,layers:[],published:false}
+  name:'SpakTok Video 3D',source:null,colorPresetId:'original',layers:[],published:false}
 }
 export function createVideo3DLayer(id:string,kind:Video3DKind,
  name:string=kind,assetName:string|null=null):Video3DLayer{
@@ -57,6 +59,7 @@ export function createVideo3DLayer(id:string,kind:Video3DKind,
 export function validateVideo3DProject(value:Video3DProject):void{
  if(value.format!=='SpakTokVideo3DProject'||value.version!==1||
   value.published!==false||!value.name?.trim()||value.name.length>90||
+  !filterPresets.some(p=>p.id===value.colorPresetId)||
   !Array.isArray(value.layers)||value.layers.length>VIDEO_3D_MAX_LAYERS)
   throw Error('video3d_invalid_project')
  const source=value.source
