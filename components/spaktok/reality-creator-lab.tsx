@@ -164,6 +164,7 @@ export default function RealityCreatorLab(){
   if(!next)return
   const image=hasStudioImageExtension(next.name)
   if((!image&&!/\.(glb|obj)$/i.test(next.name))||
+     next.size<1||next.name.length>255||
      next.size>(image?12:35)*1024*1024){
    setStatus('Choose GLB or OBJ up to 35 MB, or PNG/JPEG/WebP up to 12 MB.')
    return
