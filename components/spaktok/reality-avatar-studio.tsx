@@ -5,7 +5,9 @@ import Link from 'next/link'
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {assertSelfContainedVideo3DGlb,VIDEO_3D_MAX_GLB_BYTES} from '@/lib/filter-engine/reality-video3d-project'
-import {loadFaceLandmarker,configureFace3DExtras} from '@/lib/filter-engine/vision'
+import {loadFaceLandmarker,configureFace3DExtras,recoverFaceLandmarkerOnCpu} from '@/lib/filter-engine/vision'
+import {avatarLandmarkExpression,avatarLuminance,chooseAvatarTrackerIssue,
+ avatarTrackingIssueArabic,type AvatarTrackingIssue} from '@/lib/filter-engine/reality-avatar-detection'
 import {
  avatarExpressionFromMediaPipe,avatarPoseFromLandmarks,easeAvatarPose,
  getAvatarMorphBindings,NEUTRAL_AVATAR_EXPRESSION,NEUTRAL_AVATAR_HEAD,
@@ -94,7 +96,19 @@ export default function RealityAvatarStudio(){
  const lastTrackingRef=useRef(0)
  const expressionsRef=useRef<AvatarExpression>(NEUTRAL_AVATAR_EXPRESSION)
  const poseRef=useRef<AvatarHeadPose>(NEUTRAL_AVATAR_HEAD)
+ const trackerIssueRef=useRef<AvatarTrackingIssue>('no-video')
+ const diagnosticsRef=useRef({frames:0,faces:0,expressions:0,errors:0,
+  brightness:null as number|null,cpu:false})
+ const lightCanvasRef=useRef<HTMLCanvasElement|null>(null)
+ const enhancedCanvasRef=useRef<HTMLCanvasElement|null>(null)
+ const lastLightSample=useRef(0)
+ const lowLightSince=useRef(0)
+ const lastDiagnosticsUpdate=useRef(0)
+ const cpuRecoveryAttempted=useRef(false)
+ const consecutiveErrors=useRef(0)
  const [status,setStatus]=useState<CameraState>('idle')
+ const [trackerIssue,setTrackerIssue]=useState<AvatarTrackingIssue>('no-video')
+ const [diagnostics,setDiagnostics]=useState(diagnosticsRef.current)
  const [tracking,setTracking]=useState(false)
  const [message,setMessage]=useState('ابدأ بكاميرتك أو حمّل مجسم GLB مُجهّزًا بتعابير الوجه.')
  const [modelName,setModelName]=useState('شخصية تجريبية من SpakTok')
@@ -113,6 +127,8 @@ export default function RealityAvatarStudio(){
   poseRef.current=NEUTRAL_AVATAR_HEAD
   lastTrackingRef.current=0
   setTracking(false)
+  trackerIssueRef.current='no-video'
+  setTrackerIssue('no-video')
  }
  const stopCamera=useCallback(()=>{
   trackingActiveRef.current=false
@@ -210,6 +226,13 @@ export default function RealityAvatarStudio(){
   if(status==='loading'||status==='running')return
   if(!navigator.mediaDevices?.getUserMedia){setStatus('unsupported');return}
   setStatus('loading')
+  diagnosticsRef.current={frames:0,faces:0,expressions:0,errors:0,
+   brightness:null,cpu:false}
+  setDiagnostics({...diagnosticsRef.current})
+  lastDiagnosticsUpdate.current=0
+  lastLightSample.current=0;lowLightSince.current=0
+  consecutiveErrors.current=0;cpuRecoveryAttempted.current=false
+  setTrackerIssue('no-video')
   try{
    const stream=await navigator.mediaDevices.getUserMedia({
     audio:false,video:{facingMode:'user',width:{ideal:640},height:{ideal:480},
@@ -223,30 +246,109 @@ export default function RealityAvatarStudio(){
    let detector=await loadFaceLandmarker()
    trackingActiveRef.current=true
    setStatus('running')
-   setMessage('التتبع محلي: يدير الرأس ويطبق تعابير الرمش والفم على المجسم المتوافق.')
+   setMessage('التتبع محلي، وسيعرض الاستوديو حالة النموذج والإضاءة وعدد الوجوه المكتشفة.')
+   const sampleLighting=(now:number)=>{
+    if(now-lastLightSample.current<1100)return
+    lastLightSample.current=now
+    try{
+     if(!lightCanvasRef.current){
+      lightCanvasRef.current=document.createElement('canvas')
+      lightCanvasRef.current.width=48;lightCanvasRef.current.height=36
+     }
+     const ctx=lightCanvasRef.current.getContext('2d',{willReadFrequently:true})
+     if(ctx){
+      ctx.drawImage(video,0,0,48,36)
+      diagnosticsRef.current.brightness=avatarLuminance(
+       ctx.getImageData(0,0,48,36).data)
+     }
+    }catch{diagnosticsRef.current.brightness=null}
+   }
+   const showDiagnostics=(now:number,issue:AvatarTrackingIssue)=>{
+    if(now-lastDiagnosticsUpdate.current>=650||trackerIssueRef.current!==issue){
+     trackerIssueRef.current=issue
+     setTrackerIssue(issue)
+     lastDiagnosticsUpdate.current=now
+     setDiagnostics({...diagnosticsRef.current})
+    }
+   }
    const track=async(now:number)=>{
     if(!trackingActiveRef.current)return
     if(!document.hidden&&video.readyState>=2&&
      now-lastDetectRef.current>=1000/maxFps){
      lastDetectRef.current=now
+     sampleLighting(now)
+     diagnosticsRef.current.frames++
      try{
-      const result=detector.detectForVideo(video,now)
-      const points=result.faceLandmarks?.[0] as TrackedPoint[]|undefined
+      let result=detector.detectForVideo(video,now)
+      let points=result.faceLandmarks?.[0] as TrackedPoint[]|undefined
+      consecutiveErrors.current=0
+      const lowLight=diagnosticsRef.current.brightness!==null&&
+       diagnosticsRef.current.brightness<72
+      if(!points&&lowLight){
+       if(!lowLightSince.current)lowLightSince.current=now
+       if(now-lowLightSince.current>1100){
+        // Contrast enhancement is private and used only for low-light
+        // INFERENCE. The original pixels are never replaced or uploaded.
+        try{
+         if(!enhancedCanvasRef.current)
+          enhancedCanvasRef.current=document.createElement('canvas')
+         const canvas=enhancedCanvasRef.current
+         if(canvas.width!==video.videoWidth)canvas.width=video.videoWidth
+         if(canvas.height!==video.videoHeight)canvas.height=video.videoHeight
+         const context=canvas.getContext('2d')
+         if(context){
+          context.filter='brightness(1.65) contrast(1.12)'
+          context.drawImage(video,0,0)
+          context.filter='none'
+          const improved=detector.detectForVideo(canvas,now+.05)
+          if(improved.faceLandmarks?.[0]){
+           result=improved
+           points=improved.faceLandmarks[0] as TrackedPoint[]
+          }
+         }
+        }catch{/* Some mobile models accept video but not canvas input. */}
+       }
+      }else lowLightSince.current=0
+      if(points)diagnosticsRef.current.faces++
       const pose=points&&avatarPoseFromLandmarks(points,mirrorRef.current)
+      const categories=result.faceBlendshapes?.[0]?.categories??[]
+      if(categories.length)diagnosticsRef.current.expressions++
       if(pose){
        const coeffs:Record<string,number>={}
-       for(const item of result.faceBlendshapes?.[0]?.categories??[]){
-        coeffs[item.categoryName]=item.score
-       }
+       for(const item of categories)coeffs[item.categoryName]=item.score
+       const base=avatarExpressionFromMediaPipe(coeffs)
+       const fallback=avatarLandmarkExpression(points!,video.videoWidth/video.videoHeight)
        poseRef.current=pose
-       expressionsRef.current=avatarExpressionFromMediaPipe(coeffs)
+       expressionsRef.current=categories.length?base:{
+        ...base,jawOpen:fallback?.jawOpen??0,
+        eyeBlinkLeft:fallback?.eyeBlinkLeft??0,
+        eyeBlinkRight:fallback?.eyeBlinkRight??0,
+       }
        lastTrackingRef.current=now
        setTracking(value=>value||true)
       }else if(now-lastTrackingRef.current>450)setTracking(false)
+      showDiagnostics(now,chooseAvatarTrackerIssue({
+       videoReady:true,hasFace:!!points,poseValid:!!pose,
+       brightness:diagnosticsRef.current.brightness,inferenceFailed:false,
+      }))
      }catch{
-      // MediaPipe tracking may be temporarily unavailable on some phone GPUs.
-      // The last expression naturally decays to neutral after 450ms.
+      diagnosticsRef.current.errors++
+      consecutiveErrors.current++
+      showDiagnostics(now,'model-error')
       if(now-lastTrackingRef.current>450)setTracking(false)
+      if(consecutiveErrors.current>=2&&!cpuRecoveryAttempted.current){
+       cpuRecoveryAttempted.current=true
+       try{
+        const cpu=await recoverFaceLandmarkerOnCpu()
+        if(cpu&&trackingActiveRef.current){
+         detector=cpu;consecutiveErrors.current=0
+         diagnosticsRef.current.cpu=true
+         setMessage('تم تحويل MediaPipe إلى CPU بعد فشل GPU. افتح وجهك نحو الكاميرا.')
+        }
+       }catch{
+        setMessage('فشل تتبّع الوجه على GPU وCPU. جرّب إعادة تشغيل الكاميرا في Chrome.')
+       }
+      }
      }
     }
     trackingAnimationRef.current=requestAnimationFrame(track)
@@ -337,14 +439,16 @@ export default function RealityAvatarStudio(){
       aria-label="معاينة شخصية ثلاثية الأبعاد متحركة"/>
      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 p-3">
       <p className="text-xs text-slate-300">{modelName}</p>
-      <span className={tracking?'text-emerald-300':'text-amber-300'}>{tracking?'● التتبع نشط':'○ لم يُكتشف وجه بعد'}</span>
+      <span role="status" className={tracking?'text-emerald-300':'text-amber-300'}>
+       {tracking?'● التتبع نشط':'○ '+avatarTrackingIssueArabic[trackerIssue]}
+      </span>
      </div>
     </section>
     <aside className="space-y-4">
      <div className="rounded-2xl border border-white/10 bg-slate-900 p-4">
       <h2 className="font-semibold">1. تفعيل كاميرا التتبع</h2>
       <video ref={videoRef} muted playsInline autoPlay
-       className="mt-3 h-24 w-32 rounded-xl bg-black object-cover"
+       className="mt-3 h-40 w-44 rounded-xl bg-black object-cover"
        style={{transform:mirror?'scaleX(-1)':'none'}} aria-label="معاينة الكاميرا الخام"/>
       <div className="mt-3 flex gap-2">
        {status==='running'?
@@ -358,6 +462,14 @@ export default function RealityAvatarStudio(){
        مطابقة حركة الرأس في المرآة
       </label>
       {status==='denied'&&<p className="mt-2 text-xs text-amber-200">إذن الكاميرا مرفوض. افتح الرابط في Chrome واسمح للكاميرا.</p>}
+      {status==='running'&&<div className="mt-3 space-y-2 rounded-lg border border-white/10 bg-slate-950 p-3 text-xs leading-6 text-slate-300">
+       <p className={tracking?'text-emerald-300':'text-amber-200'}>{avatarTrackingIssueArabic[trackerIssue]}</p>
+       <p>فحوص الكاميرا: {diagnostics.frames} · اكتشاف الوجه: {diagnostics.faces} ·
+        معاملات التعابير: {diagnostics.expressions} · أخطاء النموذج: {diagnostics.errors}</p>
+       <p>سطوع تقريبي: {diagnostics.brightness===null?'—':Math.round(diagnostics.brightness)+'/255'} ·
+        المحرك: {diagnostics.cpu?'CPU بعد الاسترداد':'GPU / CPU تلقائي'}</p>
+       {!tracking&&<p>اجعل مصدر الضوء أمام وجهك ووجّه الكاميرا مباشرة إليه. إذا لم يتحسّن التتبع، أوقف الكاميرا وأعد تشغيلها.</p>}
+      </div>
      </div>
      <div className="rounded-2xl border border-white/10 bg-slate-900 p-4">
       <h2 className="font-semibold">2. اختيار الشخصية</h2>
