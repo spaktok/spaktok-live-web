@@ -88,10 +88,15 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const [uploadMessage, setUploadMessage] = useState<string | null>(null)
   const uploadAbortRef = useRef<AbortController | null>(null)
   const [isLive, setIsLive] = useState(false)
+  const [liveMeshQa,setLiveMeshQa]=useState(false)
   const [liveSeconds, setLiveSeconds] = useState(0)
   const [liveTitle, setLiveTitle] = useState('')
 
-  const camera = useCameraStudio({ state: studio, localPhotoFaceFile, audio: mode !== 'photo', paused: Boolean(captured) })
+  const camera = useCameraStudio({
+   state:studio,localPhotoFaceFile,audio:mode!=='photo',
+   paused:Boolean(captured),liveFaceMesh:isLive&&mode==='live',
+   liveMeshDebug:liveMeshQa&&isLive,
+  })
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => () => {
@@ -305,6 +310,9 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
           className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover',
             studio.face.id.startsWith('3d-')?'opacity-100':'opacity-0')}
           aria-label="مجسمات ثلاثية الأبعاد مرتبطة بالرأس" role="img"/>
+        <canvas ref={camera.liveMeshCanvasRef} aria-label="معاينة فحص شبكة وجه اللايف"
+         className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover',
+          liveMeshQa&&isLive?'opacity-100':'opacity-0')} aria-hidden="true"/>
 
         {!captured&&!camera.recording&&mode!=='live'&&
           <div className="absolute inset-x-0 top-[max(5.5rem,env(safe-area-inset-top))] z-20 flex flex-col items-center gap-1 px-3" dir="rtl">
@@ -529,6 +537,18 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
             <div className="flex flex-col gap-3 bg-gradient-to-t from-black/80 to-transparent p-4">
               <p className="text-xs text-white/70" dir="rtl">معاينة محلية للفلاتر قبل البث. لم تبدأ بثًا عامًا، ولا يوجد مشاهدون.</p>
               <div dir="rtl" className="rounded-xl border border-cyan-400/20 bg-black/45 p-2.5 text-xs text-white/85">
+                <p className="font-bold text-cyan-200">شبكة الوجه المخصصة للايف (من كاميرتك)</p>
+                <p className="mt-1">
+                 {camera.liveMeshInfo?.tracking?
+                   `تتبع نشط · ${camera.liveMeshInfo.measuredLandmarks} نقطة أصلية · ${camera.liveMeshInfo.triangleCount.toLocaleString('en-US')} مثلث مرسوم في المخزن الهندسي · ${camera.liveMeshInfo.levels} مستويات تقسيم`:
+                   camera.vision==='loading'?'تحميل متتبع الوجه…':
+                   'لا توجد شبكة صالحة: وجّه وجهك نحو الكاميرا'}
+                </p>
+                <p className="mt-1 text-white/60">هذه مثلثات مستنتجة من النقاط المقاسة، وليست مليون نقطة مسح حقيقي. لا يغيّر الشبك ملامحك تلقائيًا.</p>
+                <label className="mt-2 flex gap-2 text-[11px]">
+                  <input type="checkbox" checked={liveMeshQa} onChange={e=>setLiveMeshQa(e.target.checked)}/>
+                  إظهار خطوط الشبكة للفحص فقط (لن تظهر في التسجيل أو البث)
+                </label>
                 <p className="font-semibold">Reality Unified • {liveLookActive?'تحسين الإضاءة مفعّل في المعاينة':'إضاءة أصلية'}</p>
                 <p className="mt-1 text-white/60">الشبكة ثلاثية الأبعاد متكيّفة حسب الجهاز؛ مليون مثلث ليست كثافة فعلية مؤكدة.</p>
                 <p className="mt-1 text-white/60">معايرة أولية آمنة: {previewMeshBudget.baseTriangles} مثلثًا مرجعيًا؛ دون وجه متتبّع لا نرفع الجودة اصطناعيًا.</p>
