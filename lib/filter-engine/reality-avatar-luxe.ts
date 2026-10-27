@@ -32,10 +32,6 @@ const sphere=(r=1,s=24,t=16)=>new THREE.SphereGeometry(r,s,t)
 const material=(color:number,roughness=.36,coat=.45)=>
  new THREE.MeshPhysicalMaterial({color,metalness:.025,roughness,
   clearcoat:coat,clearcoatRoughness:.2})
-const hairMat=new THREE.MeshPhysicalMaterial({color:0x090b16,roughness:.22,
- metalness:.23,clearcoat:1,clearcoatRoughness:.11})
-const hairGlint=new THREE.MeshPhysicalMaterial({color:0x334155,roughness:.19,
- metalness:.45,clearcoat:1,clearcoatRoughness:.08})
 /** Features are enclosed in a reusable bone-like Group and animated through
  * the existing camera expression mapping. All geometry is on-device.
  */
@@ -43,6 +39,11 @@ export function createLuxeAvatar(style:LuxeAvatarStyle):LuxeAvatarRig{
  if(style!=='masculine'&&style!=='feminine')throw Error('invalid_luxe_style')
  const fem=style==='feminine'
  const root=new THREE.Group()
+ // Per-instance materials: disposing one style never invalidates the next.
+ const hairMat=new THREE.MeshPhysicalMaterial({color:0x090b16,roughness:.22,
+  metalness:.23,clearcoat:1,clearcoatRoughness:.11})
+ const hairGlint=new THREE.MeshPhysicalMaterial({color:0x334155,roughness:.19,
+  metalness:.45,clearcoat:1,clearcoatRoughness:.08})
  const skin=material(fem?0xe8b2a2:0xdba48d,fem ? .24 : .31,fem ? .85 : .65)
  const skinShade=material(fem?0xd69b91:0xc98d76,.45,.2)
  const lip=material(fem?0xe67e95:0xb86e78,.26,.85)
