@@ -4,6 +4,7 @@ import {useCallback,useEffect,useRef,useState,type ChangeEvent} from 'react'
 import Link from 'next/link'
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
+import {createLuxeAvatar,LUXE_AVATAR_PRESETS,type LuxeAvatarStyle} from '@/lib/filter-engine/reality-avatar-luxe'
 import {assertSelfContainedVideo3DGlb,VIDEO_3D_MAX_GLB_BYTES} from '@/lib/filter-engine/reality-video3d-project'
 import {loadFaceLandmarker,configureFace3DExtras,recoverFaceLandmarkerOnCpu} from '@/lib/filter-engine/vision'
 import {avatarLandmarkExpression,avatarLuminance,chooseAvatarTrackerIssue,
@@ -25,6 +26,7 @@ type AvatarState={
   mesh:THREE.Mesh;bindings:ReturnType<typeof getAvatarMorphBindings>
  }>
  eyes:THREE.Object3D[]
+ brows:THREE.Object3D[]
  mouth:THREE.Object3D|null
  expression:AvatarExpression;pose:AvatarHeadPose
 }
@@ -48,41 +50,6 @@ function disposeModel(root:THREE.Object3D){
  for(const g of geometries)g.dispose()
  for(const m of mats)m.dispose()
  for(const t of textures)t.dispose()
-}
-function buildDemoAvatar(){
- const root=new THREE.Group()
- const skin=new THREE.MeshStandardMaterial({color:0xd49b76,metalness:0,roughness:.66})
- const dark=new THREE.MeshStandardMaterial({color:0x131a2c,roughness:.4})
- const white=new THREE.MeshStandardMaterial({color:0xf7f3e9,roughness:.3})
- const iris=new THREE.MeshStandardMaterial({color:0x2879aa,roughness:.2})
- const pink=new THREE.MeshStandardMaterial({color:0x7b263b,roughness:.55})
- const add=(g:THREE.BufferGeometry,m:THREE.Material,x:number,y:number,z:number,
-  sx=1,sy=1,sz=1)=>{
-  const mesh=new THREE.Mesh(g,m);mesh.position.set(x,y,z)
-  mesh.scale.set(sx,sy,sz);root.add(mesh);return mesh
- }
- const sphere=new THREE.SphereGeometry(1,32,24)
- add(sphere,skin,0,0,0,.85,1.05,.67)
- add(new THREE.SphereGeometry(1,24,16),dark,0,.87,-.05,.78,.34,.56)
- add(sphere,skin,0,-.08,.64,.15,.25,.15)
- const eyes:THREE.Object3D[]=[]
- for(const x of [-.33,.33]){
-  // Eye, iris and pupil must blink together, not leave floating pupils.
-  const eyeRig=new THREE.Group()
-  eyeRig.position.set(x,.22,.59)
-  root.add(eyeRig);eyes.push(eyeRig)
-  const ball=(m:THREE.Material,z:number,sx:number,sy:number,sz:number)=>{
-   const obj=new THREE.Mesh(new THREE.SphereGeometry(1,20,14),m)
-   obj.position.z=z;obj.scale.set(sx,sy,sz);eyeRig.add(obj)
-  }
-  ball(white,0,.18,.12,.085)
-  ball(iris,.10,.07,.082,.025)
-  ball(dark,.125,.028,.038,.015)
-  const brow=add(new THREE.CapsuleGeometry(.035,.23,4,8),dark,x,.47,.57)
-  brow.rotation.z=Math.PI/2
- }
- const mouth=add(new THREE.SphereGeometry(1,26,16),pink,0,-.5,.61,.28,.065,.035)
- return {root,eyes,mouth}
 }
 export default function RealityAvatarStudio(){
  const canvasRef=useRef<HTMLCanvasElement|null>(null)
@@ -111,7 +78,8 @@ export default function RealityAvatarStudio(){
  const [diagnostics,setDiagnostics]=useState(diagnosticsRef.current)
  const [tracking,setTracking]=useState(false)
  const [message,setMessage]=useState('ابدأ بكاميرتك أو حمّل مجسم GLB مُجهّزًا بتعابير الوجه.')
- const [modelName,setModelName]=useState('شخصية تجريبية من SpakTok')
+ const [modelName,setModelName]=useState('LUXA • ذكوري')
+ const [avatarStyle,setAvatarStyle]=useState<LuxeAvatarStyle>('masculine')
  const [targetNames,setTargetNames]=useState<string[]>([])
  const [morphCount,setMorphCount]=useState(0)
  const [mappedCount,setMappedCount]=useState(0)
@@ -154,7 +122,7 @@ export default function RealityAvatarStudio(){
   camera.position.set(0,0,5.6)
   const root=new THREE.Group()
   scene.add(root)
-  const demo=buildDemoAvatar()
+  const demo=createLuxeAvatar('masculine')
   root.add(demo.root)
   scene.add(new THREE.HemisphereLight(0xdbefff,0x293248,2))
   const key=new THREE.DirectionalLight(0xffdfbc,2.2)
@@ -163,7 +131,7 @@ export default function RealityAvatarStudio(){
   rim.position.set(3,-1,-3);scene.add(rim)
   const state:AvatarState={
    renderer,scene,camera,root,defaultModel:demo.root,uploaded:null,
-   controls:[],eyes:demo.eyes,mouth:demo.mouth,
+   controls:[],eyes:[...demo.eyes],brows:[...demo.brows],mouth:demo.mouth,
    expression:NEUTRAL_AVATAR_EXPRESSION,pose:NEUTRAL_AVATAR_HEAD,
   }
   stateRef.current=state
@@ -198,10 +166,16 @@ export default function RealityAvatarStudio(){
      state.eyes[i].scale.y=bound(1-eyesAvg[i]*.92,.08,1)
     }
     if(state.mouth){
-     state.mouth.scale.y=.065+state.expression.jawOpen*factor*.21+
-      (state.expression.mouthSmileLeft+state.expression.mouthSmileRight)*factor*.035
-     state.mouth.scale.x=.28+
-      (state.expression.mouthSmileLeft+state.expression.mouthSmileRight)*factor*.09
+     const smile=state.expression.mouthSmileLeft+state.expression.mouthSmileRight
+     state.mouth.scale.y=1+state.expression.jawOpen*factor*2.4+
+      smile*factor*.16
+     state.mouth.scale.x=1+smile*factor*.13+
+      state.expression.mouthPucker*factor*(-.24)
+    }
+    for(const brow of state.brows){
+     const restY=brow.userData.restY
+     if(typeof restY==='number')
+      brow.position.y=restY+state.expression.browInnerUp*factor*.1
     }
    }
    renderer.render(scene,camera)
@@ -414,15 +388,31 @@ export default function RealityAvatarStudio(){
    setMessage('تعذّر قراءة هذا GLB بصورة آمنة: '+(error instanceof Error?error.message:'ملف غير متوافق'))
   }
  }
- const useDemo=()=>{
+ const selectLuxeAvatar=(style:LuxeAvatarStyle)=>{
   const state=stateRef.current
   if(!state)return
-  if(state.uploaded){state.root.remove(state.uploaded);disposeModel(state.uploaded)}
-  state.uploaded=null;state.controls=[];state.defaultModel.visible=true
-  setModelName('شخصية تجريبية من SpakTok')
+  const rig=createLuxeAvatar(style)
+  if(state.uploaded){
+   state.root.remove(state.uploaded)
+   disposeModel(state.uploaded)
+   state.uploaded=null
+  }
+  const old=state.defaultModel
+  state.root.remove(old);disposeModel(old)
+  state.defaultModel=rig.root
+  state.eyes=[...rig.eyes]
+  state.brows=[...rig.brows]
+  state.mouth=rig.mouth
+  state.controls=[]
+  state.root.add(rig.root)
+  state.expression=NEUTRAL_AVATAR_EXPRESSION
+  setAvatarStyle(style)
+  const preset=LUXE_AVATAR_PRESETS.find(x=>x.id===style)!
+  setModelName(preset.label)
   setMorphCount(0);setMappedCount(0);setTargetNames([])
-  setMessage('الشخصية التجريبية تستجيب للرأس والرمش والفم؛ GLB الحقيقي يحتاج Morph Targets مُجهّزة.')
+  setMessage('نموذج LUXA تجريبي منحوت داخل التطبيق، مستوحى من المراجع. يتتبع حركة الرأس والرمش والفم، لكنه لا يطابق جودة الصور التفصيلية بعد.')
  }
+ const useDemo=()=>selectLuxeAvatar(avatarStyle)
  return <main dir="rtl" className="min-h-screen bg-[#080e18] px-4 py-6 text-white">
   <section className="mx-auto max-w-6xl space-y-4">
    <header className="flex flex-wrap items-center justify-between gap-3">
@@ -472,7 +462,22 @@ export default function RealityAvatarStudio(){
       </div>}
      </div>
      <div className="rounded-2xl border border-white/10 bg-slate-900 p-4">
-      <h2 className="font-semibold">2. اختيار الشخصية</h2>
+      <h2 className="font-semibold">2. اختيار تصميم LUXA</h2>
+      <div className="mt-3 grid grid-cols-2 gap-2" role="group" aria-label="اختيار مظهر الأفاتار">
+       {LUXE_AVATAR_PRESETS.map(preset=><button type="button" key={preset.id}
+        onClick={()=>selectLuxeAvatar(preset.id)}
+        aria-pressed={!stateRef.current?.uploaded&&avatarStyle===preset.id}
+        className={`rounded-xl border px-3 py-3 text-xs font-bold transition-colors ${!stateRef.current?.uploaded&&avatarStyle===preset.id?'border-cyan-300 bg-cyan-950/50 text-cyan-100':'border-slate-600 bg-slate-950 text-slate-300'}`}>
+        {preset.id==='masculine'?'مظهر ذكوري':'مظهر أنثوي'}
+       </button>)}
+      </div>
+      <p className="mt-2 text-xs leading-6 text-slate-300">
+       {LUXE_AVATAR_PRESETS.find(preset=>preset.id===avatarStyle)?.description}
+      </p>
+      <p className="mt-1 text-[11px] leading-5 text-amber-200">
+       هذه نسخة ثلاثية الأبعاد مولّدة هندسيًا داخل التطبيق لإثبات الأسلوب والحركة، وليست استخراجًا آليًا مطابقًا للصور المرجعية.
+      </p>
+      <h3 className="mt-4 font-semibold text-white">استيراد شخصية GLB احترافية</h3>
       <label className="mt-3 block space-y-1 text-sm">
        <span>استيراد GLB مُجهّز لتحريك الوجه (حد 15MB)</span>
        <input type="file" accept=".glb,model/gltf-binary" onChange={loadGlb}
@@ -480,7 +485,7 @@ export default function RealityAvatarStudio(){
       </label>
       <button type="button" onClick={useDemo}
        className="mt-3 rounded-lg border border-white/20 px-3 py-2 text-xs text-cyan-300">
-       الرجوع إلى الشخصية التجريبية
+       الرجوع إلى نموذج LUXA المختار
       </button>
       <p className="mt-2 text-xs text-slate-400">Morph Targets: {morphCount} · حركات معروفة: {mappedCount}</p>
       {!!targetNames.length&&<p className="mt-1 break-words text-xs text-slate-500">المفاتيح: {targetNames.join(' · ')}</p>}
@@ -493,7 +498,7 @@ export default function RealityAvatarStudio(){
       <p className="text-xs text-slate-300">شدة التحريك: {Math.round(strength*100)}%</p>
      </div>
      <p role="status" className="rounded-xl border border-white/10 bg-slate-950 p-3 text-xs leading-6 text-slate-300">{message}</p>
-     <p className="text-xs leading-6 text-slate-400">هذا أول مسار لربط الشخصية بالتعابير، وليس مولّدًا آليًا من صورة. يلزم تجهيز Morph Targets متوافقة، وتحسين الرأس والجسم، واختبار الهواتف، ثم ربط خرج الفيديو ببث Agora قبل الإطلاق.</p>
+     <p className="text-xs leading-6 text-slate-400">الصور المرجعية تحدد الاتجاه الفني: شعر منحوت ومضيء، خامات جلد وعيون لامعة ووجه دقيق. المطابقة البصرية العالية تتطلب نماذج نحت وخامات وملفات GLB مُجهّزة بإشراف فني، وليس مجرد أشكال إجرائية. معاينة محلية فقط، لا يوجد بث Agora للجمهور.</p>
     </aside>
    </div>
   </section>
