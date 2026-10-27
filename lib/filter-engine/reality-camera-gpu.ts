@@ -48,7 +48,7 @@ export function realityCoverCrop(sourceW:number,sourceH:number,outW:number,outH:
 
 const FLOATS=[
   'uTime','uMirror','uAspect','uHasFace','uFaceWidth','uMouthWidth',
-  'uSmooth','uWhiten','uSlim','uEyes','uJaw','uNoseSlim','uLipstick','uBlush','uMorphStrength',
+  'uSmooth','uWhiten','uSlim','uEyes','uJaw','uNoseSlim','uLipstick','uBlush','uMorphStrength','uHasLiveWarp',
   'uHasMask','uBgBlur','uBgMode','uFx','uFxAmount','uClarity',
   'uExposure','uContrast','uSaturation','uVibrance','uTemperature','uTint',
   'uHighlights','uShadows','uHue','uFade','uSharpen','uVignette','uGrain',
@@ -107,6 +107,8 @@ export class RealityGpuCameraLayer {
   readonly plane:THREE.Mesh<THREE.PlaneGeometry,THREE.ShaderMaterial>
   private readonly uniforms:Uniforms
   private maskTexture:THREE.DataTexture
+  private liveWarpTexture:THREE.DataTexture
+  private lastLiveWarp:RenderInput['liveSculpt']=null
   private lastMask:RealityCameraMask=null
   private maskAllocations=0
   /** Number of GPU mask texture allocations (including the 1x1 default).
@@ -132,7 +134,16 @@ export class RealityGpuCameraLayer {
     this.maskTexture.needsUpdate=true
     this.maskAllocations=1
 
+    this.liveWarpTexture=new THREE.DataTexture(
+      new Uint8Array([128,128,0,255]),1,1,THREE.RGBAFormat)
+    this.liveWarpTexture.flipY=false
+    this.liveWarpTexture.unpackAlignment=1
+    this.liveWarpTexture.minFilter=THREE.LinearFilter
+    this.liveWarpTexture.magFilter=THREE.LinearFilter
+    this.liveWarpTexture.generateMipmaps=false
+    this.liveWarpTexture.needsUpdate=true
     this.uniforms=emptyUniforms(this.videoTexture,this.maskTexture)
+    this.uniforms.uLiveWarp={value:this.liveWarpTexture}
     this.material=new THREE.ShaderMaterial({
       uniforms:this.uniforms,
       vertexShader:realityGpuCameraVertexShader,
@@ -212,6 +223,26 @@ export class RealityGpuCameraLayer {
     this.n('uMirror',input.mirror?1:0)
     this.n('uTime',input.time%1000)
     this.face(input.face)
+    const warp=input.liveSculpt
+    const enabled=!!(warp&&input.face&&warp.width>=32&&warp.height>=32&&
+      warp.data.length===warp.width*warp.height*4)
+    this.n('uHasLiveWarp',enabled?1:0)
+    if(enabled&&warp&&warp!==this.lastLiveWarp){
+      const image=this.liveWarpTexture.image
+      if(image.width!==warp.width||image.height!==warp.height){
+        const next=new THREE.DataTexture(warp.data,warp.width,warp.height,THREE.RGBAFormat)
+        next.flipY=false;next.unpackAlignment=1
+        next.minFilter=THREE.LinearFilter;next.magFilter=THREE.LinearFilter
+        next.generateMipmaps=false;next.needsUpdate=true
+        this.liveWarpTexture.dispose()
+        this.liveWarpTexture=next
+        this.uniforms.uLiveWarp.value=next
+      }else{
+        image.data=warp.data
+        this.liveWarpTexture.needsUpdate=true
+      }
+      this.lastLiveWarp=warp
+    }
     const beauty=input.beauty,color=input.color,effects=input.effects
     this.n('uSmooth',beauty.smooth);this.n('uWhiten',beauty.whiten)
     this.n('uSlim',input.face?beauty.slim:0)
@@ -253,6 +284,7 @@ export class RealityGpuCameraLayer {
     this.plane.geometry.dispose()
     this.material.dispose()
     this.maskTexture.dispose()
+    this.liveWarpTexture.dispose()
     this.videoTexture.dispose()
   }
 }

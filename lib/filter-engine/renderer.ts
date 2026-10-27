@@ -1,5 +1,6 @@
 import { backgroundCode, fxCode, faceFxCode, type FaceFxParams, type BeautyParams, type ColorParams, type EffectParams } from './params'
 import {faceMorphIsActive, type FaceMorphSettings} from './reality-face-morph'
+import type {LiveSculptFrame} from './reality-live-sculpt-warp'
 
 export interface Point {
   x: number
@@ -36,6 +37,8 @@ export interface RenderInput {
   face: FaceGeometry | null
   /** Live face pixels are sculpted directly; no foreign photograph overlay. */
   morph?:FaceMorphSettings|null
+  /** Per-person tracked triangle inverse displacement map, local-only. */
+  liveSculpt?:LiveSculptFrame|null
   mask: { data: Uint8Array; width: number; height: number } | null
   time: number
 }
@@ -53,6 +56,8 @@ precision highp float;
 varying vec2 vUv;
 uniform sampler2D uVideo;
 uniform sampler2D uMask;
+uniform sampler2D uLiveWarp;
+uniform float uHasLiveWarp;
 uniform vec2 uCropScale;
 uniform vec2 uCropOffset;
 uniform float uMirror;
@@ -404,6 +409,12 @@ void main() {
   float faceRegion = 1.0;
   if (uHasFace > 0.5) {
     float fw = uFaceWidth;
+    if (uHasLiveWarp > 0.5) {
+      // One mesh-derived inverse map per tracked face: source pixels
+      // stay inside the same color/exposure/skin rendering pipeline.
+      vec2 field = texture2D(uLiveWarp, clamp(src,0.0,1.0)).rg;
+      src = clamp(src + (field - 0.5) * 0.11,0.0,1.0);
+    } else {
     src = pull(src, uLeftCheek, uFaceCenter, fw * 0.5, uSlim * 0.16);
     src = pull(src, uRightCheek, uFaceCenter, fw * 0.5, uSlim * 0.16);
     src = pull(src, uLeftJaw, uFaceCenter, fw * 0.4, uJaw * 0.18);
@@ -413,6 +424,7 @@ void main() {
     src = bulge(src, uRightEye, fw * 0.17, uEyes * 0.32);
     src = bulge(src, uNose, fw * 0.12, -uNoseSlim * 0.28);
     src = sculptFace(src,fw);
+    }
     vec2 fd = (baseSrc - uFaceCenter) * aspectVec() / vec2(fw * 0.62, fw * 0.85);
     faceRegion = 1.0 - smoothstep(0.85, 1.15, length(fd));
   }
@@ -573,6 +585,8 @@ export class FilterRenderer {
   private uniforms: UniformMap = {}
   private videoTexture: WebGLTexture
   private maskTexture: WebGLTexture
+  private liveWarpTexture: WebGLTexture
+  private lastWarp:LiveSculptFrame|null=null
 
   constructor(readonly canvas: HTMLCanvasElement) {
     const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true, premultipliedAlpha: false, antialias: false, alpha: false })
@@ -590,8 +604,10 @@ export class FilterRenderer {
 
     this.videoTexture = this.createTexture(0)
     this.maskTexture = this.createTexture(1)
+    this.liveWarpTexture = this.createTexture(2)
     gl.uniform1i(this.uniform('uVideo'), 0)
     gl.uniform1i(this.uniform('uMask'), 1)
+    gl.uniform1i(this.uniform('uLiveWarp'), 2)
   }
 
   private createProgram() {
@@ -659,6 +675,19 @@ export class FilterRenderer {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, input.mask.width, input.mask.height, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, input.mask.data)
     }
 
+    const warp=input.liveSculpt
+    const warpValid=!!(warp&&input.face&&
+     warp.width>=32&&warp.height>=32&&
+     warp.data.length===warp.width*warp.height*4)
+    this.set1('uHasLiveWarp',warpValid?1:0)
+    if(warpValid&&warp&&this.lastWarp!==warp){
+      gl.activeTexture(gl.TEXTURE2)
+      gl.bindTexture(gl.TEXTURE_2D,this.liveWarpTexture)
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT,1)
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,warp.width,warp.height,
+       0,gl.RGBA,gl.UNSIGNED_BYTE,warp.data)
+      this.lastWarp=warp
+    }
     const sourceAspect = sourceWidth / sourceHeight
     const canvasAspect = width / height
     let scaleX = 1
@@ -740,6 +769,7 @@ export class FilterRenderer {
     const gl = this.gl
     gl.deleteTexture(this.videoTexture)
     gl.deleteTexture(this.maskTexture)
+    gl.deleteTexture(this.liveWarpTexture)
     gl.deleteProgram(this.program)
     gl.getExtension('WEBGL_lose_context')?.loseContext()
   }

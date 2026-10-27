@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Download, Radio, RefreshCw, Send, SlidersHorizontal, Timer, X, Zap, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createStudioState } from '@/lib/filter-engine/params'
+import {NEUTRAL_LIVE_SCULPT,type LiveSculptControls} from '@/lib/filter-engine/reality-live-sculpt-warp'
 import {
  DEFAULT_REALITY_UNIFIED_CONFIG,resolveUnifiedRealityLook,
  planRealityMeshBudget,type RealityLook,
@@ -34,6 +35,16 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   // Live stays a local preview until a real broadcast transport is connected.
   const [liveLook,setLiveLook]=useState<RealityLook>('natural-light')
   const [liveFaceOptIn,setLiveFaceOptIn]=useState(false)
+  const [showLiveSculptPanel,setShowLiveSculptPanel]=useState(false)
+  const [liveSculpt,setLiveSculpt]=useState<LiveSculptControls>({
+   jaw:.28,chin:.16,eyes:.25,nose:.20,
+  })
+  const sculptOptions=[
+   {key:'jaw',name:'تنحيف الفك',hint:'تضييق الجزء السفلي مع إبقاء الخدين'},
+   {key:'chin',name:'تنحيف الذقن',hint:'ضبط عرض وطول الذقن'},
+   {key:'eyes',name:'توسيع العينين',hint:'زيادة حجم العين حسب محيطها الحقيقي'},
+   {key:'nose',name:'تصغير الأنف',hint:'تضييق منطقة الأنف تدريجيًا'},
+  ] as const
   const [liveLookActive,setLiveLookActive]=useState(false)
   const previewMeshBudget=planRealityMeshBudget({
    mode:'live-preview',device:'mid',trackingValid:false,quality:'adaptive',
@@ -96,6 +107,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
    state:studio,localPhotoFaceFile,audio:mode!=='photo',
    paused:Boolean(captured),liveFaceMesh:isLive&&mode==='live',
    liveMeshDebug:liveMeshQa&&isLive,
+   liveSculpt:isLive&&liveFaceOptIn?liveSculpt:NEUTRAL_LIVE_SCULPT,
   })
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -203,9 +215,11 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
        const adapted=resolveUnifiedRealityLook({
         ...DEFAULT_REALITY_UNIFIED_CONFIG,
         look:liveLook,
-        faceShapeOptIn:liveFaceOptIn,
-        faceMorphStrength:liveFaceOptIn?.24:0,
-        skinSmoothing:liveFaceOptIn?.14:0,
+        // Geometry is handled by the independent per-face mesh warp,
+        // not by replacing the selected 3D accessory with face-morph.
+        faceShapeOptIn:false,
+        faceMorphStrength:0,
+        skinSmoothing:0,
        },prev)
        // Existing AR wearable remains selected; never silently swap it.
        return prev.face.id!=='none'&&prev.face.id!=='face-morph'
@@ -544,7 +558,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                    camera.vision==='loading'?'تحميل متتبع الوجه…':
                    'لا توجد شبكة صالحة: وجّه وجهك نحو الكاميرا'}
                 </p>
-                <p className="mt-1 text-white/60">هذه مثلثات مستنتجة من النقاط المقاسة، وليست مليون نقطة مسح حقيقي. لا يغيّر الشبك ملامحك تلقائيًا.</p>
+                <p className="mt-1 text-white/60">كل مثلث ينقل بكسلات من صورتك الأصلية. {liveFaceOptIn?'أدوات نحت الوجه مفعلة بموافقتك.':'بلا أي تغيير لشكل وجهك.'}</p>
                 <label className="mt-2 flex gap-2 text-[11px]">
                   <input type="checkbox" checked={liveMeshQa} onChange={e=>setLiveMeshQa(e.target.checked)}/>
                   إظهار خطوط الشبكة للفحص فقط (لن تظهر في التسجيل أو البث)
@@ -552,6 +566,38 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                 <p className="font-semibold">Reality Unified • {liveLookActive?'تحسين الإضاءة مفعّل في المعاينة':'إضاءة أصلية'}</p>
                 <p className="mt-1 text-white/60">الشبكة ثلاثية الأبعاد متكيّفة حسب الجهاز؛ مليون مثلث ليست كثافة فعلية مؤكدة.</p>
                 <p className="mt-1 text-white/60">معايرة أولية آمنة: {previewMeshBudget.baseTriangles} مثلثًا مرجعيًا؛ دون وجه متتبّع لا نرفع الجودة اصطناعيًا.</p>
+              </div>
+              <div dir="rtl" className="rounded-xl border border-white/20 bg-black/65 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-white">
+                    <input type="checkbox" checked={liveFaceOptIn}
+                      onChange={e=>setLiveFaceOptIn(e.target.checked)}/>
+                    نحت الوجه من شبكتي الخاصة
+                  </label>
+                  <button type="button" onClick={()=>setShowLiveSculptPanel(v=>!v)}
+                    className="rounded-lg bg-white/10 px-3 py-1.5 text-[11px] text-cyan-200">
+                    {showLiveSculptPanel?'إخفاء التفاصيل':'ضبط الفك والعين والأنف'}
+                  </button>
+                </div>
+                {showLiveSculptPanel&&<div className="mt-2 max-h-36 space-y-2 overflow-y-auto">
+                  {sculptOptions.map(option=><label key={option.key} className="block text-[11px] text-white/80">
+                    <span className="flex justify-between">
+                      <span>{option.name}</span><span className="tabular-nums">{Math.round(liveSculpt[option.key]*100)}%</span>
+                    </span>
+                    <input type="range" min={0} max={.65} step={.01}
+                      value={liveSculpt[option.key]} disabled={!liveFaceOptIn}
+                      onChange={e=>setLiveSculpt(prev=>({...prev,[option.key]:Number(e.target.value)}))}
+                      className="w-full accent-cyan-400 disabled:opacity-40"
+                      aria-label={option.name}/>
+                  </label>)}
+                  <button type="button" className="text-[11px] text-rose-200 underline"
+                    onClick={()=>{setLiveFaceOptIn(false);setLiveSculpt({jaw:0,chin:0,eyes:0,nose:0})}}>
+                    إلغاء كل تغييرات شكل الوجه
+                  </button>
+                </div>}
+                <p className="mt-1 text-[10px] text-white/55">
+                  تحريك مثلثات الوجه متاح في المعاينة مع استرجاع البكسلات الأصلية. قد تنخفض الدقة عند الالتفات الشديد أو اختفاء الوجه.
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setShowPanel((value) => !value)} className="flex-1 rounded-full bg-white/15 py-2.5 text-sm font-semibold text-white">
@@ -588,9 +634,9 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                       <option value="studio-glow" className="bg-slate-900">إضاءة استوديو ناعمة</option>
                     </select>
                     <label className="flex items-center gap-2 text-xs">
-                     <input type="checkbox" checked={liveFaceOptIn} disabled={isLive}
+                     <input type="checkbox" checked={liveFaceOptIn}
                       onChange={e=>setLiveFaceOptIn(e.target.checked)} />
-                     تغيير بسيط لشكل الوجه بموافقتي (اختياري، لا توجد معايير جمال إجبارية)
+                     تفعيل أدوات تعديل شبكة وجهي عند المعاينة (اختياري)
                     </label>
                     <p className="text-[10px] text-white/50">إذا كان أحد مجسمات الوجه مفعّلًا، يبقى ظاهرًا ولا نستبدله تلقائيًا بفلتر نحت الوجه.</p>
                   </div>
