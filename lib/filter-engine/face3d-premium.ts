@@ -53,9 +53,24 @@ function luxGlasses():THREE.Group{
   const hinge=mesh(g,new THREE.CylinderGeometry(.022,.022,.045,12),paleGold,x+side*.219,-.015,.235)
   hinge.rotation.x=Math.PI/2
   mesh(g,new THREE.SphereGeometry(.014,12,8),titanium,x+side*.238,-.014,.265)
-  path(g,[[x+side*.223,-.006,.24],[x+side*.31,-.02,.18],[x+side*.43,-.08,.05],
-    [x+side*.55,-.11,-.13],[x+side*.56,-.20,-.27]],.014,titanium)
-  path(g,[[x+side*.56,-.18,-.21],[x+side*.56,-.20,-.27],[x+side*.56,-.235,-.31]],.022,acetate,12)
+  // A true parented hinge (rather than one static merged path): when the
+  // user picks up the glasses, each arm can fold with secondary inertia.
+  const hingeX=x+side*.223,hingeY=-.006,hingeZ=.24
+  const temple=new THREE.Group()
+  temple.name=side<0?'SpakTokTempleLeft':'SpakTokTempleRight'
+  temple.position.set(hingeX,hingeY,hingeZ)
+  g.add(temple)
+  const relative=(points:number[][])=>points.map(([px,py,pz])=>[
+   px-hingeX,py-hingeY,pz-hingeZ,
+  ])
+  path(temple,relative([
+   [x+side*.223,-.006,.24],[x+side*.31,-.02,.18],[x+side*.43,-.08,.05],
+   [x+side*.55,-.11,-.13],[x+side*.56,-.20,-.27],
+  ]),.014,titanium)
+  path(temple,relative([
+   [x+side*.56,-.18,-.21],[x+side*.56,-.20,-.27],
+   [x+side*.56,-.235,-.31],
+  ]),.022,acetate,12)
   mesh(g,new THREE.SphereGeometry(.045,12,8),matte(0xe0dce0),side*.09,.06,.20).scale.set(.48,.65,.48)
  }
  path(g,[[-.045,-.038,.265],[0,-.075,.282],[.045,-.038,.265]],.019,titanium,24)

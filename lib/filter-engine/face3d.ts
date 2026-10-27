@@ -27,6 +27,7 @@ import {createFaceSemanticAtlas,type FaceSemanticAtlas} from './reality-face-reg
 import {createRegionSurfaceBinding,evaluateFaceSurfaceBinding,type FaceSurfaceBinding} from './reality-face-surface'
 import {RealityHandPhysics,type TrackedHand,type HandInteraction} from './reality-hand-physics'
 import {estimateMetricFaceScale,type MetricCalibration} from './reality-canonical-head'
+import {realityRigActuation} from './reality-prop-rig'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -611,6 +612,32 @@ export class FaceMesh3DEngine{
    this.lastHandInteraction=null
   }
   if(this.model){
+   // The prop is not one rigid billboard: authored hinges and hair locks
+   // react to grip orientation and spring back to their rest angles.
+   const rig=realityRigActuation(this.lastHandInteraction?.state??'mounted',
+    this.lastHandInteraction?.hand??null,{
+     pitch:this.mount.rotation.x-pose.pitch*.7,
+     roll:this.mount.rotation.z-pose.roll,
+    })
+   for(const [name,target] of [
+     ['SpakTokTempleLeft',rig.leftTempleY],
+     ['SpakTokTempleRight',rig.rightTempleY],
+   ] as const){
+    const joint=this.model.getObjectByName(name)
+    if(joint)joint.rotation.y=THREE.MathUtils.damp(
+     joint.rotation.y,target,8,1/30)
+   }
+   this.model.traverse(node=>{
+    if(!node.name.startsWith('SpakTokHairLock'))return
+    if(!node.userData.realityRest){
+     node.userData.realityRest={x:node.rotation.x,z:node.rotation.z}
+    }
+    const rest=node.userData.realityRest as {x:number;z:number}
+    node.rotation.x=THREE.MathUtils.damp(node.rotation.x,
+      rest.x+rig.hairPitchX,7,1/30)
+    node.rotation.z=THREE.MathUtils.damp(node.rotation.z,
+      rest.z+rig.hairRollZ,7,1/30)
+   })
    const expr=frame.geometry.expression
    const mouth=clamp(frame.blendshapes?.jawOpen??expr?.mouthOpen??0,0,1)
    const blinkL=clamp(frame.blendshapes?.eyeBlinkLeft??(1-(expr?.leftEyeOpen??1)),0,1)

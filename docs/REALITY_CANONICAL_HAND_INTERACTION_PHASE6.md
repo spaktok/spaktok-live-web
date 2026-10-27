@@ -61,3 +61,17 @@ Canonical rig editor (author-specified grip and release constraints),
 per-object friction/inertia, retargeted bones, per-vertex hair deformation,
 hand/person depth segmentation, R2 effect publishing/versioning and tests
 with real captured camera clips.
+
+## Phase 6B — articulated grip rather than moving a rigid sticker
+- Added separate 3D hinge Groups for the procedural premium glasses:
+  `SpakTokTempleLeft` and `SpakTokTempleRight`, with true parent-child
+  transform pivots. The near/held side rotates more than the opposite arm.
+- A shared `reality-prop-rig.ts` contract generates bounded actuation for
+  both eyeglass temples and optional `SpakTokHairLock*` glTF nodes/bones.
+- During a grab, the glasses tilt in space AND the side arms articulate;
+  on release, each part damps back to its authored rest orientation.
+- On compatible authored hair rigs, individual named strand groups follow
+  hand movement and spring back rather than having all hair transform rigidly.
+  We currently do not ship an authored hair-physics model or skeletal mesh;
+  the animation interface is ready but cannot generate realistic hair alone.
+- This is conservative secondary motion, not collision-solved elastodynamics.

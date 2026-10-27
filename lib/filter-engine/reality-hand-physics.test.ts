@@ -1,6 +1,7 @@
 import {describe,it,expect} from 'vitest'
 import {DEFAULT_CANONICAL_HEAD,estimateMetricFaceScale,validateAuthoringAsset} from './reality-canonical-head'
 import {RealityHandPhysics,handGripPoint,type TrackedHand} from './reality-hand-physics'
+import {realityRigActuation} from './reality-prop-rig'
 const frame=(now:number,mirror=false)=>({
  sourceWidth:1000,sourceHeight:1000,outputWidth:1000,outputHeight:1000,
  mirror,now,
@@ -100,5 +101,22 @@ describe('Hands grab, carry and release 3D wearables rather than cancel effects'
   const far=hand(100,{x:.05,y:.06},{x:.07,y:.06})
   expect(physics.step(home,220,[far],frame(100)).state).toBe('mounted')
   expect(physics.step(home,220,[{...far,timestamp:220}],frame(220)).state).toBe('mounted')
+ })
+})
+
+describe('Articulated physically authored accessories',()=>{
+ it('opens the near eyeglass temple more than the far temple',()=>{
+  const left=realityRigActuation('grabbed','Left',{pitch:.2,roll:.3})
+  const right=realityRigActuation('grabbed','Right',{pitch:.2,roll:.3})
+  expect(left.leftTempleY).toBeGreaterThan(right.leftTempleY)
+  expect(Math.abs(right.rightTempleY)).toBeGreaterThan(Math.abs(left.rightTempleY))
+ })
+ it('bends opt-in hair rig transforms, never stretches an unrigged model',()=>{
+  const held=realityRigActuation('grabbed','Unknown',{pitch:.4,roll:.6})
+  const mounted=realityRigActuation('mounted','Unknown',{pitch:.4,roll:.6})
+  expect(held.hairRollZ).toBeGreaterThan(0)
+  expect(held.hairPitchX).toBeGreaterThan(0)
+  expect(mounted.hairRollZ).toBe(0)
+  expect(mounted.leftTempleY).toBe(0)
  })
 })
