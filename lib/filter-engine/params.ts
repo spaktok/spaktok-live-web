@@ -104,6 +104,7 @@ export const faceFxCatalog = [
   { id: '3d-metal-cap', name: 'قبعة معدنية', icon: '🧢', group: '3d' },
   { id: '3d-crystal', name: 'جوهرة ثلاثية', icon: '💎', group: '3d' },
   { id: '3d-expression', name: 'قناع التعبيرات', icon: '🎭', group: '3d' },
+  { id: '3d-photo-face', name: 'وجه GLB محلي متحرك', icon: '🧑', group: '3d' },
 
   { id: '3d-makeup-soft', name: 'مكياج ناعم', icon: '🌷', group: 'makeup' },
   { id: '3d-makeup-glam', name: 'مكياج سهرة', icon: '💄', group: 'makeup' },

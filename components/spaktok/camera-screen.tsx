@@ -28,6 +28,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const [mode, setMode] = useState<CaptureMode>(initialMode)
   const [showPanel, setShowPanel] = useState(false)
   const [showFaceTray,setShowFaceTray] = useState(true)
+  const [localPhotoFaceFile,setLocalPhotoFaceFile]=useState<File|null>(null)
   const [timerSeconds, setTimerSeconds] = useState<0 | 3 | 10>(0)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [progress, setProgress] = useState(0)
@@ -44,7 +45,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const [liveSeconds, setLiveSeconds] = useState(0)
   const [liveTitle, setLiveTitle] = useState('')
 
-  const camera = useCameraStudio({ state: studio, audio: mode !== 'photo', paused: Boolean(captured) })
+  const camera = useCameraStudio({ state: studio, localPhotoFaceFile, audio: mode !== 'photo', paused: Boolean(captured) })
   const progressRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => () => {
@@ -243,6 +244,38 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
           className={cn('pointer-events-none absolute inset-0 h-full w-full object-cover',
             studio.face.id.startsWith('3d-')?'opacity-100':'opacity-0')}
           aria-label="مجسمات ثلاثية الأبعاد مرتبطة بالرأس" role="img"/>
+
+        {!captured&&!camera.recording&&mode!=='live'&&
+          <div className="absolute inset-x-0 top-[max(5.5rem,env(safe-area-inset-top))] z-20 flex flex-col items-center gap-1 px-3" dir="rtl">
+            <label className="cursor-pointer rounded-full border border-cyan-300/45 bg-[#0d1935]/85 px-4 py-2 text-[11px] font-semibold text-white shadow-lg backdrop-blur-md">
+              <span>🧑 تحميل وجه GLB وتحريكه على الكاميرا</span>
+              <input type="file" accept=".glb,model/gltf-binary" className="sr-only"
+                onChange={event=>{
+                  const file=event.target.files?.[0]
+                  if(!file)return
+                  setLocalPhotoFaceFile(file)
+                  setStudio(prev=>({...prev,face:{...prev.face,id:'3d-photo-face',strength:1}}))
+                  setShowFaceTray(false)
+                  event.target.value=''
+                }}/>
+            </label>
+            {studio.face.id==='3d-photo-face'&&
+              <div className="flex max-w-[93%] items-center gap-2 rounded-full bg-black/70 px-3 py-1 text-[10px] text-white">
+                <span role="status" className="truncate">
+                  {camera.photoFaceStatus==='loading'?'يتم فحص وتحميل المجسم محليًا…':
+                   camera.photoFaceStatus==='ready'?'✓ الوجه مرتبط بالشبكة الحية':
+                   camera.photoFaceStatus==='error'?'لم يُقبل الملف: '+(camera.photoFaceError??'خطأ غير معروف'):
+                   localPhotoFaceFile?'جارٍ تجهيز المجسم':'اختر ملف الوجه GLB'}
+                </span>
+                {localPhotoFaceFile&&
+                  <button type="button" aria-label="إزالة الوجه المحلي"
+                    className="shrink-0 rounded-full border border-white/30 px-2"
+                    onClick={()=>{
+                      setLocalPhotoFaceFile(null)
+                      setStudio(prev=>({...prev,face:{...prev.face,id:'none'}}))
+                    }}>×</button>}
+              </div>}
+          </div>}
 
         {camera.status !== 'ready' && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center">

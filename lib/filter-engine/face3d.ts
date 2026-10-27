@@ -32,6 +32,7 @@ import {RealityHandMatte} from './reality-hand-matte'
 import {planRealityRenderGraph,type RealityRenderNode} from './reality-render-graph'
 import {loadInteractiveHandSegmentation} from './vision'
 import {segmentHandOnce,semanticHandMaskFresh,type RealitySemanticHand} from './reality-hand-segmentation'
+import {RealityLivePhotoFace,LOCAL_PHOTO_FACE_ID} from './reality-live-photo-face'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -40,6 +41,7 @@ export const face3DPresets = [
  {id:'3d-metal-cap',name:'قبعة معدنية',icon:'🧢',group:'3d'},
  {id:'3d-crystal',name:'جوهرة ثلاثية',icon:'💎',group:'3d'},
  {id:'3d-expression',name:'قناع التعبيرات',icon:'🎭',group:'3d'},
+ {id:'3d-photo-face',name:'وجه GLB محلي متحرك',icon:'🧑',group:'3d'},
  ...makeupLooks,
 ] as const
 export type Face3DId = (typeof face3DPresets)[number]['id']
@@ -263,6 +265,8 @@ export class FaceMesh3DEngine{
  readonly crownContact=makeCrownContactShadow()
  private readonly loader=new GLTFLoader()
  private model:THREE.Object3D|null=null
+ private photoFace:RealityLivePhotoFace|null=null
+ private photoLoadToken=0
  private current:Face3DId|null=null
  private surfaceBinding:FaceSurfaceBinding|null=null
  private surfaceBoundId:Face3DId|null=null
@@ -403,6 +407,7 @@ export class FaceMesh3DEngine{
     loadAuthoredGLB:async uri=>(await this.loader.loadAsync(uri)).scene,
     createProceduralPreview:effect=>
      effect.kind==='face-surface'?new THREE.Group():
+     id===LOCAL_PHOTO_FACE_ID?new THREE.Group():
      makePremiumAccessory(id) ?? (id==='3d-lux-glasses'?makeGlasses():
       id==='3d-gold-crown'?makeCrown():
       id==='3d-space-visor'?makeVisor():
@@ -427,6 +432,22 @@ export class FaceMesh3DEngine{
    if(token===this.request)this.current=null
    return false
   }
+ }
+ /** Private file, decoded on-device. Loading a newer file invalidates
+  * any earlier in-flight parse without changing the rest of the filters.
+  */
+ async setLocalPhotoFace(file:File|null):Promise<boolean>{
+  const token=++this.photoLoadToken
+  this.photoFace?.dispose(this.scene)
+  this.photoFace=null
+  if(!file)return false
+  const loaded=await RealityLivePhotoFace.load(this.scene,file)
+  if(!this.alive||token!==this.photoLoadToken){
+   loaded.dispose(this.scene)
+   return false
+  }
+  this.photoFace=loaded
+  return true
  }
  private adaptLight(source:RenderInput['source'],at:number){
   if(!Number.isFinite(at)||at-this.lastLightUpdate<.5)return
@@ -487,6 +508,7 @@ export class FaceMesh3DEngine{
   if(!isFace3DId(id)||!frame||strength<=0){
    this.surfaceBinding=null
    this.meshDebug.visible=false
+   if(this.photoFace)this.photoFace.mesh.visible=false
    this.depthMesh.visible=false;this.mount.visible=false
    this.crownContact.visible=false
    this.makeup.setStyle(id,false)
@@ -506,6 +528,7 @@ export class FaceMesh3DEngine{
   if(!pose){
    this.surfaceBinding=null
    this.meshDebug.visible=false
+   if(this.photoFace)this.photoFace.mesh.visible=false
    // Invalid geometry must NEVER reproject a previous user's face or stale
    // makeup into the current camera frame.
    this.depthMesh.visible=false
@@ -517,7 +540,9 @@ export class FaceMesh3DEngine{
    this.finishGpuStats(started,integrated?1:0)
    return
   }
-  this.depthMesh.visible=!heldFaceMissing
+  this.depthMesh.visible=!heldFaceMissing&&id!==LOCAL_PHOTO_FACE_ID
+  if(this.photoFace)this.photoFace.mesh.visible=
+   id===LOCAL_PHOTO_FACE_ID&&this.lensReady&&!heldFaceMissing
   this.meshDebug.visible=typeof window!=='undefined'&&
    new URLSearchParams(window.location.search).get('realityMesh')==='1'
   this.makeup.setStyle(id,this.lensReady,makeup)
@@ -535,6 +560,8 @@ export class FaceMesh3DEngine{
    this.depthPositions.needsUpdate=true
    this.depthMesh.geometry.computeVertexNormals()
    this.makeup.update(frame.landmarks,sourceW/sourceH)
+   if(this.photoFace)this.photoFace.update(buffer,
+    id===LOCAL_PHOTO_FACE_ID&&this.lensReady,strength)
    this.lastFrame=frame.timestamp
    this.lastSourceW=sourceW;this.lastSourceH=sourceH;this.lastMirror=mirror
   }
@@ -670,7 +697,7 @@ export class FaceMesh3DEngine{
     }
    })
   }
-  this.mount.visible=this.lensReady
+  this.mount.visible=this.lensReady&&id!==LOCAL_PHOTO_FACE_ID
   // Segmentation is not delivered by HandLandmarker. Until a true per-pixel
   // hand model is available we use a conservative landmark-derived matte.
   // Keep this behind a SECOND QA flag; never fade/cancel the wearable.
@@ -762,7 +789,9 @@ export class FaceMesh3DEngine{
  }
  dispose(){
   if(!this.alive)return
-  this.alive=false;this.request++
+  this.alive=false;this.request++;this.photoLoadToken++
+  this.photoFace?.dispose(this.scene)
+  this.photoFace=null
   if(this.model){this.mount.remove(this.model);disposeObject(this.model)}
   this.makeup.dispose()
   this.scene.remove(this.meshDebug)

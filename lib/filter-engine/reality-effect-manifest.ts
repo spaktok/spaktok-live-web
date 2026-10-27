@@ -63,6 +63,7 @@ const threeConfigs: Readonly<Record<string, ThreeConfig>> = {
       localAnchor:[0,0,0],calibration:'screen-y-down'},
     surfaceBinding:{region:'forehead',targetLandmark:10,normalOffsetPx:9},
   },
+  '3d-photo-face':{anchor:'eyes_center'},
   '3d-lux-glasses':{anchor:'eyes_center'},
   '3d-space-visor':{anchor:'eyes_center'},
   '3d-metal-cap':{anchor:'eyes_center'},

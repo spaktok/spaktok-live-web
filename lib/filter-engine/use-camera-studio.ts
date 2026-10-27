@@ -19,6 +19,7 @@ export type VisionStatus = 'off' | 'loading' | 'ready' | 'tracking' | 'no-face' 
 
 interface Options {
   state: StudioState
+  localPhotoFaceFile?:File|null
   audio?: boolean
   paused?: boolean
   /** Output aspect ratio (width / height). Portrait 9:16 matches stories and live. */
@@ -42,7 +43,7 @@ const chooseOutputHeight = () => {
  * Face mesh and person segmentation run on-device (MediaPipe) so reshape and
  * background effects follow the face frame-by-frame.
  */
-export function useCameraStudio({ state, audio = false, paused = false, aspect = 9 / 16 }: Options) {
+export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false, paused = false, aspect = 9 / 16 }: Options) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -88,6 +89,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const [gpu2Metrics,setGpu2Metrics] = useState<{cpuRenderMs:number;drawCalls:number;triangles:number;passes:number}|null>(null)
   const [threeStatus,setThreeStatus]=useState<'idle'|'loading'|'ready'|'unavailable'>('idle')
   const [threeQuality,setThreeQuality]=useState<'hd'|'fallback'|'none'>('none')
+  const [photoFaceStatus,setPhotoFaceStatus]=useState<'idle'|'loading'|'ready'|'error'>('idle')
+  const [photoFaceError,setPhotoFaceError]=useState<string|null>(null)
   const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null)
 
   stateRef.current = state
@@ -282,10 +285,27 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
       let engine=threeEngineRef.current
       if(!engine){engine=new FaceMesh3DEngine(layer,base.width,base.height);threeEngineRef.current=engine}
       const loaded=await engine.setLens(state.face.id)
+      if(state.face.id==='3d-photo-face'){
+       if(!cancelled){setPhotoFaceStatus(localPhotoFaceFile?'loading':'idle');setPhotoFaceError(null)}
+       try{
+        const valid=await engine.setLocalPhotoFace(localPhotoFaceFile)
+        if(!cancelled){
+         setPhotoFaceStatus(valid?'ready':localPhotoFaceFile?'error':'idle')
+         if(!valid&&localPhotoFaceFile)setPhotoFaceError('تعذر التحقق من ملف الوجه ثلاثي الأبعاد.')
+        }
+       }catch(error){
+        if(!cancelled){
+         setPhotoFaceStatus('error')
+         setPhotoFaceError(error instanceof Error?error.message:String(error))
+        }
+       }
+      }else if(!cancelled){
+       setPhotoFaceStatus('idle');setPhotoFaceError(null)
+      }
       if(!cancelled){setThreeQuality(loaded?engine.modelQuality:'none');setThreeStatus(loaded?'ready':'unavailable')}
     }).catch(()=>{if(!cancelled){setThreeQuality('none');setThreeStatus('unavailable')}})
     return()=>{cancelled=true}
-  },[state.face.id])
+  },[state.face.id,localPhotoFaceFile])
   useEffect(()=>()=>{threeEngineRef.current?.dispose();threeEngineRef.current=null},[])
 
   useEffect(() => {
@@ -615,6 +635,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     threeCanvasRef,
     threeStatus,
     threeQuality,
+    photoFaceStatus,
+    photoFaceError,
     gpuAvailable,
     gpu2Active,
     gpu2Metrics,
