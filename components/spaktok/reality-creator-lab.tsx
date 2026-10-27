@@ -276,6 +276,10 @@ export default function RealityCreatorLab(){
       className="inline-flex rounded-lg border border-violet-400 bg-violet-800/30 px-4 py-3 text-sm font-semibold text-white">
       معاينة اللايف: تنحيف الفك وتعديل العينين والأنف مباشرة بالكاميرا
      </a>
+     <a href="/avatar-studio"
+      className="inline-flex rounded-lg border border-violet-400/50 bg-violet-500/15 px-4 py-3 text-sm font-semibold text-violet-100">
+      Avatar 3D Live — استيراد شخصية وتحريك الرأس والرمش والفم بتتبع الوجه
+     </a>
      <a href="/video-studio"
       className="inline-flex rounded-lg border border-cyan-500 bg-cyan-950/50 px-4 py-3 text-sm font-semibold text-cyan-200">
       افتح Video 3D Studio — إنشاء مجسمات وتحريكها داخل الفيديو
