@@ -115,9 +115,9 @@ export default function RealityAvatarStudio(){
    powerPreference:'high-performance'})
   renderer.outputColorSpace=THREE.SRGBColorSpace
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.5))
-  renderer.setClearColor(0x0d1728,1)
+  renderer.setClearColor(0xf5f6fa,1)
   const scene=new THREE.Scene()
-  scene.background=new THREE.Color(0x0d1728)
+  scene.background=new THREE.Color(0xf5f6fa)
   const camera=new THREE.PerspectiveCamera(35,1,.1,50)
   camera.position.set(0,0,5.6)
   const root=new THREE.Group()
@@ -422,12 +422,12 @@ export default function RealityAvatarStudio(){
     </div>
     <Link href="/reality-studio" className="rounded-xl border border-white/20 px-4 py-2 text-sm text-cyan-200">العودة إلى Reality Studio</Link>
    </header>
-   <p className="text-sm leading-7 text-slate-300">معاينة خاصة محلية: استورد GLB مُجهّزًا بتعابير الوجه أو جرّب الشخصية البسيطة. لا يوجد بث للمشاهدين أو رفع للصورة أو تسجيل صوت.</p>
+   <p className="text-sm leading-7 text-slate-300">معاينة خاصة محلية: اختر نموذج LUXA الذكوري أو الأنثوي، أو استورد GLB مجهزًا بتعابير الوجه. لا يوجد بث للمشاهدين أو رفع للصورة أو تسجيل صوت.</p>
    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_330px]">
-    <section className="overflow-hidden rounded-2xl border border-cyan-500/20 bg-[#0d1728]">
+    <section className="overflow-hidden rounded-2xl border border-cyan-500/20 bg-[#f5f6fa]">
      <canvas ref={canvasRef} className="h-[54dvh] min-h-[340px] w-full sm:h-[650px]"
       aria-label="معاينة شخصية ثلاثية الأبعاد متحركة"/>
-     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 p-3">
+     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-[#111b2d] p-3">
       <p className="text-xs text-slate-300">{modelName}</p>
       <span role="status" className={tracking?'text-emerald-300':'text-amber-300'}>
        {tracking?'● التتبع نشط':'○ '+avatarTrackingIssueArabic[trackerIssue]}
