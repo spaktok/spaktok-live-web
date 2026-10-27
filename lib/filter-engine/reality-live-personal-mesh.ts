@@ -141,8 +141,7 @@ export function chooseLiveMeshLevel(
  device:'low'|'mid'|'high'|'desktop',fps:number|null,faceValid:boolean,
 ):0|1|2{
  if(!faceValid)return 0
- if(device==='low')return 0
- if(typeof fps==='number'&&(!finite(fps)||fps<23))return 0
+ if(device==='low'||fps===null||!finite(fps)||fps<23)return 0
  if(device==='mid'||(typeof fps==='number'&&fps<36))return 1
  return 2
 }
