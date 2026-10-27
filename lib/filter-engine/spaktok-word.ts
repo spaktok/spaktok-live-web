@@ -31,7 +31,7 @@ export function buildSpaktokWordPlan(p:StudioProductionPackage):Readonly<{
  const isGlb=p.sourceFormat==='glb'
  const isImage=p.sourceFormat==='image'
  const hasSource=current('source')
- const rights=current('rights')
+ const rights=hasSource&&current('rights')
  const geometry=current('geometry')
  const materials=current('materials')
  const rigNeeded=p.assetType==='face-mask'||p.assetType==='full-avatar'
@@ -40,17 +40,17 @@ export function buildSpaktokWordPlan(p:StudioProductionPackage):Readonly<{
  const canAttach=geometry&&current('placement')
  const cam=canAttach&&(!rigNeeded||rig)&&p.tests.mobileVisualApproved&&
   p.tests.deviceFpsVerified
- const vid=geometry&&materials&&p.tests.mobileVisualApproved&&
+ const vid=geometry&&materials&&(!rigNeeded||rig)&&p.tests.mobileVisualApproved&&
   p.tests.deviceFpsVerified
  const lane=(id:WordLaneId,name:string,status:WordLaneStatus,
   reason:string,dependencies:readonly WordLaneId[],href:string|null=null):WordLane=>
   ({id,name,status,reason,dependencies,href})
  const lanes:WordLane[]=[
   lane('source','مصدر المشروع',hasSource?'ready':'waiting',
-   hasSource?'تم اختيار أصل محلي':'استورد صورة أو GLB أو OBJ',['rights'],'/reality-studio'),
+   hasSource?'تم اختيار أصل محلي':'استورد صورة أو GLB أو OBJ',[],'/reality-studio'),
   lane('rights','حقوق الاستخدام',rights?'ready':'blocked',
    rights?'تأكيد المراجعة مُسجّل؛ يلزم إثبات فعلي عند النشر':
-   'حقوق المصدر غير مُتحقَّقة؛ التوليد والنشر مقيدان',[],'/reality-studio'),
+   'حقوق المصدر غير مُتحقَّقة؛ التوليد والنشر مقيدان',['source'],'/reality-studio'),
   lane('rodin','توليد مجسم Rodin',!isImage?'manual':!rights?'blocked':'external',
    isImage&&rights?'تنسيق خارجي اختياري؛ لا يوجد طلب API أو دفع تلقائي':
    isImage?'لا يمكن إرسال الصورة قبل إثبات الحقوق':
@@ -60,7 +60,7 @@ export function buildSpaktokWordPlan(p:StudioProductionPackage):Readonly<{
    geometry?'GLB صالح للفحص البنيوي':
    isImage?'بانتظار مجسم GLB حقيقي من Rodin أو مزوّد آخر':
    'يلزم GLB مستقل وخالٍ من مراجع غير آمنة',
-   ['source','rights'],'/reality-studio'),
+   ['source'],'/reality-studio'),
   lane('materials','خامات PBR وUV',materials?'ready':'waiting',
    materials?'تم فحص بيانات PBR وUV وNormals بنيويًا':
    'الخامات والخرائط غير موثقة أو ما زال المجسم مفقودًا',
@@ -81,7 +81,7 @@ export function buildSpaktokWordPlan(p:StudioProductionPackage):Readonly<{
   lane('video','الفيديو المسجل',vid?'ready':'manual',
    vid?'مؤشرات المعاينة المحلية مكتملة؛ تحقق من التصدير':
    'يلزم اختبار المواد والتصدير والصوت وتطابق الإطارات',
-   ['geometry','materials'],'/video-studio'),
+   ['geometry','materials','facial-rig'],'/video-studio'),
   lane('live','بث المشاهدين', 'manual',
    'البث الفعلي عبر Agora/WebRTC لم يثبت بعد؛ الموجود معاينة محلية',
    ['camera','facial-rig'],'/live-studio-preview'),
