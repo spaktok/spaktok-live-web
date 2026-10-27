@@ -9,6 +9,8 @@ export const VIDEO_3D_MAX_GLB_BYTES=15*1024*1024
 export const VIDEO_3D_MAX_LAYERS=12
 export const VIDEO_3D_MAX_KEYFRAMES=80
 export type Video3DKind='box'|'sphere'|'torus'|'cone'|'octahedron'|'glb'
+export type Video3DAttachment='screen'|'eyes_center'|'forehead_center'|
+ 'nose_tip'|'nose_bridge'|'chin'|'upper_lip'
 export type Video3DFrame=Readonly<{
  timeMs:number
  /** Normalized screen coordinates: 0,0=center; -0.5 left/up; +0.5 right/down. */
@@ -19,6 +21,7 @@ export type Video3DFrame=Readonly<{
 }>
 export type Video3DLayer=Readonly<{
  id:string;name:string;kind:Video3DKind;color:string
+ anchor:Video3DAttachment
  /** Local-only reference; imported GLB bytes are not in draft JSON. */
  assetName:string|null
  keyframes:readonly Video3DFrame[]
@@ -53,7 +56,7 @@ export function createVideo3DLayer(id:string,kind:Video3DKind,
  if(!ID.test(id)||!kinds.includes(kind)||!name.trim()||name.length>80||
   (kind==='glb'?!assetName||assetName.length>180:assetName!==null))
   throw Error('video3d_invalid_layer')
- return {id,name,kind,color:'#59dfff',assetName,
+ return {id,name,kind,color:'#59dfff',anchor:'screen',assetName,
   keyframes:[{...DEFAULT_VIDEO_3D_FRAME}]}
 }
 export function validateVideo3DProject(value:Video3DProject):void{
@@ -73,7 +76,9 @@ export function validateVideo3DProject(value:Video3DProject):void{
  for(const layer of value.layers){
   if(!ID.test(layer.id)||ids.has(layer.id)||!layer.name?.trim()||
    layer.name.length>80||!kinds.includes(layer.kind)||
-   !COLOR.test(layer.color)||!Array.isArray(layer.keyframes)||
+   !COLOR.test(layer.color)||
+   !['screen','eyes_center','forehead_center','nose_tip','nose_bridge','chin','upper_lip'].includes(layer.anchor)||
+   !Array.isArray(layer.keyframes)||
    layer.keyframes.length<1||layer.keyframes.length>VIDEO_3D_MAX_KEYFRAMES||
    (layer.kind==='glb'?
      !layer.assetName||layer.assetName.length>180:layer.assetName!==null))
