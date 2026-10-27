@@ -2,7 +2,7 @@ import {
  createStudioState,filterPresets,faceFxCatalog,
  type StudioState,type FaceFxId,
 } from './params'
-import {NEUTRAL_FACE_MORPH} from './reality-face-morph'
+import {DEFAULT_FACE_MORPH} from './reality-face-morph'
 import {REALITY_EFFECTS,getRealityEffect,type RealityEffectManifest} from './reality-effect-manifest'
 
 /** Shared *authoring and scheduling* contract for video, camera and live.
@@ -143,7 +143,7 @@ export function resolveUnifiedRealityLook(
   result.beauty.smooth=clamp(config.skinSmoothing,0,.35)
   if(config.faceMorphStrength>0){
    result.face={id:'face-morph',strength:clamp(config.faceMorphStrength,0,.45),
-    morph:{...NEUTRAL_FACE_MORPH,strength:clamp(config.faceMorphStrength,0,.45)}}
+    morph:{...DEFAULT_FACE_MORPH,strength:clamp(config.faceMorphStrength,0,.45)}}
   }
  }
  return result
