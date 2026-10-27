@@ -114,7 +114,7 @@ export class RealityHandMatte {
   }
   const ctx0=scratch.getContext('2d')
   if(!ctx0)return false
-  ctx0.putImageData(new ImageData(mask.rgba,mask.width,mask.height),0,0)
+  ctx0.putImageData(new ImageData(new Uint8ClampedArray(mask.rgba),mask.width,mask.height),0,0)
   const ctx=this.ctx
   ctx.clearRect(0,0,this.width,this.height)
   ctx.save()
