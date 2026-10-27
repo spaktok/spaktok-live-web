@@ -9,6 +9,7 @@ import {
 import {auditStudioGlbBytes} from '@/lib/filter-engine/reality-production-glb-audit'
 import {saveLocalStudioGlb,REALITY_HANDOFF_MAX_BYTES} from '@/lib/filter-engine/reality-local-asset-handoff'
 import RealityRodinHandoff from './reality-rodin-handoff'
+import SpaktokWordConsole from './spaktok-word-console'
 
 const stages:Readonly<Record<StudioStageId,string>>={
  source:'الأصل',
@@ -199,6 +200,17 @@ export default function RealityProductionDirector({
     تحققت من FPS والحرارة أثناء المعاينة
    </label>
   </div>
+  <SpaktokWordConsole project={project} sourceFile={file}
+   onGlbAudit={audit=>setProject(previous=>({
+    ...previous,
+    metrics:{
+     triangleCount:audit.triangles,materialCount:audit.materials,
+     uvReady:audit.hasUV,normalReady:audit.hasNormals,pbrReady:audit.hasPBR,
+     textureCount:audit.textures,rigTargets:audit.rigTargets,
+     animationCount:audit.animations,selfContained:audit.selfContained,
+     validated:audit.valid,
+    },
+   }))}/>
   <RealityRodinHandoff project={project} sourceFile={file}/>
   <div className="flex flex-wrap gap-2">
    <button type="button" onClick={exportDraft} disabled={!review?.mayExportCandidate}
