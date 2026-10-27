@@ -43,7 +43,7 @@ export function createLuxeAvatar(style:LuxeAvatarStyle):LuxeAvatarRig{
  if(style!=='masculine'&&style!=='feminine')throw Error('invalid_luxe_style')
  const fem=style==='feminine'
  const root=new THREE.Group()
- const skin=material(fem?0xe8b2a2:0xdba48d,fem?.24:.31,fem?.85:.65)
+ const skin=material(fem?0xe8b2a2:0xdba48d,fem ? .24 : .31,fem ? .85 : .65)
  const skinShade=material(fem?0xd69b91:0xc98d76,.45,.2)
  const lip=material(fem?0xe67e95:0xb86e78,.26,.85)
  const lipShadow=material(fem?0x9b465b:0x914c51,.37,.4)
@@ -73,7 +73,7 @@ export function createLuxeAvatar(style:LuxeAvatarStyle):LuxeAvatarRig{
  // instead of scaling an identical sphere. Dense enough to remain smooth
  // under rotation without excessive phone GPU cost.
  const rings=42,around=62,positions:number[]=[],uvs:number[]=[],faces:number[]=[]
- const width=fem?.76:.84,height=fem?1.04:1.12
+ const width=fem ? .76 : .84,height=fem ? 1.04 : 1.12
  for(let j=0;j<=rings;j++){
   const theta=P*j/rings
   const y=Math.cos(theta)*height
@@ -92,7 +92,7 @@ export function createLuxeAvatar(style:LuxeAvatarStyle):LuxeAvatarRig{
  }
  for(let y=0;y<rings;y++)for(let x=0;x<around;x++){
   const a=y*(around+1)+x,b=a+around+1
-  faces.push(a,b,a+1,b,b+1,a+1)
+  faces.push(a,a+1,b,b,a+1,b+1)
  }
  const geometry=new THREE.BufferGeometry()
  geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3))
@@ -118,7 +118,7 @@ export function createLuxeAvatar(style:LuxeAvatarStyle):LuxeAvatarRig{
  const eyeY=fem?.19:.18,eyeX=fem?.315:.315
  for(const side of [-1,1]){
   const x=side*eyeX
-  const socket=add(root,sphere(.2,20,14),skinShade,x,eyeY,.615,.94,.78,.30)
+  add(root,sphere(.2,20,14),skinShade,x,eyeY,.615,.94,.78,.30)
   // Fem style has a low-cost iridescent two-band eye shadow.
   if(fem){
    add(root,sphere(.19,24,14),violet,x,eyeY+.065,.716,1.21,.64,.27)
@@ -153,6 +153,7 @@ export function createLuxeAvatar(style:LuxeAvatarStyle):LuxeAvatarRig{
   }
   const eyebrow=new THREE.Group()
   eyebrow.position.set(x,eyeY+.295,.64)
+  eyebrow.userData.restY=eyeY+.295
   root.add(eyebrow);brows.push(eyebrow)
   curve(eyebrow,[
    vector(-.18,-.028,0),vector(-.055,.047,.045),
