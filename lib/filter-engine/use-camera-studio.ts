@@ -13,6 +13,8 @@ import type {TrackedHand} from './reality-hand-physics'
 import {stabilizeFaceMesh,hasFreshFace} from './face3d-tracking'
 import {cameraSurfaceDimensions} from './preview-surface'
 import {cameraMorphForEffect} from './reality-face-morph'
+import {buildLiveSculptWarp,hasLiveSculpt,normalizeLiveSculpt,
+ type LiveSculptControls,type LiveSculptFrame} from './reality-live-sculpt-warp'
 import {createDenseFaceTopology,type DenseFaceTopology} from './reality-face-topology'
 import {createLiveFaceMeshTemplate,updateLiveFaceMesh,chooseLiveMeshLevel,
  type LiveMeshTemplate} from './reality-live-personal-mesh'
@@ -28,6 +30,7 @@ interface Options {
   paused?: boolean
   liveFaceMesh?:boolean
   liveMeshDebug?:boolean
+  liveSculpt?:LiveSculptControls
   /** Output aspect ratio (width / height). Portrait 9:16 matches stories and live. */
   aspect?: number
 }
@@ -49,12 +52,14 @@ const chooseOutputHeight = () => {
  * Face mesh and person segmentation run on-device (MediaPipe) so reshape and
  * background effects follow the face frame-by-frame.
  */
-export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false }: Options) {
+export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false, liveSculpt }: Options) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const liveMeshCanvasRef=useRef<HTMLCanvasElement|null>(null)
   const liveMeshEnabledRef=useRef(liveFaceMesh)
+  const liveSculptRef=useRef(normalizeLiveSculpt(liveSculpt))
+  const liveWarpRef=useRef<{frame:LiveSculptFrame;timestamp:number}|null>(null)
   const liveMeshDebugRef=useRef(liveMeshDebug)
   const liveTopologyRef=useRef<DenseFaceTopology|null>(null)
   const liveTemplatesRef=useRef(new Map<number,LiveMeshTemplate>())
@@ -116,6 +121,8 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
   stateRef.current = state
   activeRef.current = !paused
   liveMeshEnabledRef.current=liveFaceMesh
+  liveSculptRef.current=normalizeLiveSculpt(liveSculpt)
+  if(!liveFaceMesh||!hasLiveSculpt(liveSculptRef.current))liveWarpRef.current=null
   liveMeshDebugRef.current=liveMeshDebug
   const executionPlan = createRealityExecutionPlan(state)
   compositeArRef.current = executionPlan.faceOverlay
@@ -276,6 +283,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
       liveTopologyRef.current=null
       liveTemplatesRef.current.clear()
       liveProjectedRef.current=null
+      liveWarpRef.current=null
       livePreviousPointsRef.current=null
       liveMeshCanvasRef.current?.getContext('2d')?.clearRect(0,0,
         liveMeshCanvasRef.current.width,liveMeshCanvasRef.current.height)
@@ -452,6 +460,14 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
               },liveBufferRef.current?.length===template.vertexCount*3
                 ?liveBufferRef.current:undefined)
               if(updated){
+                if(hasLiveSculpt(liveSculptRef.current)){
+                  const warp=buildLiveSculptWarp(meshPoints,
+                    liveTopologyRef.current.indices,liveSculptRef.current,{
+                      sourceWidth:video.videoWidth,sourceHeight:video.videoHeight,
+                      outputWidth:out.width,outputHeight:out.height,mirror:facing==='user',
+                    })
+                  liveWarpRef.current=warp?{frame:warp,timestamp:now}:null
+                }else liveWarpRef.current=null
                 liveBufferRef.current=updated.positions
                 liveProjectedRef.current={positions:updated.positions,template,timestamp:now}
                 if(now-liveMeshLastUpdateRef.current>=500){
@@ -462,6 +478,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
                   })
                 }
               }else{
+                liveWarpRef.current=null
                 liveProjectedRef.current=null
                 setLiveMeshInfo(null)
               }
@@ -469,6 +486,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
           }
           setVision((value) => (value === 'tracking' ? value : 'tracking'))
         } else if (++lostFrames > 4) {
+          liveWarpRef.current=null
           liveProjectedRef.current=null
           livePreviousPointsRef.current=null
           livePreviousTimestampRef.current=0
@@ -518,6 +536,11 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
         runVision(now).catch(() => { faceRef.current=null; setVision('unavailable') })
         const current = stateRef.current
         const original = compareRef.current
+        const currentWarp=(!original&&liveMeshEnabledRef.current&&
+         hasLiveSculpt(liveSculptRef.current)&&
+         liveWarpRef.current&&now-liveWarpRef.current.timestamp<=375&&faceRef.current)
+         ?liveWarpRef.current.frame:null
+        const beauty=currentWarp?{...current.beauty,slim:0,jaw:0,eyes:0,nose:0}:current.beauty
         const overlay=arCanvasRef.current
         const overlayCtx=overlay?.getContext('2d')
         if(overlayCtx && overlay){
@@ -564,10 +587,11 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
             const cameraInput:RenderInput|undefined=candidate?{
               source:video,
               color:original?neutralColor:resolveColor(current),
-              beauty:original?neutralBeauty:current.beauty,
+              beauty:original?neutralBeauty:beauty,
               effects:original?neutralEffects:current.effects,
               faceFx:neutralFaceFx,
-              morph:original?null:cameraMorphForEffect(current.face.id,current.face.strength,current.face.morph),
+              morph:original||currentWarp?null:cameraMorphForEffect(current.face.id,current.face.strength,current.face.morph),
+              liveSculpt:currentWarp,
               mirror:facing==='user',
               face:faceRef.current,
               mask:maskRef.current,
@@ -597,10 +621,11 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
             filteredFrameReadyRef.current=rendererRef.current.render({
               source:video,
               color:original?neutralColor:resolveColor(current),
-              beauty:original?neutralBeauty:current.beauty,
+              beauty:original?neutralBeauty:beauty,
               effects:original?neutralEffects:current.effects,
               faceFx:neutralFaceFx,
-              morph:original?null:cameraMorphForEffect(current.face.id,current.face.strength,current.face.morph),
+              morph:original||currentWarp?null:cameraMorphForEffect(current.face.id,current.face.strength,current.face.morph),
+              liveSculpt:currentWarp,
               mirror:facing==='user',
               face:faceRef.current,
               mask:maskRef.current,
