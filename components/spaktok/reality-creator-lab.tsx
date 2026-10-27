@@ -193,9 +193,13 @@ export default function RealityCreatorLab(){
    </div>
   </div>
  )
+ const rightsApproved=(()=>{
+  try{return reviewStudioProduction(production).mayExportCandidate}
+  catch{return false}
+ })()
  const exportRetarget=async()=>{
   if(!file||!/\.obj$/i.test(file.name)||retargetBusy)return
-  if(!reviewStudioProduction(production).mayExportCandidate){
+  if(!rightsApproved){
    setStatus('راجع حقوق الأصل في لوحة الإنتاج أولًا.')
    return
   }
@@ -238,7 +242,7 @@ export default function RealityCreatorLab(){
  }
  const exportDraft=()=>{
   if(!file)return
-  if(!reviewStudioProduction(production).mayExportCandidate){
+  if(!rightsApproved){
    setStatus('حقوق الأصل غير معتمدة. راجعها في خط الإنتاج قبل التصدير.')
    return
   }
@@ -307,7 +311,7 @@ export default function RealityCreatorLab(){
    {file&&hasStudioImageExtension(file.name)?
     <div className="mx-auto max-w-7xl space-y-3">
      <RealityImageReference key={file.name+'-'+file.size+'-'+file.lastModified}
-      file={file} canExport={reviewStudioProduction(production).mayExportCandidate}/>
+      file={file} canExport={rightsApproved}/>
      <label className="block rounded-xl border border-slate-700 bg-slate-900 p-4 text-sm">
       استبدال الصورة أو استيراد صورة أخرى
       <input type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
@@ -371,7 +375,7 @@ export default function RealityCreatorLab(){
         {retargetInfo&&<p className="text-xs text-cyan-300">{retargetInfo}</p>}
        </div>
      }
-     <button onClick={exportDraft} disabled={!file||/\.obj$/i.test(file.name)||!reviewStudioProduction(production).mayExportCandidate}
+     <button onClick={exportDraft} disabled={!file||/\.obj$/i.test(file.name)||!rightsApproved}
       className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
       تصدير مسودة Effect Package
      </button>
