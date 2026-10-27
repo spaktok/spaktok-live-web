@@ -2,6 +2,9 @@
 
 import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react'
 import * as THREE from 'three'
+import type {FaceLandmarker} from '@mediapipe/tasks-vision'
+import {loadFaceLandmarker} from '@/lib/filter-engine/vision'
+import {resolveRealityAnchor} from '@/lib/filter-engine/reality-effect-anchors'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js'
 import {REALITY_SHARED_GRADE_OPTIONS} from '@/lib/filter-engine/reality-unified-profile'
@@ -12,7 +15,7 @@ import {
  video3DOutputSize,VIDEO_3D_MAX_VIDEO_BYTES,VIDEO_3D_MAX_GLB_BYTES,
  VIDEO_3D_MAX_DURATION_MS,VIDEO_3D_MAX_LAYERS,DEFAULT_VIDEO_3D_FRAME,
  type Video3DProject,type Video3DLayer,type Video3DKind,
- type Video3DFrame,type Video3DFrameProperty,
+ type Video3DFrame,type Video3DFrameProperty,type Video3DAttachment,
 } from '@/lib/filter-engine/reality-video3d-project'
 
 const kinds:{kind:Exclude<Video3DKind,'glb'>;title:string}[]=[
@@ -86,6 +89,11 @@ export default function RealityVideo3DStudio(){
  const stageRef=useRef<HTMLDivElement|null>(null)
  const videoRef=useRef<HTMLVideoElement|null>(null)
  const stageEngine=useRef<Stage|null>(null)
+ const videoFaceTracker=useRef<FaceLandmarker|null>(null)
+ const trackedFace=useRef<{landmarks:{x:number;y:number;z:number}[];at:number}|null>(null)
+ const trackingWanted=useRef(false)
+ const lastVideoInference=useRef(0)
+ const [videoTrackingStatus,setVideoTrackingStatus]=useState<'off'|'loading'|'ready'|'error'>('off')
  const uploadedAssets=useRef(new Map<string,THREE.Group>())
  const videoURL=useRef<string|null>(null)
  const recorderRef=useRef<MediaRecorder|null>(null)
@@ -106,6 +114,23 @@ export default function RealityVideo3DStudio(){
   currentLayer?sampleVideo3DLayer(currentLayer,currentMs):DEFAULT_VIDEO_3D_FRAME,
  [currentLayer,currentMs])
  const layerSignature=project.layers.map(layer=>layer.id+':'+layer.kind+':'+(layer.assetName??'')).join('|')
+ const needsTrackedFace=project.layers.some(layer=>layer.anchor!=='screen')
+ useEffect(()=>{trackingWanted.current=needsTrackedFace},[needsTrackedFace])
+ useEffect(()=>{
+  if(!needsTrackedFace){trackedFace.current=null;setVideoTrackingStatus('off');return}
+  let cancelled=false
+  setVideoTrackingStatus('loading')
+  loadFaceLandmarker().then(model=>{
+   if(cancelled)return
+   videoFaceTracker.current=model
+   setVideoTrackingStatus('ready')
+  }).catch(()=>{
+   if(cancelled)return
+   videoFaceTracker.current=null
+   setVideoTrackingStatus('error')
+  })
+  return()=>{cancelled=true}
+ },[needsTrackedFace])
  useEffect(()=>{
   const material=stageEngine.current?.background.material
   if(material instanceof THREE.ShaderMaterial)
@@ -155,11 +180,35 @@ export default function RealityVideo3DStudio(){
     lastUi=time;setCurrentMs(current)
    }
    const state=projectRef.current
+   if(trackingWanted.current&&videoFaceTracker.current&&video.readyState>=2&&
+    video.videoWidth>0&&time-lastVideoInference.current>100){
+    lastVideoInference.current=time
+    try{
+     const found=videoFaceTracker.current.detectForVideo(video,time)
+     const landmarks=found.faceLandmarks[0]
+     trackedFace.current=landmarks?.length===478
+      ?{landmarks:landmarks.map(p=>({x:p.x,y:p.y,z:p.z})),at:time}:null
+    }catch{trackedFace.current=null}
+   }
    for(const layer of state.layers){
     const root=stage.holders.get(layer.id)
     if(!root)continue
     const f=sampleVideo3DLayer(layer,current)
-    root.position.set(f.x*stage.aspect,-f.y,.5)
+    let x=f.x*stage.aspect,y=-f.y
+    if(layer.anchor!=='screen'){
+     const face=trackedFace.current
+     // Lost tracking: hide model, never leave a frozen prop on someone else's face.
+     if(!face||time-face.at>375||!video.videoWidth||!video.videoHeight){
+      root.visible=false;continue
+     }
+     const anchor=resolveRealityAnchor(layer.anchor,face.landmarks,
+      video.videoWidth,video.videoHeight,
+      renderer.domElement.width,renderer.domElement.height,false)
+     if(!anchor){root.visible=false;continue}
+     x+=(anchor.x/renderer.domElement.width-.5)*stage.aspect
+     y+=.5-anchor.y/renderer.domElement.height
+    }
+    root.position.set(x,y,.5)
     root.rotation.set(
      THREE.MathUtils.degToRad(f.rotationX),
      THREE.MathUtils.degToRad(f.rotationY),
@@ -269,6 +318,7 @@ export default function RealityVideo3DStudio(){
     video.videoWidth>8192||video.videoHeight>8192)
     throw Error('video_exceeds_120s_or_invalid_dimensions')
    videoURL.current=url
+   trackedFace.current=null
    if(old)URL.revokeObjectURL(old)
    setProject(prev=>({...prev,source:{
     name:file.name,width:video.videoWidth,height:video.videoHeight,durationMs,
@@ -371,6 +421,11 @@ export default function RealityVideo3DStudio(){
    setProject(prev=>({...prev,layers:prev.layers.map(l=>l.id===currentLayer.id
     ?upsertVideo3DFrame(l,updated,duration):l)}))
   }catch(error){setMessage('تعذر إضافة نقطة التحريك: '+String(error))}
+ }
+ const updateAttachment=(anchor:Video3DAttachment)=>{
+  trackedFace.current=null
+  setProject(prev=>({...prev,layers:prev.layers.map(layer=>
+   layer.id===selected?{...layer,anchor}:layer)}))
  }
  const updateColor=(color:string)=>{
   setProject(prev=>({...prev,layers:prev.layers.map(layer=>
@@ -556,6 +611,26 @@ export default function RealityVideo3DStudio(){
      </section>
      {currentLayer&&<section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900 p-4">
       <h2 className="font-bold">4. ضبط وتحريك {currentLayer.name}</h2>
+      <label className="block text-xs leading-6 text-slate-300">
+       ربط المجسم بالوجه في الفيديو
+       <select value={currentLayer.anchor} onChange={event=>updateAttachment(event.target.value as Video3DAttachment)}
+        disabled={recording}
+        className="mt-1 block w-full rounded-lg border border-slate-600 bg-slate-950 p-2 text-sm text-white">
+        <option value="screen">ثابت بالنسبة لإطار الفيديو</option>
+        <option value="forehead_center">منتصف الجبهة (تاج)</option>
+        <option value="eyes_center">منتصف العينين (نظارات)</option>
+        <option value="nose_bridge">جسر الأنف</option>
+        <option value="nose_tip">طرف الأنف</option>
+        <option value="upper_lip">الشفة العليا</option>
+        <option value="chin">الذقن</option>
+       </select>
+      </label>
+      {currentLayer.anchor!=='screen'&&<p className="text-[11px] leading-5 text-cyan-200">
+       تتبع وجه الفيديو: {videoTrackingStatus==='ready'?'مفعّل محليًا عند ظهور وجه':
+        videoTrackingStatus==='loading'?'جارٍ تحميل MediaPipe':
+        videoTrackingStatus==='error'?'فشل تحميل نموذج الوجه':'في انتظار تفعيل التتبع'}
+       . هذا تتبع موضع ثنائي الأبعاد، وليس نموذج رأس 6DoF أو إخفاءً واقعيًا خلف الشعر.
+      </p>}
       <p className="text-xs leading-6 text-slate-400">حرّك مؤشر الزمن، ثم غيّر أي قيمة لإنشاء نقطة Keyframe تلقائيًا. الحركة بين النقاط ناعمة وقابلة للتعديل.</p>
       <label className="flex items-center gap-3 text-xs">لون المجسم
        <input type="color" value={currentLayer.color} onChange={e=>updateColor(e.target.value)}
