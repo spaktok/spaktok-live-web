@@ -530,7 +530,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
         }
         // Optional QA wireframe is screen-only. It never alters transmitted
         // source pixels, facial identity, makeup or recording frames.
-        const wireCanvas=liveMeshCanvasRef.current
+        const wireCanvas=liveMeshEnabledRef.current?liveMeshCanvasRef.current:null
         const wireContext=wireCanvas?.getContext('2d')
         if(wireCanvas&&wireContext){
           wireContext.clearRect(0,0,wireCanvas.width,wireCanvas.height)
