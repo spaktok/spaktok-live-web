@@ -5,10 +5,11 @@ import { FilterRenderer, type FaceGeometry, type RenderInput } from './renderer'
 import { isFace3DSelected, neutralBeauty, neutralColor, neutralEffects, neutralFaceFx, resolveColor, type StudioState } from './params'
 import { composeRealityFrame } from './reality-compositor'
 import { createRealityExecutionPlan, shouldUseRealityGpu2 } from './reality-pipeline'
-import { loadFaceLandmarker, recoverFaceLandmarkerOnCpu, configureFace3DExtras, loadSegmenter, smoothFace, toFaceGeometry } from './vision'
+import { loadFaceLandmarker, recoverFaceLandmarkerOnCpu, configureFace3DExtras, loadSegmenter, loadHandLandmarker, smoothFace, toFaceGeometry } from './vision'
 import { drawFaceMask } from './face-overlay'
 import {trackingIntervalMs,updatedMean} from './vision-scheduler'
 import type {FaceMesh3DEngine,Face3DFrame} from './face3d'
+import type {TrackedHand} from './reality-hand-physics'
 import {stabilizeFaceMesh,hasFreshFace} from './face3d-tracking'
 import {cameraSurfaceDimensions} from './preview-surface'
 
@@ -54,6 +55,9 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const rendererRef = useRef<FilterRenderer | null>(null)
   const filteredFrameReadyRef = useRef(false)
   const gpu2RequestedRef=useRef(false)
+  const handsRequestedRef=useRef(false)
+  const trackedHandsRef=useRef<TrackedHand[]>([])
+  const lastHandsVisionRef=useRef(0)
   const gpu2ActiveRef=useRef(false)
   const streamRef = useRef<MediaStream | null>(null)
   const stateRef = useRef(state)
@@ -80,6 +84,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
   const [previewFps,setPreviewFps] = useState<number | null>(null)
   const [gpuAvailable,setGpuAvailable] = useState(true)
   const [gpu2Active,setGpu2Active] = useState(false)
+  const [handMode,setHandMode] = useState<'off'|'mounted'|'grabbed'|'returning'>('off')
   const [gpu2Metrics,setGpu2Metrics] = useState<{cpuRenderMs:number;drawCalls:number;triangles:number;passes:number}|null>(null)
   const [threeStatus,setThreeStatus]=useState<'idle'|'loading'|'ready'|'unavailable'>('idle')
   const [threeQuality,setThreeQuality]=useState<'hd'|'fallback'|'none'>('none')
@@ -95,7 +100,9 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
 
   useEffect(()=>{
     // Device QA opt-in only until Android/iOS parity and sustained FPS pass.
-    gpu2RequestedRef.current=new URLSearchParams(window.location.search).get('realityGpu')==='2'
+    const query=new URLSearchParams(window.location.search)
+    gpu2RequestedRef.current=query.get('realityGpu')==='2'
+    handsRequestedRef.current=query.get('realityHands')==='1'
   },[])
 
   const stopStream = useCallback(() => {
@@ -236,6 +243,18 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     }
   }, [needsFace, needsMask])
 
+  useEffect(()=>{
+    if(!isFace3DSelected(state.face.id)||!handsRequestedRef.current){
+      trackedHandsRef.current=[]
+      return
+    }
+    let cancelled=false
+    loadHandLandmarker().catch(()=>{
+      if(!cancelled)trackedHandsRef.current=[]
+    })
+    return()=>{cancelled=true;trackedHandsRef.current=[]}
+  },[state.face.id])
+
   /** All photo/video/live outputs composite the SAME graded GPU frame + AR layers. */
   const drawCompositeFrame = (video:HTMLVideoElement, mode:Facing, layer:HTMLCanvasElement|null)=>{
     return composeRealityFrame({
@@ -345,6 +364,22 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
           setVision((value) => (value === 'no-face' ? value : 'no-face'))
         }
       }
+      // Bounded hand inference, independent from camera drawing; hands
+      // manipulate objects and NEVER disable the selected effect.
+      if(handsRequestedRef.current&&isFace3DSelected(current.face.id)&&
+         now-lastHandsVisionRef.current>=115){
+        lastHandsVisionRef.current=now
+        try{
+          const detector=await loadHandLandmarker()
+          const result=detector.detectForVideo(video,now)
+          trackedHandsRef.current=result.landmarks.map((landmarks,index)=>({
+           landmarks:landmarks.map(point=>({x:point.x,y:point.y,z:point.z})),
+           handedness:result.handednesses?.[index]?.[0]?.categoryName==='Left'?'Left':
+             result.handednesses?.[index]?.[0]?.categoryName==='Right'?'Right':'Unknown',
+           timestamp:now,
+          }))
+        }catch{trackedHandsRef.current=[]}
+      }
       if (wantsMask) {
         const segmenter = await loadSegmenter().catch(() => null)
         segmenter?.segmentForVideo(video, now, (result) => {
@@ -400,7 +435,8 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
             }:undefined
             threeEngineRef.current.render(original?null:fresh,
               video.videoWidth,video.videoHeight,facing==='user',
-              current.face.id,current.face.strength,current.face.makeup,cameraInput)
+              current.face.id,current.face.strength,current.face.makeup,cameraInput,
+              handsRequestedRef.current?trackedHandsRef.current:undefined)
             frameUsedGpu2=candidate
           }catch{
             threeEngineRef.current.dispose()
@@ -447,6 +483,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
           setPreviewFps(Math.round(1000*fps.frames/(now-fps.last)))
           // CPU submission time and draw calls, not actual GPU execution time.
           setGpu2Metrics(frameUsedGpu2?threeEngineRef.current?.lastGpuStats??null:null)
+          setHandMode(handsRequestedRef.current?threeEngineRef.current?.lastHandInteraction?.state??'mounted':'off')
           fps.last=now;fps.frames=0
         }
       }
@@ -581,6 +618,7 @@ export function useCameraStudio({ state, audio = false, paused = false, aspect =
     gpuAvailable,
     gpu2Active,
     gpu2Metrics,
+    handMode,
     status,
     vision,
     facing,

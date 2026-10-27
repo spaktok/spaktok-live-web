@@ -287,6 +287,10 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                 <span className="rounded-full border border-[#90aaff]/20 bg-black/55 px-2.5 py-1 font-mono text-[10px] tabular-nums text-[#acc4ff]">
                   {camera.previewFps} FPS • Preview
                 </span>}
+              {camera.handMode!=='off'&&faceArSelected&&
+                <span className="rounded-full bg-black/65 px-3 py-1 text-[10px] font-medium text-white/85">
+                  Hand interaction: {camera.handMode==='grabbed'?'holding object':camera.handMode==='returning'?'returning to face':'pinch near wearable'}
+                </span>}
               {camera.gpu2Active&&camera.gpu2Metrics&&
                 <span className="rounded-full border border-white/15 bg-black/65 px-2.5 py-1 font-mono text-[10px] tabular-nums text-white/80"
                   title="CPU render submission time, not GPU execution time">

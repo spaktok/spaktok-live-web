@@ -1,16 +1,20 @@
-import type { FaceLandmarker, ImageSegmenter } from '@mediapipe/tasks-vision'
+import type { FaceLandmarker, ImageSegmenter, HandLandmarker } from '@mediapipe/tasks-vision'
 import type { FaceGeometry, Point } from './renderer'
 
 const WASM_BASE = 'https://spaktok-face-assets.spaktok.workers.dev/wasm'
 const WASM_BACKUP = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm'
 const FACE_MODEL = 'https://spaktok-face-assets.spaktok.workers.dev/face_landmarker.task'
 const SEGMENTER_MODEL = 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite'
+/** Publicly versioned official model. Camera pixels remain on-device. The
+ * model bundle is fetched by browser once, not user content uploaded. */
+const HAND_MODEL = 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
 
 let filesetPromise: Promise<Awaited<ReturnType<typeof import('@mediapipe/tasks-vision').FilesetResolver.forVisionTasks>>> | null = null
 let facePromise: Promise<FaceLandmarker> | null = null
 let forcedCpu = false
 let extraFace3DEnabled=false
 let segmenterPromise: Promise<ImageSegmenter> | null = null
+let handPromise: Promise<HandLandmarker> | null = null
 
 async function loadFileset() {
   if (!filesetPromise) {
@@ -71,6 +75,27 @@ export async function configureFace3DExtras(enabled:boolean){
  const model=await loadFaceLandmarker()
  await model.setOptions({outputFaceBlendshapes:enabled,outputFacialTransformationMatrixes:enabled})
  extraFace3DEnabled=enabled
+}
+/** Lazy model load; NEVER run hand ML unless creator opted into interaction QA.
+ * GPU first with CPU fallback; no camera/hand landmarks leave the browser.
+ */
+export function loadHandLandmarker():Promise<HandLandmarker>{
+ if(!handPromise){
+  handPromise=(async()=>{
+   const [{HandLandmarker},fileset]=await Promise.all([
+    import('@mediapipe/tasks-vision'),loadFileset(),
+   ])
+   return withGpuFallback(delegate=>HandLandmarker.createFromOptions(fileset,{
+    baseOptions:{modelAssetPath:HAND_MODEL,delegate},
+    runningMode:'VIDEO',numHands:2,
+    minHandDetectionConfidence:.55,
+    minHandPresenceConfidence:.55,
+    minTrackingConfidence:.5,
+   }))
+  })()
+  handPromise.catch(()=>{handPromise=null})
+ }
+ return handPromise
 }
 export function loadSegmenter() {
   if (!segmenterPromise) {

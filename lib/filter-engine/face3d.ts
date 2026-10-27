@@ -25,6 +25,8 @@ import {resolveRealityAnchor,solveRealityMount} from './reality-effect-anchors'
 import {createDenseFaceTopology,isDenseFaceFrame,type DenseFaceTopology} from './reality-face-topology'
 import {createFaceSemanticAtlas,type FaceSemanticAtlas} from './reality-face-regions'
 import {createRegionSurfaceBinding,evaluateFaceSurfaceBinding,type FaceSurfaceBinding} from './reality-face-surface'
+import {RealityHandPhysics,type TrackedHand,type HandInteraction} from './reality-hand-physics'
+import {estimateMetricFaceScale,type MetricCalibration} from './reality-canonical-head'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -259,6 +261,10 @@ export class FaceMesh3DEngine{
  private current:Face3DId|null=null
  private surfaceBinding:FaceSurfaceBinding|null=null
  private surfaceBoundId:Face3DId|null=null
+ private readonly handPhysics=new RealityHandPhysics()
+ lastHandInteraction:HandInteraction|null=null
+ lastMetricCalibration:MetricCalibration|null=null
+ private lastGoodFrame:Face3DFrame|null=null
  private request=0
  private alive=true
  private width:number
@@ -367,6 +373,8 @@ export class FaceMesh3DEngine{
  async setLens(id:Face3DId):Promise<boolean>{
   if(this.current===id)return this.lensReady
   this.current=id
+  this.handPhysics.reset()
+  this.lastHandInteraction=null
   this.surfaceBinding=null
   this.surfaceBoundId=null
   this.lensReady=false
@@ -441,9 +449,15 @@ export class FaceMesh3DEngine{
  /** A camera input enables GPU v2: video/beauty and physical 3D use the
   * SAME WebGLRenderer, enabling scene-based transmission. Without it, the
   * previous alpha-overlay renderer remains unchanged for safe fallback. */
- render(frame:Face3DFrame|null,sourceW:number,sourceH:number,mirror:boolean,id:FaceFxId,strength:number,makeup?:MakeupOverrides,cameraInput?:RenderInput){
+ render(frame:Face3DFrame|null,sourceW:number,sourceH:number,mirror:boolean,id:FaceFxId,strength:number,makeup?:MakeupOverrides,cameraInput?:RenderInput,trackedHands?:readonly TrackedHand[]){
   if(!this.alive)return
   const started=performance.now()
+  // A hand briefly covering the face must not cancel the wearable.
+  // Retain the last good pose up to 650ms only WHILE gripping an object.
+  const heldFaceMissing=!frame&&this.handPhysics.state==='grabbed'
+  if(heldFaceMissing&&this.lastGoodFrame&&
+     started-this.lastGoodFrame.timestamp<=650)frame=this.lastGoodFrame
+  if(frame&&!heldFaceMissing)this.lastGoodFrame=frame
   this.renderer.info.reset()
   if(cameraInput){
    this.adaptLight(cameraInput.source,cameraInput.time)
@@ -490,7 +504,7 @@ export class FaceMesh3DEngine{
    this.finishGpuStats(started,integrated?1:0)
    return
   }
-  this.depthMesh.visible=true
+  this.depthMesh.visible=!heldFaceMissing
   this.meshDebug.visible=typeof window!=='undefined'&&
    new URLSearchParams(window.location.search).get('realityMesh')==='1'
   this.makeup.setStyle(id,this.lensReady,makeup)
@@ -540,6 +554,11 @@ export class FaceMesh3DEngine{
   }else this.mount.position.set(pose.x,pose.y,18)
   this.mount.scale.setScalar(pose.width)
   this.mount.rotation.set(pose.pitch*.7,pose.yaw*.75,pose.roll)
+  // Nominal metric estimate only, not a scan of the user's skull.
+  this.lastMetricCalibration=estimateMetricFaceScale(
+   frame.landmarks[33],frame.landmarks[263],
+   {width:sourceW,height:sourceH},{width:this.width,height:this.height},
+  )
   // Dense surface attachment is in mobile QA until face-pose, mask and GLB
   // alignment pass real-device tests. Default remains the stable head anchor.
   if(definition?.surfaceBinding&&typeof window!=='undefined'&&
@@ -572,6 +591,24 @@ export class FaceMesh3DEngine{
    // Barycentric attachment follows all three live triangle vertices and
    // uses the local surface normal for safe positive camera-facing offset.
    this.mount.position.set(surface.x,surface.y,surface.z)
+  }
+  if(trackedHands!==undefined&&this.lensReady&&
+     (definition?.kind==='wearable-3d'||definition?.kind==='expression-3d')){
+   const home={
+    x:this.mount.position.x,y:this.mount.position.y,z:this.mount.position.z,
+    pitch:this.mount.rotation.x,yaw:this.mount.rotation.y,roll:this.mount.rotation.z,
+   }
+   this.lastHandInteraction=this.handPhysics.step(home,pose.width,trackedHands,{
+    sourceWidth:sourceW,sourceHeight:sourceH,
+    outputWidth:this.width,outputHeight:this.height,
+    mirror,now:started,
+   })
+   const moved=this.lastHandInteraction.pose
+   this.mount.position.set(moved.x,moved.y,moved.z)
+   this.mount.rotation.set(moved.pitch,moved.yaw,moved.roll)
+  }else if(trackedHands===undefined&&this.handPhysics.state!=='mounted'){
+   this.handPhysics.reset()
+   this.lastHandInteraction=null
   }
   if(this.model){
    const expr=frame.geometry.expression
