@@ -461,11 +461,15 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
                 ?liveBufferRef.current:undefined)
               if(updated){
                 if(hasLiveSculpt(liveSculptRef.current)){
+                  // Start conservative, only raise warp LUT precision after
+                  // measured real preview frame rate confirms headroom.
+                  const measured=liveFpsRef.current
+                  const grid=measured===null||measured<24?96:measured<30?128:160
                   const warp=buildLiveSculptWarp(meshPoints,
                     liveTopologyRef.current.indices,liveSculptRef.current,{
                       sourceWidth:video.videoWidth,sourceHeight:video.videoHeight,
                       outputWidth:out.width,outputHeight:out.height,mirror:facing==='user',
-                    })
+                    },grid)
                   liveWarpRef.current=warp?{frame:warp,timestamp:now}:null
                 }else liveWarpRef.current=null
                 liveBufferRef.current=updated.positions
