@@ -4,6 +4,8 @@ import {useEffect,useMemo,useRef,useState,type ChangeEvent} from 'react'
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js'
+import {REALITY_SHARED_GRADE_OPTIONS} from '@/lib/filter-engine/reality-unified-profile'
+import {createRealityVideoGrade,setRealityVideoGrade} from '@/lib/filter-engine/reality-video-grade'
 import {
  assertSelfContainedVideo3DGlb,createVideo3DLayer,createVideo3DProject,
  sampleVideo3DLayer,upsertVideo3DFrame,validateVideo3DProject,
@@ -104,6 +106,11 @@ export default function RealityVideo3DStudio(){
   currentLayer?sampleVideo3DLayer(currentLayer,currentMs):DEFAULT_VIDEO_3D_FRAME,
  [currentLayer,currentMs])
  const layerSignature=project.layers.map(layer=>layer.id+':'+layer.kind+':'+(layer.assetName??'')).join('|')
+ useEffect(()=>{
+  const material=stageEngine.current?.background.material
+  if(material instanceof THREE.ShaderMaterial)
+   setRealityVideoGrade(material,project.colorPresetId)
+ },[project.colorPresetId])
  useEffect(()=>{projectRef.current=project},[project])
 
  useEffect(()=>{
@@ -129,13 +136,14 @@ export default function RealityVideo3DStudio(){
   texture.minFilter=THREE.LinearFilter
   texture.magFilter=THREE.LinearFilter
   const bg=new THREE.Mesh(new THREE.PlaneGeometry(aspect,1),
-   new THREE.MeshBasicMaterial({map:texture,toneMapped:false,depthWrite:false}))
+   createRealityVideoGrade(texture))
   bg.position.z=-.2
   bg.visible=false
   scene.add(bg)
   scene.add(new THREE.HemisphereLight(0xffffff,0x415178,2.2))
   const light=new THREE.DirectionalLight(0xffffff,2.6)
   light.position.set(-2,3,5);scene.add(light)
+  setRealityVideoGrade(bg.material as THREE.ShaderMaterial,projectRef.current.colorPresetId)
   const stage:Stage={renderer,scene,camera,background:bg,texture,
    holders:new Map(),primitiveIds:new Set(),aspect}
   stageEngine.current=stage
@@ -521,8 +529,21 @@ export default function RealityVideo3DStudio(){
       </label>
       {assetErrors&&<p className="text-xs text-rose-300">{assetErrors}</p>}
      </section>
+     <section className="space-y-3 rounded-xl border border-cyan-700/40 bg-slate-900 p-4">
+      <h2 className="font-bold">2. فلاتر الألوان الموحدة للفيديو</h2>
+      <label className="block text-xs text-slate-300">
+       اختر أحد فلاتر الكاميرا نفسها؛ ستظهر المعاينة والتصدير داخل Canvas ثلاثي الأبعاد.
+       <select value={project.colorPresetId} disabled={recording}
+        onChange={event=>setProject(prev=>({...prev,colorPresetId:event.target.value}))}
+        className="mt-2 block w-full rounded-lg border border-slate-600 bg-slate-950 p-2 text-sm text-white">
+        {REALITY_SHARED_GRADE_OPTIONS.map(option=>
+         <option key={option.id} value={option.id}>{option.name}</option>)}
+       </select>
+      </label>
+      <p className="text-[11px] text-slate-400">هذه طبقة ألوان GPU خفيفة تتشارك تعريفات الفلاتر. المطابقة الدقيقة مع Shader الكاميرا، وتتبّع أقنعة الوجه داخل الفيديو، ما زالا قيد التطوير.</p>
+     </section>
      <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900 p-4">
-      <h2 className="font-bold">2. طبقات المجسمات ({project.layers.length}/{VIDEO_3D_MAX_LAYERS})</h2>
+      <h2 className="font-bold">3. طبقات المجسمات ({project.layers.length}/{VIDEO_3D_MAX_LAYERS})</h2>
       <div className="max-h-[190px] space-y-2 overflow-y-auto">
        {project.layers.length===0&&<p className="text-xs text-slate-400">أضف أول مجسم لإظهار أدوات الضبط.</p>}
        {project.layers.map(layer=><button type="button" key={layer.id} onClick={()=>setSelected(layer.id)}
@@ -534,7 +555,7 @@ export default function RealityVideo3DStudio(){
       </div>
      </section>
      {currentLayer&&<section className="space-y-3 rounded-xl border border-slate-700 bg-slate-900 p-4">
-      <h2 className="font-bold">3. ضبط وتحريك {currentLayer.name}</h2>
+      <h2 className="font-bold">4. ضبط وتحريك {currentLayer.name}</h2>
       <p className="text-xs leading-6 text-slate-400">حرّك مؤشر الزمن، ثم غيّر أي قيمة لإنشاء نقطة Keyframe تلقائيًا. الحركة بين النقاط ناعمة وقابلة للتعديل.</p>
       <label className="flex items-center gap-3 text-xs">لون المجسم
        <input type="color" value={currentLayer.color} onChange={e=>updateColor(e.target.value)}
