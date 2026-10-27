@@ -541,8 +541,7 @@ export class FaceMesh3DEngine{
    return
   }
   this.depthMesh.visible=!heldFaceMissing&&id!==LOCAL_PHOTO_FACE_ID
-  if(this.photoFace)this.photoFace.mesh.visible=
-   id===LOCAL_PHOTO_FACE_ID&&this.lensReady&&!heldFaceMissing
+  if(this.photoFace)this.photoFace.mesh.visible=false
   this.meshDebug.visible=typeof window!=='undefined'&&
    new URLSearchParams(window.location.search).get('realityMesh')==='1'
   this.makeup.setStyle(id,this.lensReady,makeup)
@@ -560,8 +559,9 @@ export class FaceMesh3DEngine{
    this.depthPositions.needsUpdate=true
    this.depthMesh.geometry.computeVertexNormals()
    this.makeup.update(frame.landmarks,sourceW/sourceH)
-   if(this.photoFace)this.photoFace.update(buffer,
-    id===LOCAL_PHOTO_FACE_ID&&this.lensReady,strength)
+   // Deprecated photo-face renderer: never substitute a different person's
+   // printed face over the user's live skin. Canonical GLB is authoring only.
+   if(this.photoFace)this.photoFace.mesh.visible=false
    this.lastFrame=frame.timestamp
    this.lastSourceW=sourceW;this.lastSourceH=sourceH;this.lastMirror=mirror
   }

@@ -79,14 +79,14 @@ const faceManifests=faceFxCatalog.filter(x=>x.id!=='none').map((fx):RealityEffec
   if(three&&!conf)throw Error('reality_missing_3d_contract:'+id)
   return {
     schemaVersion:REALITY_MANIFEST_VERSION,id,name:fx.name,
-    kind:surface?'face-surface':three?conf.kind??'wearable-3d':'face-overlay',
+    kind:id==='face-morph'?'face-deform':surface?'face-surface':three?conf.kind??'wearable-3d':'face-overlay',
     quality:surface?'tracked-mesh':three?(conf.asset?'authored-glb':'procedural-preview'):'shader-only',
     anchor:surface?null:three?conf.anchor:null,
     occlusion:surface?'surface-depth':three?'face-depth':'none',
     asset:conf?.asset??null,
     surfaceBinding:conf?.surfaceBinding??null,
     expressionBindings:conf?.expressionBindings??[],
-    requires:['face-mesh'],tracking:surface?'face-surface':three?'head-6dof':'screen-space',
+    requires:['face-mesh'],tracking:surface||id==='face-morph'?'face-surface':three?'head-6dof':'screen-space',
   }
 })
 const gradeManifests=filterPresets.map((f):RealityEffectManifest=>({

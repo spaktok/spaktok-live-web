@@ -5,9 +5,9 @@ import {faceFxCatalog,type FaceFxParams,type FaceFxId} from '@/lib/filter-engine
 import {cn} from '@/lib/utils'
 import {getMakeupPalette,type MakeupLookId} from '@/lib/filter-engine/makeup3d'
 
-type Category='makeup'|'3d'|'all'|'fashion'|'animal'|'fantasy'|'fun'|'reactive'|'saved'
+type Category='beauty'|'makeup'|'3d'|'all'|'fashion'|'animal'|'fantasy'|'fun'|'reactive'|'saved'
 const tabs:{id:Category;label:string}[]=[
- {id:'makeup',label:'مكياج 3D'},{id:'3d',label:'مجسمات 3D'},{id:'all',label:'الكل'},{id:'saved',label:'المفضلة'},{id:'reactive',label:'الذكية'},
+ {id:'beauty',label:'نحت الوجه'},{id:'makeup',label:'مكياج 3D'},{id:'3d',label:'مجسمات 3D'},{id:'all',label:'الكل'},{id:'saved',label:'المفضلة'},{id:'reactive',label:'الذكية'},
  {id:'animal',label:'الحيوانات'},{id:'fashion',label:'المظهر'},
  {id:'fantasy',label:'الخيال'},{id:'fun',label:'المرح'},
 ]
@@ -96,6 +96,7 @@ export function FaceMaskTray({value,onChange,visible,onToggle}:{
  const filtered=useMemo(()=>{
   const q=search.trim().toLocaleLowerCase('ar')
   return faceFxCatalog.filter(fx=>{
+    if(fx.id==='3d-photo-face')return false // rejected legacy photo overlay
    if(tab==='saved'&&!favorites.includes(fx.id))return false
    if(tab!=='all'&&tab!=='saved'&&fx.group!==tab)return false
    return !q||fx.name.toLocaleLowerCase('ar').includes(q)||fx.id.includes(q)

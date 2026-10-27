@@ -54,9 +54,9 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
      if(cancelled||faceRestoreCancelled.current)return
      setLocalPhotoFaceFile(file)
      setSavedFaceId(data.latest.id)
-     setPhotoImportHint('✓ تم استدعاء مجسم الوجه تلقائيًا من Cloudflare R2 الخاص بحسابك.')
+     setPhotoImportHint('✓ استعدنا مرجع GLB الخاص من R2، والتشكيل يعمل على صورتك الحية.')
      setStudio(prev=>prev.face.id==='none'?{
-      ...prev,face:{...prev.face,id:'3d-photo-face',strength:1},
+      ...prev,face:{...prev.face,id:'face-morph',strength:.65},
      }:prev)
      setShowFaceTray(false)
     }catch{/* No session, network failure or empty drafts: keep local picker. */}
@@ -289,7 +289,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                 setPhotoImportHint('يمكنك اختيار ملف GLB من هاتفك، وسيُحفظ في R2 الخاص بحسابك إن كنت مسجل الدخول. إذا لم يظهر الملف افتح Chrome.')
                 photoPickerRef.current?.click()
               }}>
-              🧑 {localPhotoFaceFile?'تغيير ملف الوجه GLB':'اختيار ملف وجه GLB من الهاتف'}
+              🧑 {localPhotoFaceFile?'تغيير مرجع GLB':'إضافة مرجع GLB اختياري'}
             </button>
             <input ref={photoPickerRef} type="file" accept="*/*"
               aria-label="اختر مجسم الوجه GLB"
@@ -309,8 +309,8 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                   faceRestoreCancelled.current=true
                   setLocalPhotoFaceFile(file)
                   setSavedFaceId(null)
-                  setPhotoImportHint('جارٍ تحميل المجسم محليًا وحفظ نسخة خاصة على Cloudflare…')
-                  setStudio(prev=>({...prev,face:{...prev.face,id:'3d-photo-face',strength:1}}))
+                  setPhotoImportHint('يُحفظ مرجع GLB الخاص؛ يُعدل Face Morph وجهك بدل عرض صورة فوقه…')
+                  setStudio(prev=>({...prev,face:{...prev.face,id:'face-morph',strength:.65}}))
                   setShowFaceTray(false)
                   // Authentication and authorization happen on our server.
                   // Never upload to a public R2 URL or log user GLB bytes.
@@ -329,7 +329,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                     return
                    }
                    setSavedFaceId(data.id)
-                   setPhotoImportHint('✓ حُفظ المجسم في Cloudflare R2 الخاص بحسابك. سيُستدعى تلقائيًا عند فتح الكاميرا مجددًا.')
+                   setPhotoImportHint('✓ حُفظ مرجع GLB في R2؛ Face Morph يُعدل وجهك، وليس خامة المرجع.')
                   }).catch(()=>setPhotoImportHint('تعذر الاتصال بـCloudflare؛ المجسم يعمل محليًا على جهازك.'))
                 }catch{
                   setPhotoImportHint('تعذر قراءة الملف. تأكد من اكتمال تنزيل GLB ثم اختره مجددًا.')
@@ -339,11 +339,11 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
               <p role="status" className="max-w-[95%] rounded-xl border border-cyan-400/20 bg-black/80 px-3 py-1.5 text-center text-[11px] text-cyan-100">
                 {photoImportHint}
               </p>}
-            {studio.face.id==='3d-photo-face'&&
+            {studio.face.id==='face-morph'&&
               <div className="flex max-w-[93%] items-center gap-2 rounded-full bg-black/70 px-3 py-1 text-[10px] text-white">
                 <span role="status" className="truncate">
                   {camera.photoFaceStatus==='loading'?'جارٍ التحقق من نقاط مجسم الوجه…':
-                   camera.photoFaceStatus==='ready'?(camera.vision==='tracking'?'✓ النموذج محمّل وتتبع الوجه نشط':'✓ النموذج محمّل؛ بانتظار اكتشاف الوجه'):
+                   camera.vision==='tracking'?'✓ Face Morph يغير ملامحك الحية':'بانتظار تتبع الوجه؛ GLB مرجع فقط':
                    camera.photoFaceStatus==='error'?'لم يُقبل المجسم: '+(camera.photoFaceError??'خطأ غير معروف'):
                    localPhotoFaceFile?'جارٍ تجهيز المجسم':'لم يتم اختيار ملف GLB بعد'}
                 </span>

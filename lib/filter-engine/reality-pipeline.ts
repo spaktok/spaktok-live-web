@@ -21,7 +21,8 @@ export type RealityExecutionPlan = Readonly<{
 export function createRealityExecutionPlan(
   state: Pick<StudioState, 'face' | 'beauty' | 'effects'>,
 ): RealityExecutionPlan {
-  const faceOverlay = needsFaceFxTracking(state.face)
+  const faceSelected=needsFaceFxTracking(state.face)
+  const faceOverlay=faceSelected&&state.face.id!=='face-morph'
   const manifest = faceOverlay ? getFaceRealityEffect(state.face.id) : null
   // The runtime contract owns the type of effect; string prefixes are no
   // longer used for the central camera execution plan.
@@ -29,7 +30,7 @@ export function createRealityExecutionPlan(
     (manifest.kind==='wearable-3d'||manifest.kind==='expression-3d'||
      manifest.kind==='face-surface'))
   return {
-    trackFace: faceOverlay || needsFaceTracking(state.beauty),
+    trackFace: faceSelected || needsFaceTracking(state.beauty),
     trackPerson: needsSegmentation(state.effects),
     faceOverlay,
     threeDimensional,

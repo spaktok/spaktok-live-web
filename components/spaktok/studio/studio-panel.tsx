@@ -18,6 +18,7 @@ import {
   type StudioState,
 } from '@/lib/filter-engine/params'
 import { gradeToState, type Grade } from '@/lib/filter-engine/ai-grade'
+import {DEFAULT_FACE_MORPH,normalizeFaceMorph,FACE_MORPH_FEATURES,type FaceMorphFeature} from '@/lib/filter-engine/reality-face-morph'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
 
 const backgroundLabel: Record<BackgroundMode, string> = { none: 'bgNone', blur: 'bgBlur', splash: 'bgSplash', studio: 'bgStudio' }
@@ -161,9 +162,13 @@ export function StudioPanel({ state, onChange, captureFrame, tabs = ['face', 'fi
               <ScanFace className="size-6 text-[#a5baff]" aria-hidden="true"/>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              {faceFxCatalog.map(effect=>(
+              {faceFxCatalog.filter(effect=>effect.id!=='3d-photo-face').map(effect=>(
                 <button type="button" key={effect.id}
-                  onClick={()=>onChange({...state,face:{...state.face,id:effect.id}})}
+                  onClick={()=>onChange({...state,face:{
+                   ...state.face,id:effect.id,
+                   ...(effect.id==='face-morph'?{strength:.65,
+                     morph:state.face.morph??DEFAULT_FACE_MORPH}:{}),
+                  }})}
                   aria-pressed={state.face.id===effect.id} aria-label={effect.name}
                   className="flex min-w-[78px] shrink-0 flex-col items-center gap-1.5">
                   <span className={cn('flex size-[68px] items-center justify-center rounded-[22px] border-2 bg-gradient-to-br text-3xl transition',
@@ -176,9 +181,40 @@ export function StudioPanel({ state, onChange, captureFrame, tabs = ['face', 'fi
               ))}
             </div>
             {state.face.id!=='none'&&(
-              <Slider label="قوة القناع" value={state.face.strength} min={0} max={1}
-                onChange={strength=>onChange({...state,face:{...state.face,strength}})}/>
+              <Slider label={state.face.id==='face-morph'?'قوة إعادة تشكيل ملامحك':'قوة القناع'}
+               value={state.face.strength} min={0} max={1}
+               onChange={strength=>onChange({...state,face:{...state.face,strength}})}/>
             )}
+            {state.face.id==='face-morph'&&
+              <div className="rounded-xl border border-indigo-400/30 bg-indigo-950/40 p-3">
+                <p className="mb-2 text-xs font-semibold text-cyan-200">
+                  Face Morph · نحت ملامح المستخدم نفسه دون صورة وجه مركبة
+                </p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                  {FACE_MORPH_FEATURES.map(feature=>{
+                    const labels:Record<FaceMorphFeature,string>={
+                      cheeks:'الخدود',jaw:'الفك',eyes:'العينان',
+                      nose:'الأنف',lips:'الشفاه',chin:'الذقن',
+                    }
+                    const morph=normalizeFaceMorph(state.face.morph)
+                    return <Slider key={feature} label={labels[feature]}
+                      value={morph[feature]} min={0} max={1}
+                      onChange={value=>onChange({...state,face:{
+                        ...state.face,morph:{...morph,[feature]:value},
+                      }})}/>
+                  })}
+                </div>
+                <button type="button"
+                  className="mt-3 rounded-full border border-white/20 px-3 py-1 text-xs text-white"
+                  onClick={()=>onChange({...state,face:{...state.face,
+                    morph:DEFAULT_FACE_MORPH,strength:.65}})}>
+                  استعادة الإعدادات
+                </button>
+                <p className="mt-2 text-[10px] leading-4 text-white/60">
+                  يُعيد تشكيل صورتك الحية، ولا يستبدلها بصورة شخص آخر.
+                  المعاينة تجريبية وتحتاج اختبارًا بصريًا على الهاتف.
+                </p>
+              </div>}
             <p className="text-[11px] leading-5 text-white/45">تعمل الأقنعة عند اكتشاف الوجه أمام الكاميرا. نقاط الوجه تُعالج على جهازك فقط.</p>
           </div>
         )}

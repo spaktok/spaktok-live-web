@@ -9,6 +9,7 @@ import {validateAuthoringAsset,type RealityAuthoringAsset} from '@/lib/filter-en
 import {buildCanonicalRetarget,parseCanonicalOBJ} from '@/lib/filter-engine/reality-canonical-retarget'
 import {hasStudioImageExtension} from '@/lib/filter-engine/reality-image-projection'
 import RealityImageReference from './reality-image-reference'
+import RealityProjectEditor from './reality-project-editor'
 
 type Vec3=readonly [number,number,number]
 const anchors=['eyes_center','forehead_center','head_top','nose_bridge',
@@ -343,6 +344,7 @@ export default function RealityCreatorLab(){
      <p className="text-xs leading-6 text-slate-400">لا يتم رفع الملفات ولا نشرها. لإنتاج مؤثر واقعي يجب تصميم UV/PBR وRig بجودة جيدة، ثم رفع الأصل إلى مستودع SpakTok ومراجعته واختباره على الهاتف.</p>
     </section>
    </div>}
+   <RealityProjectEditor/>
   </main>
  )
 }

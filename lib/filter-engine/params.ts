@@ -1,3 +1,5 @@
+import type {FaceMorphSettings} from './reality-face-morph'
+
 export interface ColorParams {
   exposure: number
   contrast: number
@@ -18,6 +20,7 @@ export interface ColorParams {
   highlightTint: [number, number, number]
   splitAmount: number
 }
+
 
 export interface BeautyParams {
   smooth: number
@@ -114,12 +117,13 @@ export const faceFxCatalog = [
   { id: '3d-makeup-neon', name: 'نيون فني', icon: '🪩', group: 'makeup' },
   { id: '3d-makeup-golden', name: 'توهج ذهبي', icon: '✨', group: 'makeup' },
   { id: '3d-makeup-editorial', name: 'مكياج فني', icon: '🎨', group: 'makeup' },
+  { id: 'face-morph', name: 'نحت الوجه الحي', icon: '✨', group: 'beauty' },
 ] as const
 export type FaceFxId = (typeof faceFxCatalog)[number]['id']
 export const faceFxCode = (id: FaceFxId) => Math.max(0, faceFxCatalog.findIndex(x=>x.id===id))
 export type MakeupRegion = 'foundation'|'lips'|'eyeshadow'|'eyeliner'|'blush'|'contour'|'highlight'
 export type MakeupOverrides = Partial<Record<MakeupRegion,number>>
-export type FaceFxParams = { id: FaceFxId; strength: number; makeup?:MakeupOverrides }
+export type FaceFxParams = { id: FaceFxId; strength: number; makeup?:MakeupOverrides; morph?: Partial<FaceMorphSettings> }
 export const neutralFaceFx: FaceFxParams = { id: 'none', strength: 0.85 }
 export const isFace3DSelected = (id:FaceFxId) => id.startsWith('3d-')
 export const needsFaceFxTracking = (face: FaceFxParams) => face.id !== 'none' && face.strength > 0

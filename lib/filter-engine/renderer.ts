@@ -1,4 +1,5 @@
 import { backgroundCode, fxCode, faceFxCode, type FaceFxParams, type BeautyParams, type ColorParams, type EffectParams } from './params'
+import {faceMorphIsActive, type FaceMorphSettings} from './reality-face-morph'
 
 export interface Point {
   x: number
@@ -33,6 +34,8 @@ export interface RenderInput {
   faceFx: FaceFxParams
   mirror: boolean
   face: FaceGeometry | null
+  /** Live face pixels are sculpted directly; no foreign photograph overlay. */
+  morph?:FaceMorphSettings|null
   mask: { data: Uint8Array; width: number; height: number } | null
   time: number
 }
@@ -86,6 +89,9 @@ uniform float uSlim;
 uniform float uEyes;
 uniform float uJaw;
 uniform float uNoseSlim;
+uniform float uMorphStrength;
+uniform vec3 uMorphContour; // cheeks, jaw, chin
+uniform vec3 uMorphDetail; // eyes, nose, lips
 uniform float uHasMask;
 uniform float uBgBlur;
 
@@ -129,7 +135,34 @@ vec2 pull(vec2 p, vec2 from, vec2 to, float r, float k) {
   return p;
 }
 
-float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+// Inverse texture sampling: keep user's original skin, hair and lighting.
+ // Each center follows current tracked facial landmarks and naturally moves
+ // with head pose. Attenuation is elliptical in source-video coordinates.
+ vec2 sculptDrag(vec2 p,vec2 center,vec2 displacement,float radius,float gain){
+   vec2 q=(p-center)*aspectVec()/max(radius,.0001);
+   float w=exp(-dot(q,q)*3.0);
+   return p-displacement*gain*w;
+ }
+ vec2 sculptFace(vec2 p,float fw){
+   if(uMorphStrength<=.0001)return p;
+   float s=uMorphStrength;
+   vec2 cheekLeft=uFaceCenter-uLeftCheek;
+   vec2 cheekRight=uFaceCenter-uRightCheek;
+   // Skin contour deforms in original camera image; the user's identity
+   // remains, unlike the rejected photo-over-face GLB overlay.
+   p=sculptDrag(p,uLeftCheek,vec2(cheekLeft.x,0.0),fw*.48,s*uMorphContour.x*.36);
+   p=sculptDrag(p,uRightCheek,vec2(cheekRight.x,0.0),fw*.48,s*uMorphContour.x*.36);
+   p=sculptDrag(p,uLeftJaw,vec2(cheekLeft.x,0.0),fw*.50,s*uMorphContour.y*.31);
+   p=sculptDrag(p,uRightJaw,vec2(cheekRight.x,0.0),fw*.50,s*uMorphContour.y*.31);
+   p=sculptDrag(p,uChin,vec2(0.0,-fw*.18),fw*.42,s*uMorphContour.z*.30);
+   p=bulge(p,uLeftEye,fw*.17,s*uMorphDetail.x*.23);
+   p=bulge(p,uRightEye,fw*.17,s*uMorphDetail.x*.23);
+   p=bulge(p,uNose,fw*.13,-s*uMorphDetail.y*.24);
+   // Scale existing lip pixels; no painted lipstick or extra face texture.
+   p=bulge(p,uMouth,max(uMouthWidth*.47,fw*.11),s*uMorphDetail.z*.14);
+   return p;
+ }
+ float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
 
 float skinMask(vec3 c) {
   float y = luma(c);
@@ -379,6 +412,7 @@ void main() {
     src = bulge(src, uLeftEye, fw * 0.17, uEyes * 0.32);
     src = bulge(src, uRightEye, fw * 0.17, uEyes * 0.32);
     src = bulge(src, uNose, fw * 0.12, -uNoseSlim * 0.28);
+    src = sculptFace(src,fw);
     vec2 fd = (baseSrc - uFaceCenter) * aspectVec() / vec2(fw * 0.62, fw * 0.85);
     faceRegion = 1.0 - smoothstep(0.85, 1.15, length(fd));
   }
@@ -659,6 +693,10 @@ export class FilterRenderer {
     }
 
     const { beauty, color } = input
+    const morph=faceMorphIsActive(input.morph,input.face?.width??0)?input.morph!:null
+    this.set1('uMorphStrength',morph?.strength??0)
+    gl.uniform3f(this.uniform('uMorphContour'),morph?.cheeks??0,morph?.jaw??0,morph?.chin??0)
+    gl.uniform3f(this.uniform('uMorphDetail'),morph?.eyes??0,morph?.nose??0,morph?.lips??0)
     this.set1('uSmooth', beauty.smooth)
     this.set1('uWhiten', beauty.whiten)
     this.set1('uSlim', face ? beauty.slim : 0)

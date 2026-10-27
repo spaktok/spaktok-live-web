@@ -12,6 +12,7 @@ import type {FaceMesh3DEngine,Face3DFrame} from './face3d'
 import type {TrackedHand} from './reality-hand-physics'
 import {stabilizeFaceMesh,hasFreshFace} from './face3d-tracking'
 import {cameraSurfaceDimensions} from './preview-surface'
+import {cameraMorphForEffect} from './reality-face-morph'
 
 export type Facing = 'user' | 'environment'
 export type CameraStatus = 'idle' | 'starting' | 'ready' | 'denied' | 'unsupported' | 'error'
@@ -448,6 +449,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
               beauty:original?neutralBeauty:current.beauty,
               effects:original?neutralEffects:current.effects,
               faceFx:neutralFaceFx,
+              morph:original?null:cameraMorphForEffect(current.face.id,current.face.strength,current.face.morph),
               mirror:facing==='user',
               face:faceRef.current,
               mask:maskRef.current,
@@ -480,6 +482,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
               beauty:original?neutralBeauty:current.beauty,
               effects:original?neutralEffects:current.effects,
               faceFx:neutralFaceFx,
+              morph:original?null:cameraMorphForEffect(current.face.id,current.face.strength,current.face.morph),
               mirror:facing==='user',
               face:faceRef.current,
               mask:maskRef.current,

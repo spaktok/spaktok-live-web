@@ -48,7 +48,7 @@ export function realityCoverCrop(sourceW:number,sourceH:number,outW:number,outH:
 
 const FLOATS=[
   'uTime','uMirror','uAspect','uHasFace','uFaceWidth','uMouthWidth',
-  'uSmooth','uWhiten','uSlim','uEyes','uJaw','uNoseSlim','uLipstick','uBlush',
+  'uSmooth','uWhiten','uSlim','uEyes','uJaw','uNoseSlim','uLipstick','uBlush','uMorphStrength',
   'uHasMask','uBgBlur','uBgMode','uFx','uFxAmount','uClarity',
   'uExposure','uContrast','uSaturation','uVibrance','uTemperature','uTint',
   'uHighlights','uShadows','uHue','uFade','uSharpen','uVignette','uGrain',
@@ -59,7 +59,7 @@ const VECTORS2=[
   'uFaceCenter','uLeftCheek','uRightCheek','uLeftJaw','uRightJaw','uChin',
   'uNose','uMouth','uLeftBlush','uRightBlush',
 ] as const
-const VECTORS3=['uShadowTint','uHighlightTint'] as const
+const VECTORS3=['uShadowTint','uHighlightTint','uMorphContour','uMorphDetail'] as const
 export const realityCameraUniforms={ floats:FLOATS,vectors2:VECTORS2,vectors3:VECTORS3 }
 
 /** OrthographicCamera top=0 makes +Y point DOWN on screen, so
@@ -218,6 +218,12 @@ export class RealityGpuCameraLayer {
     this.n('uEyes',input.face?beauty.eyes:0)
     this.n('uJaw',input.face?beauty.jaw:0)
     this.n('uNoseSlim',input.face?beauty.nose:0)
+    const morph=input.face&&input.face.width>.035?input.morph:null
+    this.n('uMorphStrength',morph?.strength??0)
+    ;(this.uniforms.uMorphContour.value as THREE.Vector3).set(
+      morph?.cheeks??0,morph?.jaw??0,morph?.chin??0)
+    ;(this.uniforms.uMorphDetail.value as THREE.Vector3).set(
+      morph?.eyes??0,morph?.nose??0,morph?.lips??0)
     this.n('uLipstick',input.face?beauty.lipstick:0)
     this.n('uBlush',input.face?beauty.blush:0)
     this.n('uBgBlur',effects.backgroundBlur)
