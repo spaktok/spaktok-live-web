@@ -293,6 +293,14 @@ export default function RealityCreatorLab(){
     <h1 className="text-3xl font-bold">استوديو صناعة المؤثرات ثلاثية الأبعاد</h1>
     <p className="max-w-3xl text-sm leading-7 text-slate-300">استورد مجسم GLB أو OBJ أو صورة PNG/JPEG/WebP، افحص الخامات والهندسة، حدد موضع الارتباط بالوجه ونقاط الإمساك باليد. جميع الملفات تبقى في متصفحك، والتصدير ينتج مسودة تعريف فقط.</p>
     <div className="flex flex-wrap gap-3">
+     <a href="/spaktok-word"
+      className="inline-flex rounded-lg border border-violet-300 bg-violet-500/30 px-4 py-3 text-sm font-bold text-violet-50">
+      Spaktok Word — مركز الربط المتوازي لجميع أقسام الاستوديو
+     </a>
+     <a href="#spaktok-word"
+      className="inline-flex rounded-lg border border-cyan-500/40 bg-cyan-950/40 px-4 py-3 text-sm font-semibold text-cyan-200">
+      الانتقال إلى لوحة Word في هذا المشروع
+     </a>
      <a href="/live-studio-preview"
       className="inline-flex rounded-lg border border-violet-400 bg-violet-800/30 px-4 py-3 text-sm font-semibold text-white">
       معاينة اللايف: تنحيف الفك وتعديل العينين والأنف مباشرة بالكاميرا
