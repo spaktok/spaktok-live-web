@@ -5,6 +5,7 @@ import { Camera, Download, Radio, RefreshCw, Send, SlidersHorizontal, Timer, X, 
 import { cn } from '@/lib/utils'
 import { createStudioState } from '@/lib/filter-engine/params'
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
+import {inspectPhotoFacePickerFile,photoFacePickerArabicError} from '@/lib/filter-engine/reality-photo-file-picker'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
 import { StudioPanel } from './studio/studio-panel'
 import { FaceMaskTray } from './studio/face-mask-tray'
@@ -29,6 +30,8 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const [showPanel, setShowPanel] = useState(false)
   const [showFaceTray,setShowFaceTray] = useState(true)
   const [localPhotoFaceFile,setLocalPhotoFaceFile]=useState<File|null>(null)
+  const photoPickerRef=useRef<HTMLInputElement|null>(null)
+  const [photoImportHint,setPhotoImportHint]=useState('')
   const [timerSeconds, setTimerSeconds] = useState<0 | 3 | 10>(0)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [progress, setProgress] = useState(0)
@@ -247,31 +250,56 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
 
         {!captured&&!camera.recording&&mode!=='live'&&
           <div className="absolute inset-x-0 top-[max(5.5rem,env(safe-area-inset-top))] z-20 flex flex-col items-center gap-1 px-3" dir="rtl">
-            <label className="cursor-pointer rounded-full border border-cyan-300/45 bg-[#0d1935]/85 px-4 py-2 text-[11px] font-semibold text-white shadow-lg backdrop-blur-md">
-              <span>🧑 تحميل وجه GLB وتحريكه على الكاميرا</span>
-              <input type="file" accept=".glb,model/gltf-binary" className="sr-only"
-                onChange={event=>{
-                  const file=event.target.files?.[0]
-                  if(!file)return
+            <button type="button"
+              className="rounded-full border border-cyan-300/45 bg-[#0d1935]/85 px-4 py-2 text-[11px] font-semibold text-white shadow-lg backdrop-blur-md"
+              aria-label="اختر ملف GLB من ملفات هاتفك لتجربة فلتر الوجه"
+              onClick={()=>{
+                setPhotoImportHint('اختر ملف GLB الذي نزّلته إلى الهاتف، من «ملفاتي» أو Downloads. إذا لم يظهر، افتح الرابط في Chrome.')
+                photoPickerRef.current?.click()
+              }}>
+              🧑 {localPhotoFaceFile?'تغيير ملف الوجه GLB':'اختيار ملف وجه GLB من الهاتف'}
+            </button>
+            <input ref={photoPickerRef} type="file" accept="*/*"
+              aria-label="اختر مجسم الوجه GLB"
+              className="sr-only"
+              onChange={async event=>{
+                const file=event.target.files?.[0]
+                // Allow retrying an identical GLB after a failed import.
+                event.target.value=''
+                if(!file)return
+                setPhotoImportHint('جارٍ فحص ملف '+file.name+' على هاتفك…')
+                try{
+                  const inspected=await inspectPhotoFacePickerFile(file)
+                  if(!inspected.ok){
+                    setPhotoImportHint(photoFacePickerArabicError(inspected.error))
+                    return
+                  }
                   setLocalPhotoFaceFile(file)
+                  setPhotoImportHint('تم اختيار '+file.name+' • تتم معاينة المجسم محليًا؛ لم يُرفع إلى الخادم.')
                   setStudio(prev=>({...prev,face:{...prev.face,id:'3d-photo-face',strength:1}}))
                   setShowFaceTray(false)
-                  event.target.value=''
-                }}/>
-            </label>
+                }catch{
+                  setPhotoImportHint('تعذر قراءة الملف. تأكد من اكتمال تنزيل GLB ثم اختره مجددًا.')
+                }
+              }}/>
+            {photoImportHint&&
+              <p role="status" className="max-w-[95%] rounded-xl border border-cyan-400/20 bg-black/80 px-3 py-1.5 text-center text-[11px] text-cyan-100">
+                {photoImportHint}
+              </p>}
             {studio.face.id==='3d-photo-face'&&
               <div className="flex max-w-[93%] items-center gap-2 rounded-full bg-black/70 px-3 py-1 text-[10px] text-white">
                 <span role="status" className="truncate">
-                  {camera.photoFaceStatus==='loading'?'يتم فحص وتحميل المجسم محليًا…':
-                   camera.photoFaceStatus==='ready'?'✓ الوجه مرتبط بالشبكة الحية':
-                   camera.photoFaceStatus==='error'?'لم يُقبل الملف: '+(camera.photoFaceError??'خطأ غير معروف'):
-                   localPhotoFaceFile?'جارٍ تجهيز المجسم':'اختر ملف الوجه GLB'}
+                  {camera.photoFaceStatus==='loading'?'جارٍ التحقق من نقاط مجسم الوجه…':
+                   camera.photoFaceStatus==='ready'?(camera.vision==='tracking'?'✓ النموذج محمّل وتتبع الوجه نشط':'✓ النموذج محمّل؛ بانتظار اكتشاف الوجه'):
+                   camera.photoFaceStatus==='error'?'لم يُقبل المجسم: '+(camera.photoFaceError??'خطأ غير معروف'):
+                   localPhotoFaceFile?'جارٍ تجهيز المجسم':'لم يتم اختيار ملف GLB بعد'}
                 </span>
                 {localPhotoFaceFile&&
                   <button type="button" aria-label="إزالة الوجه المحلي"
                     className="shrink-0 rounded-full border border-white/30 px-2"
                     onClick={()=>{
                       setLocalPhotoFaceFile(null)
+                      setPhotoImportHint('')
                       setStudio(prev=>({...prev,face:{...prev.face,id:'none'}}))
                     }}>×</button>}
               </div>}
