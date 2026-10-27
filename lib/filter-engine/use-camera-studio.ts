@@ -106,7 +106,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
   const [recording, setRecording] = useState(false)
   const [previewFps,setPreviewFps] = useState<number | null>(null)
   const [liveMeshInfo,setLiveMeshInfo]=useState<{
-    triangleCount:number;vertexCount:number;levels:number;measuredLandmarks:number;tracking:boolean
+    triangleCount:number;vertexCount:number;levels:number;measuredLandmarks:number;tracking:boolean;warpActive:boolean
   }|null>(null)
   const [gpuAvailable,setGpuAvailable] = useState(true)
   const [gpu2Active,setGpu2Active] = useState(false)
@@ -479,6 +479,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
                   setLiveMeshInfo({
                    triangleCount:updated.triangleCount,vertexCount:updated.vertexCount,
                    levels:level,measuredLandmarks:478,tracking:true,
+                   warpActive:liveWarpRef.current!==null,
                   })
                 }
               }else{

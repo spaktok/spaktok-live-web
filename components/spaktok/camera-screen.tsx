@@ -7,7 +7,7 @@ import { createStudioState } from '@/lib/filter-engine/params'
 import {NEUTRAL_LIVE_SCULPT,type LiveSculptControls} from '@/lib/filter-engine/reality-live-sculpt-warp'
 import {
  DEFAULT_REALITY_UNIFIED_CONFIG,resolveUnifiedRealityLook,
- planRealityMeshBudget,type RealityLook,
+ type RealityLook,
 } from '@/lib/filter-engine/reality-unified-profile'
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
 import {inspectPhotoFacePickerFile,photoFacePickerArabicError} from '@/lib/filter-engine/reality-photo-file-picker'
@@ -46,9 +46,6 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
    {key:'nose',name:'تصغير الأنف',hint:'تضييق منطقة الأنف تدريجيًا'},
   ] as const
   const [liveLookActive,setLiveLookActive]=useState(false)
-  const previewMeshBudget=planRealityMeshBudget({
-   mode:'live-preview',device:'mid',trackingValid:false,quality:'adaptive',
-  })
   const [showPanel, setShowPanel] = useState(false)
   const [showFaceTray,setShowFaceTray] = useState(true)
   const [localPhotoFaceFile,setLocalPhotoFaceFile]=useState<File|null>(null)
@@ -100,6 +97,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const uploadAbortRef = useRef<AbortController | null>(null)
   const [isLive, setIsLive] = useState(false)
   const [liveMeshQa,setLiveMeshQa]=useState(false)
+  const [showLiveMeshDetails,setShowLiveMeshDetails]=useState(false)
   const [liveSeconds, setLiveSeconds] = useState(0)
   const [liveTitle, setLiveTitle] = useState('')
 
@@ -549,55 +547,76 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
         <div className="absolute inset-x-0 bottom-0 flex flex-col pb-[env(safe-area-inset-bottom)]">
           {isLive ? (
             <div className="flex flex-col gap-3 bg-gradient-to-t from-black/80 to-transparent p-4">
-              <p className="text-xs text-white/70" dir="rtl">معاينة محلية للفلاتر قبل البث. لم تبدأ بثًا عامًا، ولا يوجد مشاهدون.</p>
-              <div dir="rtl" className="rounded-xl border border-cyan-400/20 bg-black/45 p-2.5 text-xs text-white/85">
-                <p className="font-bold text-cyan-200">شبكة الوجه المخصصة للايف (من كاميرتك)</p>
-                <p className="mt-1">
-                 {camera.liveMeshInfo?.tracking?
-                   `تتبع نشط · ${camera.liveMeshInfo.measuredLandmarks} نقطة أصلية · ${camera.liveMeshInfo.triangleCount.toLocaleString('en-US')} مثلث مرسوم في المخزن الهندسي · ${camera.liveMeshInfo.levels} مستويات تقسيم`:
-                   camera.vision==='loading'?'تحميل متتبع الوجه…':
-                   'لا توجد شبكة صالحة: وجّه وجهك نحو الكاميرا'}
-                </p>
-                <p className="mt-1 text-white/60">كل مثلث ينقل بكسلات من صورتك الأصلية. {liveFaceOptIn?'أدوات نحت الوجه مفعلة بموافقتك.':'بلا أي تغيير لشكل وجهك.'}</p>
-                <label className="mt-2 flex gap-2 text-[11px]">
-                  <input type="checkbox" checked={liveMeshQa} onChange={e=>setLiveMeshQa(e.target.checked)}/>
-                  إظهار خطوط الشبكة للفحص فقط (لن تظهر في التسجيل أو البث)
-                </label>
-                <p className="font-semibold">Reality Unified • {liveLookActive?'تحسين الإضاءة مفعّل في المعاينة':'إضاءة أصلية'}</p>
-                <p className="mt-1 text-white/60">الشبكة ثلاثية الأبعاد متكيّفة حسب الجهاز؛ مليون مثلث ليست كثافة فعلية مؤكدة.</p>
-                <p className="mt-1 text-white/60">معايرة أولية آمنة: {previewMeshBudget.baseTriangles} مثلثًا مرجعيًا؛ دون وجه متتبّع لا نرفع الجودة اصطناعيًا.</p>
-              </div>
-              <div dir="rtl" className="rounded-xl border border-white/20 bg-black/65 p-2">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="flex items-center gap-2 text-xs font-semibold text-white">
-                    <input type="checkbox" checked={liveFaceOptIn}
-                      onChange={e=>setLiveFaceOptIn(e.target.checked)}/>
-                    نحت الوجه من شبكتي الخاصة
-                  </label>
-                  <button type="button" onClick={()=>setShowLiveSculptPanel(v=>!v)}
-                    className="rounded-lg bg-white/10 px-3 py-1.5 text-[11px] text-cyan-200">
-                    {showLiveSculptPanel?'إخفاء التفاصيل':'ضبط الفك والعين والأنف'}
+              <div dir="rtl" className="rounded-2xl border border-cyan-300/20 bg-slate-950/65 px-3 py-2.5 text-white shadow-xl backdrop-blur-md">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span role="status" className="flex items-center gap-2 text-xs font-semibold text-cyan-200">
+                    <span className={camera.liveMeshInfo?.tracking?'h-2 w-2 rounded-full bg-emerald-400':'h-2 w-2 rounded-full bg-amber-400'}/>
+                    {camera.liveMeshInfo?.tracking
+                     ?`الوجه متتبَّع · ${camera.liveMeshInfo.triangleCount.toLocaleString('en-US')} مثلث`
+                     :camera.vision==='loading'?'تحميل التتبع…':'وجّه وجهك نحو الكاميرا'}
+                  </span>
+                  <button type="button" onClick={()=>setShowLiveMeshDetails(v=>!v)}
+                   aria-expanded={showLiveMeshDetails}
+                   className="rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80">
+                    {showLiveMeshDetails?'إخفاء تفاصيل الشبكة':'تفاصيل الشبكة'}
                   </button>
                 </div>
-                {showLiveSculptPanel&&<div className="mt-2 max-h-36 space-y-2 overflow-y-auto">
-                  {sculptOptions.map(option=><label key={option.key} className="block text-[11px] text-white/80">
+                {showLiveMeshDetails&&<div className="mt-2 space-y-2 border-t border-white/10 pt-2 text-[11px] leading-5 text-slate-300">
+                  <p>تتبّع {camera.liveMeshInfo?.measuredLandmarks??'—'} نقطة ·
+                    مستوى تقسيم {camera.liveMeshInfo?.levels??'—'} ·
+                    FPS {camera.previewFps??'—'}
+                  </p>
+                  <p>العدد المعروض هو مثلثات الشبكة المحسوبة، وليس مليون نقطة مقاسة أو عدد مثلثات GPU المرسومة.</p>
+                  <p>الإضاءة: {liveLookActive?'تم تطبيق الإعداد المختار':'أصلية'}. هذه معاينة محلية، وليست بثًا عامًا.</p>
+                  <label className="flex items-center gap-2">
+                    <input type="checkbox" checked={liveMeshQa} onChange={e=>setLiveMeshQa(e.target.checked)}/>
+                    إظهار خطوط الشبكة للفحص فقط
+                  </label>
+                </div>}
+              </div>
+              <div dir="rtl" className="space-y-2 rounded-2xl border border-white/15 bg-black/70 p-3 text-white backdrop-blur-md">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="flex min-w-0 items-center gap-2 text-xs font-semibold">
+                    <input type="checkbox" checked={liveFaceOptIn}
+                      onChange={e=>{
+                        setLiveFaceOptIn(e.target.checked)
+                        if(e.target.checked)setShowLiveSculptPanel(true)
+                      }}/>
+                    تعديل ملامح الوجه
+                  </label>
+                  <button type="button"
+                    onClick={()=>{setShowPanel(false);setShowLiveSculptPanel(v=>!v)}}
+                    aria-expanded={showLiveSculptPanel}
+                    className="rounded-lg bg-cyan-600/30 px-3 py-2 text-xs font-semibold text-cyan-100">
+                    {showLiveSculptPanel?'إخفاء أدوات الضبط':'ضبط الفك · العين · الأنف'}
+                  </button>
+                </div>
+                {liveFaceOptIn&&<p role="status" className={camera.liveMeshInfo?.warpActive
+                 ?'text-[11px] text-emerald-300':'text-[11px] text-amber-200'}>
+                  {!camera.liveMeshInfo?.tracking?'في انتظار تتبّع وجه واضح'
+                   :camera.liveMeshInfo.warpActive
+                     ?'✓ خريطة تعديل المثلثات محسوبة وجاهزة للعرض'
+                     :'التتبّع نشط، لكن خريطة التعديل غير صالحة حاليًا؛ تظهر الصورة الأصلية'}
+                </p>}
+                {showLiveSculptPanel&&<div className="max-h-[30dvh] space-y-2 overflow-y-auto overscroll-contain border-t border-white/10 pt-2">
+                  {!liveFaceOptIn&&<p className="text-[11px] text-white/65">فعّل تعديل الملامح لتجربة تأثيراتك المباشرة.</p>}
+                  {sculptOptions.map(option=><label key={option.key} className="block text-xs text-white/90">
                     <span className="flex justify-between">
-                      <span>{option.name}</span><span className="tabular-nums">{Math.round(liveSculpt[option.key]*100)}%</span>
+                      <span>{option.name}</span>
+                      <span className="tabular-nums text-cyan-200">{Math.round(liveSculpt[option.key]*100)}%</span>
                     </span>
                     <input type="range" min={0} max={.65} step={.01}
                       value={liveSculpt[option.key]} disabled={!liveFaceOptIn}
                       onChange={e=>setLiveSculpt(prev=>({...prev,[option.key]:Number(e.target.value)}))}
-                      className="w-full accent-cyan-400 disabled:opacity-40"
-                      aria-label={option.name}/>
+                      className="h-7 w-full accent-cyan-400 disabled:opacity-40" aria-label={option.name}/>
                   </label>)}
-                  <button type="button" className="text-[11px] text-rose-200 underline"
+                  <button type="button"
+                    className="rounded-lg bg-white/10 px-3 py-1.5 text-xs font-medium text-rose-100"
                     onClick={()=>{setLiveFaceOptIn(false);setLiveSculpt({jaw:0,chin:0,eyes:0,nose:0})}}>
-                    إلغاء كل تغييرات شكل الوجه
+                    إعادة الوجه إلى صورته الأصلية
                   </button>
                 </div>}
-                <p className="mt-1 text-[10px] text-white/55">
-                  تحريك مثلثات الوجه متاح في المعاينة مع استرجاع البكسلات الأصلية. قد تنخفض الدقة عند الالتفات الشديد أو اختفاء الوجه.
-                </p>
+                <p className="text-[11px] text-white/55">اضغط مطولًا على زر العين بالأعلى للمقارنة قبل وبعد. المعاينة لا تنشر البث.</p>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => setShowPanel((value) => !value)} className="flex-1 rounded-full bg-white/15 py-2.5 text-sm font-semibold text-white">
