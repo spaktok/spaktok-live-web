@@ -147,6 +147,8 @@ export function withStudioProductionSource(
  const clean=name.trim().slice(0,255)
  const next:StudioProductionPackage={
   ...p,sourceFile:clean,sourceBytes:size,sourceFormat:format,
+  // Rights/evidence belong to the particular source, not the project title.
+  rights:'unverified',rightsEvidence:'',
   metrics:{...createStudioProductionPackage().metrics},
   tests:{...createStudioProductionPackage().tests},
   quality:'reference-only',
