@@ -3,7 +3,8 @@
  * A valid GLB is not automatically art-approved or licensed.
  */
 export const STUDIO_GLB_AUDIT_MAX_BYTES=35*1024*1024
-type Accessor={count?:number;type?:string}
+type Accessor={count?:number;type?:string;componentType?:number;bufferView?:number}
+type BufferView={buffer?:number;byteOffset?:number;byteLength?:number}
 type Primitive={mode?:number;indices?:number;attributes?:Record<string,number>;
  material?:number;targets?:Array<Record<string,number>>}
 type Mesh={primitives?:Primitive[];extras?:{targetNames?:string[]}}
@@ -11,7 +12,7 @@ type Image={uri?:string;bufferView?:number;mimeType?:string}
 type GLTF={
  asset?:{version?:string}
  buffers?:Array<{byteLength?:number;uri?:string}>
- bufferViews?:unknown[]
+ bufferViews?:BufferView[]
  accessors?:Accessor[];meshes?:Mesh[]
  materials?:Array<{pbrMetallicRoughness?:unknown;normalTexture?:unknown;
   occlusionTexture?:unknown;emissiveTexture?:unknown;extensions?:object}>
@@ -51,6 +52,27 @@ export function auditStudioGlbBytes(buffer:ArrayBuffer):StudioGlbAudit{
  catch{throw Error('studio_glb_corrupt_json')}
  if(data.asset?.version!=='2.0')throw Error('studio_glb_wrong_version')
  const warnings:string[]=[]
+ // GLB must carry the actual typed vertex data, not just unbacked
+ // JSON declarations that happen to claim many triangles.
+ const binOffset=20+length
+ const hasBin=binOffset+8<=buffer.byteLength&&
+  view.getUint32(binOffset+4,true)===0x004e4942
+ const binLength=hasBin?view.getUint32(binOffset,true):0
+ if(hasBin&&(binOffset+8+binLength>buffer.byteLength||
+  binLength%4!==0))throw Error('studio_glb_invalid_bin_chunk')
+ const buffers=data.buffers??[]
+ const views=data.bufferViews??[]
+ const validViews=buffers.length===1&&
+  Number.isSafeInteger(buffers[0]?.byteLength)&&
+  (buffers[0].byteLength??0)>0&&hasBin&&
+  binLength>=(buffers[0].byteLength??0)&&
+  views.every(v=>{
+   const offset=v.byteOffset??0
+   return v.buffer===0&&Number.isSafeInteger(offset)&&offset>=0&&
+    Number.isSafeInteger(v.byteLength)&&v.byteLength!>0&&
+    offset+v.byteLength!<=buffers[0].byteLength!
+  })
+ if(!validViews)warnings.push('missing_or_invalid_embedded_geometry')
  const primitives=data.meshes?.flatMap(mesh=>mesh.primitives??[])??[]
  if(!primitives.length)warnings.push('empty_geometry')
  const accessors=data.accessors??[]
@@ -61,14 +83,22 @@ export function auditStudioGlbBytes(buffer:ArrayBuffer):StudioGlbAudit{
   const positionIndex=primitive.attributes?.POSITION
   if(!indexValid(positionIndex,accessors.length))
    throw Error('studio_glb_missing_positions')
-  const vertCount=accessors[positionIndex!].count
+  const position=accessors[positionIndex!]
+  const vertCount=position.count
+  if(!indexValid(position.bufferView,views.length)||position.type!=='VEC3'||
+   position.componentType!==5126)
+   warnings.push('unsupported_or_unbacked_position_accessor')
   if(!Number.isSafeInteger(vertCount)||vertCount!<3)
    throw Error('studio_glb_bad_vertex_count')
   let count=vertCount!
   if(primitive.indices!==undefined){
    if(!indexValid(primitive.indices,accessors.length))
     throw Error('studio_glb_bad_indices')
-   count=accessors[primitive.indices].count!
+   const idx=accessors[primitive.indices]
+   if(!indexValid(idx.bufferView,views.length)||
+    ![5121,5123,5125].includes(idx.componentType??0))
+    warnings.push('unsupported_or_unbacked_indices')
+   count=idx.count!
   }
   if(!Number.isSafeInteger(count)||count<3||count%3!==0)
    throw Error('studio_glb_triangle_indices_invalid')
@@ -107,6 +137,8 @@ export function auditStudioGlbBytes(buffer:ArrayBuffer):StudioGlbAudit{
  if(!targetCount)warnings.push('morph_targets_missing')
  if(images.length>12)warnings.push('mobile_texture_budget_review')
  const valid=allTriangle&&triangles>0&&triangles<=2_000_000&&
+  validViews&&!warnings.includes('unsupported_or_unbacked_indices')&&
+  !warnings.includes('unsupported_or_unbacked_position_accessor')&&
   selfContained&&unexpected.length===0
  return {
   ...empty(),valid,selfContained,triangles,materials:materials.length,
