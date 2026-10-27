@@ -5,6 +5,7 @@ import Link from 'next/link'
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {createLuxeAvatar,LUXE_AVATAR_PRESETS,type LuxeAvatarStyle} from '@/lib/filter-engine/reality-avatar-luxe'
+import {loadLocalStudioGlb,clearLocalStudioGlb} from '@/lib/filter-engine/reality-local-asset-handoff'
 import {assertSelfContainedVideo3DGlb,VIDEO_3D_MAX_GLB_BYTES} from '@/lib/filter-engine/reality-video3d-project'
 import {loadFaceLandmarker,configureFace3DExtras,recoverFaceLandmarkerOnCpu} from '@/lib/filter-engine/vision'
 import {avatarLandmarkExpression,avatarLuminance,chooseAvatarTrackerIssue,
@@ -82,6 +83,7 @@ export default function RealityAvatarStudio(){
  const [avatarStyle,setAvatarStyle]=useState<LuxeAvatarStyle>('masculine')
  const [targetNames,setTargetNames]=useState<string[]>([])
  const [morphCount,setMorphCount]=useState(0)
+ const [handoffBusy,setHandoffBusy]=useState(false)
  const [mappedCount,setMappedCount]=useState(0)
  const [strength,setStrength]=useState(.85)
  const [mirror,setMirror]=useState(true)
@@ -352,10 +354,7 @@ export default function RealityAvatarStudio(){
    setMessage('تعذّر تشغيل الكاميرا أو تحميل نموذج تتبع الوجه. جرّب Chrome واسمح للكاميرا.')
   }
  }
- const loadGlb=async(event:ChangeEvent<HTMLInputElement>)=>{
-  const file=event.target.files?.[0]
-  event.target.value=''
-  if(!file)return
+ const loadGlbFile=async(file:File)=>{
   if(!/\.glb$/i.test(file.name)||file.size>VIDEO_3D_MAX_GLB_BYTES||file.size<28){
    setMessage('ملف GLB غير صالح أو أكبر من 15 MB.');return
   }
@@ -402,6 +401,25 @@ export default function RealityAvatarStudio(){
   }catch(error){
    setMessage('تعذّر قراءة هذا GLB بصورة آمنة: '+(error instanceof Error?error.message:'ملف غير متوافق'))
   }
+ }
+ const loadGlb=(event:ChangeEvent<HTMLInputElement>)=>{
+  const file=event.target.files?.[0]
+  event.target.value=''
+  if(file)void loadGlbFile(file)
+ }
+ const importFromProduction=async()=>{
+  if(handoffBusy)return
+  setHandoffBusy(true)
+  try{
+   const file=await loadLocalStudioGlb()
+   if(!file){
+    setMessage('لا يوجد GLB محلي حديث. اختر الصورة في Reality Studio وصدّر نموذج GLB أولًا.')
+    return
+   }
+   await loadGlbFile(file)
+   await clearLocalStudioGlb()
+  }catch(error){setMessage('تعذر جلب المجسم المحلي: '+String(error))}
+  finally{setHandoffBusy(false)}
  }
  const selectLuxeAvatar=(style:LuxeAvatarStyle)=>{
   const state=stateRef.current
@@ -493,6 +511,14 @@ export default function RealityAvatarStudio(){
        هذه نسخة ثلاثية الأبعاد مولّدة هندسيًا داخل التطبيق لإثبات الأسلوب والحركة، وليست استخراجًا آليًا مطابقًا للصور المرجعية.
       </p>
       <h3 className="mt-4 font-semibold text-white">استيراد شخصية GLB احترافية</h3>
+      <button type="button" disabled={handoffBusy} onClick={()=>void importFromProduction()}
+       className="mt-3 w-full rounded-lg bg-cyan-500/15 px-3 py-3 text-sm font-semibold text-cyan-200 disabled:opacity-40">
+       {handoffBusy?'جارٍ جلب المجسم…':'استيراد GLB من خط إنتاج Reality Studio (محليًا)'}
+      </button>
+      <p className="mt-1 text-[11px] leading-5 text-slate-400">
+       يمكن استيراد وجه قياسي مولّد من صورة، وسيُحرّك الرأس فقط إذا كان GLB بلا Morph Targets.
+       لإظهار الرمش والابتسامة يجب تجهيز Rig حقيقي.
+      </p>
       <label className="mt-3 block space-y-1 text-sm">
        <span>استيراد GLB مُجهّز لتحريك الوجه (حد 15MB)</span>
        <input type="file" accept=".glb,model/gltf-binary" onChange={loadGlb}
