@@ -557,6 +557,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
 
               <div className="flex flex-col gap-4 bg-black/60 px-6 pb-5 pt-4 backdrop-blur-xl">
                 {mode === 'live' && (
+                  <>
                   <div dir="rtl" className="space-y-2 rounded-xl border border-white/15 bg-slate-950/70 p-3">
                     <label className="block text-xs font-semibold text-white/85">إضاءة البث (لا تغيّر ملامح الوجه)</label>
                     <select value={liveLook} onChange={e=>setLiveLook(e.target.value as RealityLook)}
@@ -580,6 +581,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                     maxLength={80}
                     className="rounded-full bg-white/10 px-4 py-2.5 text-sm text-white outline-none placeholder:text-white/40"
                   />
+                  </>
                 )}
                 <div className="flex items-center justify-between">
                   <span className="w-12" />
