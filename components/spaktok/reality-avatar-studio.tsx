@@ -469,7 +469,7 @@ export default function RealityAvatarStudio(){
        <p>سطوع تقريبي: {diagnostics.brightness===null?'—':Math.round(diagnostics.brightness)+'/255'} ·
         المحرك: {diagnostics.cpu?'CPU بعد الاسترداد':'GPU / CPU تلقائي'}</p>
        {!tracking&&<p>اجعل مصدر الضوء أمام وجهك ووجّه الكاميرا مباشرة إليه. إذا لم يتحسّن التتبع، أوقف الكاميرا وأعد تشغيلها.</p>}
-      </div>
+      </div>}
      </div>
      <div className="rounded-2xl border border-white/10 bg-slate-900 p-4">
       <h2 className="font-semibold">2. اختيار الشخصية</h2>
