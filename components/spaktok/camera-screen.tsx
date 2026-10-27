@@ -32,6 +32,38 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const [localPhotoFaceFile,setLocalPhotoFaceFile]=useState<File|null>(null)
   const photoPickerRef=useRef<HTMLInputElement|null>(null)
   const [photoImportHint,setPhotoImportHint]=useState('')
+  const [savedFaceId,setSavedFaceId]=useState<string|null>(null)
+  const faceRestoreCancelled=useRef(false)
+  useEffect(()=>{
+   faceRestoreCancelled.current=false
+   let cancelled=false
+   const restore=async()=>{
+    try{
+     const r=await fetch('/api/reality/face-drafts',{cache:'no-store',
+      credentials:'same-origin'})
+     if(!r.ok)return
+     const data=await r.json() as {latest?:{id:string}|null}
+     if(!data.latest?.id||cancelled||faceRestoreCancelled.current)return
+     const asset=await fetch('/api/reality/face-drafts/'+data.latest.id,{
+      cache:'no-store',credentials:'same-origin',
+     })
+     if(!asset.ok||cancelled||faceRestoreCancelled.current)return
+     const blob=await asset.blob()
+     if(blob.size>12*1024*1024||blob.size<64)return
+     const file=new File([blob],'saved-private-face.glb',{type:'model/gltf-binary'})
+     if(cancelled||faceRestoreCancelled.current)return
+     setLocalPhotoFaceFile(file)
+     setSavedFaceId(data.latest.id)
+     setPhotoImportHint('✓ تم استدعاء مجسم الوجه تلقائيًا من Cloudflare R2 الخاص بحسابك.')
+     setStudio(prev=>prev.face.id==='none'?{
+      ...prev,face:{...prev.face,id:'3d-photo-face',strength:1},
+     }:prev)
+     setShowFaceTray(false)
+    }catch{/* No session, network failure or empty drafts: keep local picker. */}
+   }
+   void restore()
+   return()=>{cancelled=true}
+  },[])
   const [timerSeconds, setTimerSeconds] = useState<0 | 3 | 10>(0)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [progress, setProgress] = useState(0)
@@ -254,7 +286,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
               className="rounded-full border border-cyan-300/45 bg-[#0d1935]/85 px-4 py-2 text-[11px] font-semibold text-white shadow-lg backdrop-blur-md"
               aria-label="اختر ملف GLB من ملفات هاتفك لتجربة فلتر الوجه"
               onClick={()=>{
-                setPhotoImportHint('اختر ملف GLB الذي نزّلته إلى الهاتف، من «ملفاتي» أو Downloads. إذا لم يظهر، افتح الرابط في Chrome.')
+                setPhotoImportHint('يمكنك اختيار ملف GLB من هاتفك، وسيُحفظ في R2 الخاص بحسابك إن كنت مسجل الدخول. إذا لم يظهر الملف افتح Chrome.')
                 photoPickerRef.current?.click()
               }}>
               🧑 {localPhotoFaceFile?'تغيير ملف الوجه GLB':'اختيار ملف وجه GLB من الهاتف'}
@@ -274,10 +306,31 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                     setPhotoImportHint(photoFacePickerArabicError(inspected.error))
                     return
                   }
+                  faceRestoreCancelled.current=true
                   setLocalPhotoFaceFile(file)
-                  setPhotoImportHint('تم اختيار '+file.name+' • تتم معاينة المجسم محليًا؛ لم يُرفع إلى الخادم.')
+                  setSavedFaceId(null)
+                  setPhotoImportHint('جارٍ تحميل المجسم محليًا وحفظ نسخة خاصة على Cloudflare…')
                   setStudio(prev=>({...prev,face:{...prev.face,id:'3d-photo-face',strength:1}}))
                   setShowFaceTray(false)
+                  // Authentication and authorization happen on our server.
+                  // Never upload to a public R2 URL or log user GLB bytes.
+                  void fetch('/api/reality/face-drafts',{
+                   method:'POST',credentials:'same-origin',
+                   headers:{'Content-Type':'model/gltf-binary'},
+                   body:file,
+                  }).then(async response=>{
+                   if(response.status===401){
+                    setPhotoImportHint('يعمل الفلتر محليًا؛ سجّل دخولك إلى SpakTok لحفظه في Cloudflare واستدعائه تلقائيًا.')
+                    return
+                   }
+                   const data=await response.json() as {id?:string;error?:string}
+                   if(!response.ok||!data.id){
+                    setPhotoImportHint('الفلاتر المحلية تعمل؛ لم ينجح حفظ المجسم على R2: '+(data.error??'unavailable'))
+                    return
+                   }
+                   setSavedFaceId(data.id)
+                   setPhotoImportHint('✓ حُفظ المجسم في Cloudflare R2 الخاص بحسابك. سيُستدعى تلقائيًا عند فتح الكاميرا مجددًا.')
+                  }).catch(()=>setPhotoImportHint('تعذر الاتصال بـCloudflare؛ المجسم يعمل محليًا على جهازك.'))
                 }catch{
                   setPhotoImportHint('تعذر قراءة الملف. تأكد من اكتمال تنزيل GLB ثم اختره مجددًا.')
                 }
@@ -294,12 +347,30 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
                    camera.photoFaceStatus==='error'?'لم يُقبل المجسم: '+(camera.photoFaceError??'خطأ غير معروف'):
                    localPhotoFaceFile?'جارٍ تجهيز المجسم':'لم يتم اختيار ملف GLB بعد'}
                 </span>
+                {savedFaceId&&
+                  <button type="button" aria-label="حذف مجسم الوجه الخاص من Cloudflare R2"
+                    className="shrink-0 rounded-full border border-red-300/60 px-2 text-red-200"
+                    onClick={async()=>{
+                     const id=savedFaceId
+                     try{
+                      const result=await fetch('/api/reality/face-drafts/'+id,{
+                       method:'DELETE',credentials:'same-origin',
+                      })
+                      if(!result.ok)throw Error('delete_rejected')
+                      setSavedFaceId(null)
+                      setPhotoImportHint('✓ حُذفت النسخة المخزنة في Cloudflare؛ الملف المحلي باقٍ حتى تغلق الكاميرا.')
+                     }catch{
+                      setPhotoImportHint('لم يتم حذف الملف من السحابة. تحقق من اتصالك وحاول مرة أخرى.')
+                     }
+                    }}>حذف من R2</button>}
                 {localPhotoFaceFile&&
                   <button type="button" aria-label="إزالة الوجه المحلي"
                     className="shrink-0 rounded-full border border-white/30 px-2"
                     onClick={()=>{
+                      faceRestoreCancelled.current=true
                       setLocalPhotoFaceFile(null)
-                      setPhotoImportHint('')
+                      setPhotoImportHint('يمكنك اختيار مجسم آخر؛ الملف المحفوظ في حسابك لم يُحذف.')
+                      setSavedFaceId(null)
                       setStudio(prev=>({...prev,face:{...prev.face,id:'none'}}))
                     }}>×</button>}
               </div>}
