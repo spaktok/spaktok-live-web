@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {validatePrivateFaceGlb,PRIVATE_FACE_MAX_BYTES} from './private-face-storage'
+import {validatePrivateFaceGlb,PRIVATE_FACE_MAX_BYTES} from './private-face-glb'
 function testGlb(overrides:Record<string,unknown>={}):ArrayBuffer{
  const gltf={
   asset:{version:'2.0'},
