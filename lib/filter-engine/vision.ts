@@ -1,4 +1,4 @@
-import type { FaceLandmarker, ImageSegmenter, HandLandmarker } from '@mediapipe/tasks-vision'
+import type { FaceLandmarker, ImageSegmenter, HandLandmarker, InteractiveSegmenter } from '@mediapipe/tasks-vision'
 import type { FaceGeometry, Point } from './renderer'
 
 const WASM_BASE = 'https://spaktok-face-assets.spaktok.workers.dev/wasm'
@@ -15,6 +15,10 @@ let forcedCpu = false
 let extraFace3DEnabled=false
 let segmenterPromise: Promise<ImageSegmenter> | null = null
 let handPromise: Promise<HandLandmarker> | null = null
+let handSegmentationPromise:Promise<InteractiveSegmenter>|null=null
+/** Dedicated WASM: the bundled Face Landmarker fallback may be older. */
+const INTERACTIVE_WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.1.1/wasm'
+const MAGIC_TOUCH_MODEL='https://storage.googleapis.com/mediapipe-models/interactive_segmenter_v2/magic_touch/int8/1/interactive_segmentation.task'
 
 async function loadFileset() {
   if (!filesetPromise) {
@@ -96,6 +100,25 @@ export function loadHandLandmarker():Promise<HandLandmarker>{
   handPromise.catch(()=>{handPromise=null})
  }
  return handPromise
+}
+/** Heavy point-guided pixel segmentation. Explicit QA opt-in ONLY.
+ * Official benchmark ~208ms CPU on Pixel 10; do not call on every frame.
+ * This model segments the *object at a prompt*, not hands specifically.
+ */
+export function loadInteractiveHandSegmentation():Promise<InteractiveSegmenter>{
+ if(!handSegmentationPromise){
+  handSegmentationPromise=(async()=>{
+   const [{InteractiveSegmenter,FilesetResolver},] =await Promise.all([
+    import('@mediapipe/tasks-vision'),
+   ])
+   const fileset=await FilesetResolver.forVisionTasks(INTERACTIVE_WASM)
+   return InteractiveSegmenter.createFromOptions(fileset,{
+    baseOptions:{modelAssetPath:MAGIC_TOUCH_MODEL,delegate:'CPU'},
+   })
+  })()
+  handSegmentationPromise.catch(()=>{handSegmentationPromise=null})
+ }
+ return handSegmentationPromise
 }
 export function loadSegmenter() {
   if (!segmenterPromise) {

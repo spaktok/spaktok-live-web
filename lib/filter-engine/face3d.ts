@@ -30,6 +30,8 @@ import {estimateMetricFaceScale,type MetricCalibration} from './reality-canonica
 import {realityRigActuation} from './reality-prop-rig'
 import {RealityHandMatte} from './reality-hand-matte'
 import {planRealityRenderGraph,type RealityRenderNode} from './reality-render-graph'
+import {loadInteractiveHandSegmentation} from './vision'
+import {segmentHandOnce,semanticHandMaskFresh,type RealitySemanticHand} from './reality-hand-segmentation'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -280,6 +282,10 @@ export class FaceMesh3DEngine{
  private gpuCamera:RealityGpuCameraLayer|null=null
  private gpuBlend:RealityGpuBlendPass|null=null
  private handMatte:RealityHandMatte|null=null
+ private semanticInput:HTMLCanvasElement|null=null
+ private semanticMask:RealitySemanticHand|null=null
+ private semanticPending=false
+ private lastSemanticAt=-Infinity
  lastRenderPlan:readonly RealityRenderNode[]=[]
  private lightSampler:HTMLCanvasElement|null=null
  private lastLightUpdate=-Infinity
@@ -681,7 +687,43 @@ export class FaceMesh3DEngine{
      outputWidth:this.width,outputHeight:this.height,
      mirror,now:started,
     })
-    if(valid)handMatte={texture:this.handMatte.texture,strength:.9}
+    if(valid){
+     // Pixel-level mask is opt-in and strictly limited to a valid,
+     // freshly-detected hand. If inference is stale or unavailable the
+     // conservative 21-point geometry mask remains in place.
+     const active=trackedHands[0]??null
+     const query=typeof window!=='undefined'?
+      new URLSearchParams(window.location.search):null
+     const useSemantic=query?.get('realityHandSeg')==='1'
+     if(useSemantic&&semanticHandMaskFresh(this.semanticMask,active,started)){
+      this.handMatte.applySemantic(this.semanticMask!,{
+       sourceWidth:sourceW,sourceHeight:sourceH,
+       outputWidth:this.width,outputHeight:this.height,mirror,now:started,
+      })
+     }
+     handMatte={texture:this.handMatte.texture,strength:.9}
+     // MagicTouch is heavy (hundreds of milliseconds). At most once every
+     // 1.5 seconds, after an actual grip, never as a frame-loop dependency.
+     if(useSemantic&&!this.semanticPending&&started-this.lastSemanticAt>=1500&&
+      active&&cameraInput?.source instanceof HTMLVideoElement){
+      this.semanticPending=true
+      this.lastSemanticAt=started
+      const hand=active,video=cameraInput.source
+      void loadInteractiveHandSegmentation().then(segmenter=>{
+       if(!this.alive||performance.now()-hand.timestamp>350)return
+       if(!this.semanticInput)this.semanticInput=document.createElement('canvas')
+       const canvas=this.semanticInput
+       const w=256,h=Math.max(1,Math.round(256*sourceH/sourceW))
+       if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}
+       const ctx=canvas.getContext('2d')
+       if(!ctx)return
+       ctx.drawImage(video,0,0,w,h)
+       this.semanticMask=segmentHandOnce(segmenter,canvas,hand,performance.now())
+      }).catch(()=>{this.semanticMask=null}).finally(()=>{
+       this.semanticPending=false
+      })
+     }
+    }
    }catch{
     this.handMatte?.dispose()
     this.handMatte=null
@@ -731,6 +773,8 @@ export class FaceMesh3DEngine{
   this.gpuBlend=null
   this.handMatte?.dispose()
   this.handMatte=null
+  this.semanticInput=null
+  this.semanticMask=null
   this.crownContact.geometry.dispose()
   this.crownContact.material.dispose()
   this.studioEnvironment?.dispose()

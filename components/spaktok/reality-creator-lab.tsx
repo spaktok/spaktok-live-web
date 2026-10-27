@@ -6,6 +6,7 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {OBJLoader} from 'three/addons/loaders/OBJLoader.js'
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js'
 import {validateAuthoringAsset,type RealityAuthoringAsset} from '@/lib/filter-engine/reality-canonical-head'
+import {buildCanonicalRetarget,parseCanonicalOBJ} from '@/lib/filter-engine/reality-canonical-retarget'
 
 type Vec3=readonly [number,number,number]
 const anchors=['eyes_center','forehead_center','head_top','nose_bridge',
@@ -43,6 +44,8 @@ export default function RealityCreatorLab(){
  const [modelInfo,setModelInfo]=useState({triangles:0,materials:0})
  const [articulated,setArticulated]=useState(false)
  const [wire,setWire]=useState(false)
+ const [retargetBusy,setRetargetBusy]=useState(false)
+ const [retargetInfo,setRetargetInfo]=useState<string|null>(null)
  const wireRef=useRef(false)
  useEffect(()=>{pivotRef.current=pivot},[pivot])
  useEffect(()=>{wireRef.current=wire},[wire])
@@ -176,6 +179,45 @@ export default function RealityCreatorLab(){
    </div>
   </div>
  )
+ const exportRetarget=async()=>{
+  if(!file||!/\.obj$/i.test(file.name)||retargetBusy)return
+  setRetargetBusy(true)
+  setRetargetInfo(null)
+  setStatus('Building a neutral, approximate 1220-to-468 retarget map locally...')
+  try{
+   const [userText,response]=await Promise.all([
+    file.text(),
+    fetch('/face-assets/mediapipe-canonical-face-468.obj',{cache:'force-cache'}),
+   ])
+   if(!response.ok)throw Error('canonical_reference_unavailable')
+   const source=parseCanonicalOBJ(userText)
+   const target=parseCanonicalOBJ(await response.text())
+   if(target.vertices.length!==468)throw Error('unexpected_canonical_model')
+   // Give the browser one frame to display loading feedback.
+   await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()))
+   const map=buildCanonicalRetarget(source,target)
+   const payload={
+    format:'SpakTokCanonicalRetargetDraft',version:1,
+    sourceFile:file.name,
+    sourceVertexCount:source.vertices.length,
+    sourceTriangleCount:source.triangles.length,
+    copyright:'Keep the original OBJ copyright/license notices when redistributing geometry',
+    canonical:'MediaPipe canonical_face_model.obj (468 vertices, Apache-2.0)',
+    targetMap:map,
+    validatedForLiveCamera:false,
+    note:'Projected neutral correspondences are estimates; device and pose calibration required.',
+   }
+   const blob=new Blob([JSON.stringify(payload)],{type:'application/json'})
+   const url=URL.createObjectURL(blob)
+   const a=document.createElement('a')
+   a.href=url;a.download=safeSlug(file.name)+'.retarget.json'
+   a.click();setTimeout(()=>URL.revokeObjectURL(url),2000)
+   setRetargetInfo(`${map.sourceVertices} → 468 | mean error ${map.meanProjectionError.toFixed(4)} | worst ${map.worstProjectionError.toFixed(4)}`)
+   setStatus('Retarget draft created locally. Do NOT publish without 3D fit verification.')
+  }catch(error){
+   setStatus('Retarget generation failed: '+String(error))
+  }finally{setRetargetBusy(false)}
+ }
  const exportDraft=()=>{
   if(!file)return
   if(/\.obj$/i.test(file.name)){
@@ -263,6 +305,20 @@ export default function RealityCreatorLab(){
       <input type="checkbox" checked={wire} onChange={e=>setWire(e.target.checked)}/>
       عرض الشبكة الهندسية للمجسم
      </label>
+     {file&&/\.obj$/i.test(file.name)&&
+       <div className="space-y-2 rounded-xl border border-cyan-800 bg-cyan-950/30 p-3">
+        <p className="text-sm font-semibold">Canonical Face Retarget — 468 landmarks</p>
+        <p className="text-xs leading-5 text-slate-300">
+         مطابقة هندسية تقريبية بين نموذج OBJ المرجعي ومثلثات وجه MediaPipe القياسية؛
+         لا تضيف نقاط تتبّع جديدة أو قياسات حقيقية للجسم.
+        </p>
+        <button onClick={exportRetarget} disabled={retargetBusy}
+         className="w-full rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold disabled:opacity-50">
+         {retargetBusy?'يتم إعداد الخريطة...':'توليد وتصدير خريطة Retarget'}
+        </button>
+        {retargetInfo&&<p className="text-xs text-cyan-300">{retargetInfo}</p>}
+       </div>
+     }
      <button onClick={exportDraft} disabled={!file||/\.obj$/i.test(file.name)}
       className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
       تصدير مسودة Effect Package

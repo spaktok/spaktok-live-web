@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import type {TrackedHand,HandPoint} from './reality-hand-physics'
+import type {RealitySemanticHand} from './reality-hand-segmentation'
 
 export type HandMatteFrame=Readonly<{
  sourceWidth:number;sourceHeight:number
@@ -38,6 +39,7 @@ export class RealityHandMatte {
  readonly height:number
  private readonly ctx:CanvasRenderingContext2D
  private previousKey=''
+ private semanticCanvas:HTMLCanvasElement|null=null
  constructor(outWidth:number,outHeight:number){
   if(!(outWidth>0&&outHeight>0))throw Error('hand_matte_bad_dimensions')
   this.width=Math.min(384,Math.round(outWidth))
@@ -97,6 +99,34 @@ export class RealityHandMatte {
    }
   }
   ctx.restore()
+  this.texture.needsUpdate=true
+  return true
+ }
+ /** Promote a fresh point-guided segmentation mask over the skeleton matte.
+  * Source-image coordinates map into the same cover crop and mirror as video.
+  * A semantic result is deliberately restricted to the observed hand box.
+  */
+ applySemantic(mask:RealitySemanticHand,frame:HandMatteFrame){
+  if(!this.semanticCanvas)this.semanticCanvas=document.createElement('canvas')
+  const scratch=this.semanticCanvas
+  if(scratch.width!==mask.width||scratch.height!==mask.height){
+   scratch.width=mask.width;scratch.height=mask.height
+  }
+  const ctx0=scratch.getContext('2d')
+  if(!ctx0)return false
+  ctx0.putImageData(new ImageData(mask.rgba,mask.width,mask.height),0,0)
+  const ctx=this.ctx
+  ctx.clearRect(0,0,this.width,this.height)
+  ctx.save()
+  ctx.scale(this.width/frame.outputWidth,this.height/frame.outputHeight)
+  if(frame.mirror){ctx.translate(frame.outputWidth,0);ctx.scale(-1,1)}
+  const scale=Math.max(frame.outputWidth/frame.sourceWidth,
+   frame.outputHeight/frame.sourceHeight)
+  ctx.drawImage(scratch,(frame.outputWidth-frame.sourceWidth*scale)/2,
+   (frame.outputHeight-frame.sourceHeight*scale)/2,
+   frame.sourceWidth*scale,frame.sourceHeight*scale)
+  ctx.restore()
+  this.previousKey=''
   this.texture.needsUpdate=true
   return true
  }
