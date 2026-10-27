@@ -23,7 +23,7 @@ describe('native video face AR alignment',()=>{
  })
  it('renders every on-device lens as physical artwork, not a color filter',()=>{
    // Canvas API mock verifies all catalogue IDs reach drawing commands.
-   for(const effect of faceFxCatalog.filter(x=>x.id!=='none'&&!x.id.startsWith('3d-'))){
+   for(const effect of faceFxCatalog.filter(x=>x.id!=='none'&&x.id!=='face-morph'&&!x.id.startsWith('3d-'))){
      let draws=0
      const ctx=new Proxy({},{
        get(_target,name){
@@ -37,6 +37,11 @@ describe('native video face AR alignment',()=>{
      expect(painted,effect.id).toBe(true)
      expect(draws,effect.id).toBeGreaterThan(0)
    }
+ })
+ it('keeps face morphology in the camera warp, not a painted 2D mask',()=>{
+   const ctx=new Proxy({},{get(){return()=>{}},set(){return true}}) as unknown as CanvasRenderingContext2D
+   expect(drawFaceMask(ctx,face,{id:'face-morph',strength:1},
+     720,1280,360,640,true,1.5)).toBe(true)
  })
  it('refuses degenerate camera frames and implausible landmarks',()=>{
    expect(coverCrop(0,1080,360,640)).toBeNull()
