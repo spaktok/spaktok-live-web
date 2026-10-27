@@ -1,4 +1,4 @@
-import {BrushMode,type InteractiveSegmenter} from '@mediapipe/tasks-vision'
+import type {BrushMode,InteractiveSegmenter} from '@mediapipe/tasks-vision'
 import type {TrackedHand} from './reality-hand-physics'
 /** Local, point-prompted pixel mask; NOT a hand-specific classifier.
  * Retain only pixels inside the known 21-point hand bounding region to
@@ -71,7 +71,7 @@ export function segmentHandOnce(
  if(!center)return null
  segmenter.setImage(input)
  const mask=segmenter.segment([{
-  brushMode:BrushMode.POSITIVE,
+  brushMode:1 as BrushMode, // BrushMode.POSITIVE = 1; package runtime omits enum export
   point:[{x:Math.min(.99,Math.max(.01,center.x)),
     y:Math.min(.99,Math.max(.01,center.y))}],
   isCompleted:true,
