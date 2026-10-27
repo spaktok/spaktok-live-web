@@ -9,6 +9,10 @@ import {validateAuthoringAsset,type RealityAuthoringAsset} from '@/lib/filter-en
 import {buildCanonicalRetarget,parseCanonicalOBJ} from '@/lib/filter-engine/reality-canonical-retarget'
 import {hasStudioImageExtension} from '@/lib/filter-engine/reality-image-projection'
 import RealityImageReference from './reality-image-reference'
+import RealityProductionDirector from './reality-production-director'
+import {
+ createStudioProductionPackage,withStudioProductionSource,reviewStudioProduction,
+} from '@/lib/filter-engine/reality-production-pipeline'
 import RealityProjectEditor from './reality-project-editor'
 import RealityEffectAuditPanel from './reality-effect-audit-panel'
 
@@ -38,6 +42,7 @@ export default function RealityCreatorLab(){
  const stage=useRef<HTMLDivElement|null>(null)
  const pivotRef=useRef<Vec3>([0,0,0])
  const [file,setFile]=useState<File|null>(null)
+ const [production,setProduction]=useState(createStudioProductionPackage)
  const [name,setName]=useState('My 3D Effect')
  const [category,setCategory]=useState<typeof categories[number]>('glasses')
  const [anchor,setAnchor]=useState<typeof anchors[number]>('eyes_center')
@@ -163,7 +168,10 @@ export default function RealityCreatorLab(){
    setStatus('Choose GLB or OBJ up to 35 MB, or PNG/JPEG/WebP up to 12 MB.')
    return
   }
-  setFile(next);setName(next.name.replace(/\.(glb|obj|png|jpe?g|webp)$/i,'').replace(/[_-]/g,' '))
+  setFile(next)
+  setProduction(prev=>withStudioProductionSource(prev,next.name,next.size,
+   image?'image':/\.obj$/i.test(next.name)?'obj':'glb'))
+  setName(next.name.replace(/\.(glb|obj|png|jpe?g|webp)$/i,'').replace(/[_-]/g,' '))
   setPivot([0,0,0]);setSize(null)
  }
  const numberEditor=(title:string,value:Vec3,apply:(v:Vec3)=>void)=>(
@@ -187,6 +195,10 @@ export default function RealityCreatorLab(){
  )
  const exportRetarget=async()=>{
   if(!file||!/\.obj$/i.test(file.name)||retargetBusy)return
+  if(!reviewStudioProduction(production).mayExportCandidate){
+   setStatus('راجع حقوق الأصل في لوحة الإنتاج أولًا.')
+   return
+  }
   setRetargetBusy(true)
   setRetargetInfo(null)
   setStatus('Building a neutral, approximate 1220-to-468 retarget map locally...')
@@ -226,6 +238,10 @@ export default function RealityCreatorLab(){
  }
  const exportDraft=()=>{
   if(!file)return
+  if(!reviewStudioProduction(production).mayExportCandidate){
+   setStatus('حقوق الأصل غير معتمدة. راجعها في خط الإنتاج قبل التصدير.')
+   return
+  }
   if(hasStudioImageExtension(file.name)){
    setStatus('Use the texture-mapping panel to export the experimental 3D face GLB.')
    return
@@ -286,9 +302,12 @@ export default function RealityCreatorLab(){
      </a>
     </div>
    </header>
+   <RealityProductionDirector file={file} project={production}
+    setProject={setProduction}/>
    {file&&hasStudioImageExtension(file.name)?
     <div className="mx-auto max-w-7xl space-y-3">
-     <RealityImageReference key={file.name+'-'+file.size+'-'+file.lastModified} file={file}/>
+     <RealityImageReference key={file.name+'-'+file.size+'-'+file.lastModified}
+      file={file} canExport={reviewStudioProduction(production).mayExportCandidate}/>
      <label className="block rounded-xl border border-slate-700 bg-slate-900 p-4 text-sm">
       استبدال الصورة أو استيراد صورة أخرى
       <input type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
@@ -296,7 +315,7 @@ export default function RealityCreatorLab(){
      </label>
     </div>:
    <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[minmax(0,1fr)_350px]">
-    <section className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-950">
+    <section id="production-asset" className="overflow-hidden rounded-2xl border border-slate-700 bg-slate-950">
      <div ref={stage} className="h-[390px] w-full sm:h-[620px]" aria-label="3D object inspector"/>
      <div className="border-t border-slate-800 px-4 py-3 text-sm text-slate-300">
       <div className="flex flex-wrap gap-5"><span>Triangles: {modelInfo.triangles.toLocaleString()}</span>
@@ -352,7 +371,7 @@ export default function RealityCreatorLab(){
         {retargetInfo&&<p className="text-xs text-cyan-300">{retargetInfo}</p>}
        </div>
      }
-     <button onClick={exportDraft} disabled={!file||/\.obj$/i.test(file.name)}
+     <button onClick={exportDraft} disabled={!file||/\.obj$/i.test(file.name)||!reviewStudioProduction(production).mayExportCandidate}
       className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
       تصدير مسودة Effect Package
      </button>
