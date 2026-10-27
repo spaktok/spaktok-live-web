@@ -342,10 +342,10 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
             {studio.face.id==='face-morph'&&
               <div className="flex max-w-[93%] items-center gap-2 rounded-full bg-black/70 px-3 py-1 text-[10px] text-white">
                 <span role="status" className="truncate">
-                  {camera.photoFaceStatus==='loading'?'جارٍ التحقق من نقاط مجسم الوجه…':
-                   camera.vision==='tracking'?'✓ Face Morph يغير ملامحك الحية':'بانتظار تتبع الوجه؛ GLB مرجع فقط':
-                   camera.photoFaceStatus==='error'?'لم يُقبل المجسم: '+(camera.photoFaceError??'خطأ غير معروف'):
-                   localPhotoFaceFile?'جارٍ تجهيز المجسم':'لم يتم اختيار ملف GLB بعد'}
+                  {camera.vision==='tracking'?'✓ Face Morph يعيد تشكيل ملامحك الحية':
+                   camera.vision==='unavailable'?'تعذر تشغيل تتبع الوجه على الجهاز':
+                   camera.vision==='no-face'?'وجهك غير مكتشف؛ اقترب من الكاميرا':
+                   'بانتظار الكاميرا وتتبّع وجهك'}
                 </span>
                 {savedFaceId&&
                   <button type="button" aria-label="حذف مجسم الوجه الخاص من Cloudflare R2"
