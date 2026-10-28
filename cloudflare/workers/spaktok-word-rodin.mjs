@@ -5,6 +5,12 @@ const BASE='https://api.hyper3d.com/api/v2'
 const IDENT=/^[a-f0-9-]{36}$/i
 const SHA=/^[a-f0-9]{64}$/i
 const MB=8*1024*1024
+const paidReady=env=>env.WORD_PAID_ENABLED==='true'&&
+ !!env.RODIN_API_KEY&&!!env.WORD_SIGNING_SECRET&&
+ Number(env.RODIN_FIXED_JOB_CREDITS)===0.5&&
+ (env.RODIN_DOWNLOAD_HOSTS||'').split(',').some(host=>
+  /^[a-z0-9][a-z0-9.-]{2,252}$/i.test(host.trim()))
+
 const json=(body,status=200)=>new Response(JSON.stringify(body),{
  status,headers:{'content-type':'application/json','cache-control':'private,no-store',
   'x-content-type-options':'nosniff','cross-origin-resource-policy':'same-origin'},
@@ -64,8 +70,7 @@ async function update(env,id,status,code='',extra={}){
 }
 async function submitJob(env,id){
  // A queued message must never spend after an operator disables billing.
- if(env.WORD_PAID_ENABLED!=='true'||!env.RODIN_API_KEY||
-  !env.RODIN_FIXED_JOB_CREDITS){
+ if(!paidReady(env)){
   const paused=await env.WORD_DB.prepare(
    "UPDATE word_rodin_jobs SET status='failed',error_code='paid_generation_disabled',"+
    "updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='queued' RETURNING source_key"
@@ -187,9 +192,7 @@ export default {
  async fetch(req,env){
   const path=new URL(req.url).pathname
   if(path==='/health'&&req.method==='GET')
-   return json({ok:true,paidEnabled:env.WORD_PAID_ENABLED==='true'&&
-    !!env.RODIN_API_KEY&&!!env.WORD_SIGNING_SECRET&&
-    !!env.RODIN_FIXED_JOB_CREDITS,publicBroadcast:false})
+   return json({ok:true,paidEnabled:paidReady(env),publicBroadcast:false})
   const match=/^\/v1\/jobs(?:\/([a-f\d-]{36})(?:\/(asset))?)?$/.exec(path)
   if(!match)return json({error:'not_found'},404)
   const isCreate=req.method==='POST'&&!match[1]
@@ -212,8 +215,7 @@ export default {
   const auth=await verify(req,env,path,digest)
   if(!auth)return json({error:'unauthorized'},401)
   if(isCreate){
-   if(env.WORD_PAID_ENABLED!=='true'||!env.RODIN_API_KEY||
-    !env.RODIN_FIXED_JOB_CREDITS)return json({error:'paid_generation_disabled'},503)
+   if(!paidReady(env))return json({error:'paid_generation_disabled'},503)
    const v=auth.metadata
    if(!v||v.acceptTerms!==true||v.confirmCharge!==true||
     v.rights!=='original'&&v.rights!=='licensed'||
