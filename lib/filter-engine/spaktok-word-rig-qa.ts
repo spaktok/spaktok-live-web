@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import {
- WORD_RIG_CHANNELS,type WordRigChannel,
+ WORD_RIG_CHANNELS,type WordRigExtendedChannel,
  type WordRigDiagnostics,
 } from './spaktok-word-face-rig'
 
@@ -8,8 +8,8 @@ import {
  * visual similarity, commercial rights, or real-time device performance. */
 export type WordRigQualityReport=Readonly<{
  status:'needs-recalibration'|'ready-for-visual-review'
- coverage:Readonly<Record<WordRigChannel,number>>
- channelNames:readonly WordRigChannel[]
+ coverage:Readonly<Record<WordRigExtendedChannel,number>>
+ channelNames:readonly WordRigExtendedChannel[]
  warnings:readonly string[]
  visualApprovalRequired:true
 }>
@@ -18,9 +18,10 @@ export function inspectWordRigQuality(
  diagnostics:WordRigDiagnostics,
 ):WordRigQualityReport{
  const count=geometry.getAttribute('position')?.count??0
- const channels=WORD_RIG_CHANNELS
+ const channels=diagnostics.channels
  const warnings:string[]=[]
- const coverage={} as Record<WordRigChannel,number>
+ const coverage=Object.fromEntries(channels.map(k=>[k,0]))
+  as Record<WordRigExtendedChannel,number>
  for(let i=0;i<channels.length;i++){
   const channel=channels[i]
   const attr=geometry.morphAttributes.position?.[i]
@@ -86,9 +87,13 @@ export function rankWordFaceMeshes(meshes:readonly THREE.Mesh[]):ReadonlyArray<R
 /** GLB is re-audited after export: named morph targets must survive
  * serialization, not merely exist in an in-memory Three.js mesh.
  */
-export function verifyWordRigGlbChannels(binary:ArrayBuffer):Readonly<{
- present:readonly WordRigChannel[];missing:readonly WordRigChannel[]
+export function verifyWordRigGlbChannels(
+ binary:ArrayBuffer,
+ required:readonly WordRigExtendedChannel[]=WORD_RIG_CHANNELS,
+):Readonly<{
+ present:readonly WordRigExtendedChannel[];missing:readonly WordRigExtendedChannel[]
 }>{
+
  if(binary.byteLength<28)throw Error('word_rig_export_invalid_glb')
  const view=new DataView(binary)
  if(view.getUint32(0,true)!==0x46546c67||
@@ -117,7 +122,7 @@ export function verifyWordRigGlbChannels(binary:ArrayBuffer):Readonly<{
    }
   }
  }
- const present=WORD_RIG_CHANNELS.filter(k=>known.has(k))
- const missing=WORD_RIG_CHANNELS.filter(k=>!known.has(k))
+ const present=required.filter(k=>known.has(k))
+ const missing=required.filter(k=>!known.has(k))
  return {present,missing}
 }
