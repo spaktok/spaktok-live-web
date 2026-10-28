@@ -95,6 +95,27 @@ export default function WordRodinExecution({
     (e instanceof Error?e.message:'word_generated_asset_failed'))
   }finally{setBusy(false)}
  }
+ const deleteAssets=async()=>{
+  if(!job||busy||!['queued','failed','needs_review','submission_uncertain']
+   .includes(job.status))return
+  const consent=window.confirm('هل تريد حذف الملفات الخاصة بهذه المهمة؟ '+
+   'لا يعني الحذف استرداد رسوم Rodin أو إلغاء مهمة بدأت لدى المزود.')
+  if(!consent)return
+  setBusy(true)
+  try{
+   const result=await fetch(
+    '/api/spaktok-word/rodin?id='+encodeURIComponent(job.id),
+    {method:'DELETE',credentials:'same-origin'})
+   const payload=await result.json()
+   if(!result.ok)throw Error(payload.error??'delete_failed')
+   setJob({...job,status:'failed',hasAsset:false,error:'creator_assets_deleted'})
+   setMessage('طُلب حذف ملفات المصدر والناتج من التخزين الخاص. بقي سجل المهمة للمراجعة المالية. '+ 
+    'لا توجد وعود بإلغاء رسوم المزود.')
+  }catch(e){
+   setMessage('تعذّر حذف الملفات: '+
+    (e instanceof Error?e.message:'delete_unavailable'))
+  }finally{setBusy(false)}
+ }
  const refresh=async()=>{
   if(!job)return
   setBusy(true)
@@ -152,6 +173,12 @@ export default function WordRodinExecution({
     className="rounded-lg bg-white/15 px-3 py-2 font-semibold disabled:opacity-40">
     تحديث حالة المهمة
    </button>
+   {['queued','failed','needs_review','submission_uncertain'].includes(job.status)&&
+    job.error!=='creator_assets_deleted'&&
+    <button type="button" onClick={deleteAssets} disabled={busy}
+     className="mr-2 inline-block rounded-lg border border-rose-400/40 px-3 py-2 font-semibold text-rose-200 disabled:opacity-40">
+     حذف الملفات الخاصة بهذه المهمة
+    </button>}
    {job.hasAsset&&<>
     <button type="button" onClick={importResult} disabled={busy}
      className="mr-2 inline-block rounded-lg bg-cyan-600 px-3 py-2 font-bold text-white disabled:opacity-40">
