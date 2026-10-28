@@ -94,6 +94,7 @@ export default function RealityAvatarStudio(){
  const [handoffBusy,setHandoffBusy]=useState(false)
  const [mappedCount,setMappedCount]=useState(0)
  const [faceChannelCoverage,setFaceChannelCoverage]=useState(0)
+ const [availableAdvancedChannels,setAvailableAdvancedChannels]=useState<ActiveFaceBlendshape[]>([])
  const [strength,setStrength]=useState(.85)
  const [mirror,setMirror]=useState(true)
  const mirrorRef=useRef(mirror)
@@ -426,6 +427,12 @@ export default function RealityAvatarStudio(){
    const coverage=inspectFullFaceRig(
     controls.map(x=>x.mesh.morphTargetDictionary))
    setFaceChannelCoverage(coverage.supported)
+   const available=new Set(controls.flatMap(({bindings})=>bindings.map(b=>b.key)))
+   setAvailableAdvancedChannels(MEDIAPIPE_FACE_BLENDSHAPES.slice(1).filter(
+    (name):name is ActiveFaceBlendshape=>
+     available.has(name as ActiveFaceBlendshape)&&
+     !rigControls.some(control=>control.id===name)))
+   setAdvancedChannel('none')
    setTargetNames([...targetSet].slice(0,16))
    setMessage(coverage.supported>=3?
     'تم ربط '+coverage.supported+' من 51 تعبيرًا قابلاً للتحريك. '+
@@ -477,7 +484,8 @@ export default function RealityAvatarStudio(){
   setAvatarStyle(style)
   const preset=LUXE_AVATAR_PRESETS.find(x=>x.id===style)!
   setModelName(preset.label)
-  setMorphCount(0);setMappedCount(0);setFaceChannelCoverage(0);setTargetNames([])
+  setMorphCount(0);setMappedCount(0);setFaceChannelCoverage(0)
+  setAvailableAdvancedChannels([]);setAdvancedChannel('none');setTargetNames([])
   setMessage('نموذج LUXA تجريبي منحوت داخل التطبيق، مستوحى من المراجع. يتتبع حركة الرأس والرمش والفم، لكنه لا يطابق جودة الصور التفصيلية بعد.')
  }
  const useDemo=()=>selectLuxeAvatar(avatarStyle)
@@ -588,16 +596,15 @@ export default function RealityAvatarStudio(){
          onChange={e=>setManualValues(prev=>({...prev,[control.id]:Number(e.target.value)}))}
          className="mt-1 w-full accent-cyan-300" aria-label={control.label}/>
        </label>)}
-       {faceChannelCoverage>7&&<>
+       {availableAdvancedChannels.length>0&&<>
         <label className="block text-xs">
          اختبار قناة وجه متقدمة (عندما تكون موجودة في GLB)
          <select value={advancedChannel}
           onChange={e=>setAdvancedChannel(e.target.value as ActiveFaceBlendshape|'none')}
           className="mt-1 block w-full rounded-lg border border-white/20 bg-slate-950 p-2">
           <option value="none">بدون حركة إضافية</option>
-          {MEDIAPIPE_FACE_BLENDSHAPES.slice(1)
-           .filter(name=>!rigControls.some(control=>control.id===name))
-           .map(name=><option value={name} key={name}>{name}</option>)}
+          {availableAdvancedChannels.map(name=>
+           <option value={name} key={name}>{name}</option>)}
          </select>
         </label>
         {advancedChannel!=='none'&&<label className="block text-xs">
