@@ -157,6 +157,16 @@ export default function SpaktokAssetStage({
    setFile(last)
   }catch(error){setStatus('فشل جلب المجسم المحلي: '+String(error))}
  }
+ const autoImportRef=useRef(false)
+ useEffect(()=>{
+  if(!autoImportRef.current&&
+   new URLSearchParams(window.location.search).get('from')==='ai-director'){
+   autoImportRef.current=true
+   void importPrevious()
+  }
+ // Only on navigation into this private preview; never retry paid work.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[])
  const choose=(event:ChangeEvent<HTMLInputElement>)=>{
   const f=event.target.files?.[0]??null
   event.target.value=''
