@@ -1,7 +1,7 @@
 # Standalone Cloudflare Worker for Spaktok Word.
 # Deploy only AFTER applying migrations/native/0004_word_rodin_jobs.sql
 # and creating queue spaktok-word-rodin-jobs.
-# No live paid tasks: explicit operator approval and secrets required.
+# EU Queue + existing private R2 are provisioned. Paid jobs are disabled until\n# verified vendor cost quote, Rodin API key and explicit creator approval.
 name = "spaktok-word-rodin"
 main = "cloudflare/workers/spaktok-word-rodin.mjs"
 compatibility_date = "2026-10-28"
@@ -33,4 +33,4 @@ max_batch_timeout = 5
 max_retries = 1
 
 [triggers]
-crons = ["*/1 * * * *"]
+crons = ["*/5 * * * *"]
