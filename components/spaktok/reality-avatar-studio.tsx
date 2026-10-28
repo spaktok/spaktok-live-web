@@ -12,10 +12,16 @@ import {avatarLandmarkExpression,avatarLuminance,chooseAvatarTrackerIssue,
  avatarTrackingIssueArabic,type AvatarTrackingIssue} from '@/lib/filter-engine/reality-avatar-detection'
 import {
  avatarExpressionFromMediaPipe,avatarPoseFromLandmarks,easeAvatarPose,
- getAvatarMorphBindings,NEUTRAL_AVATAR_EXPRESSION,NEUTRAL_AVATAR_HEAD,
- smoothAvatarExpression,hasExpressiveAvatarTargets,
+ NEUTRAL_AVATAR_EXPRESSION,NEUTRAL_AVATAR_HEAD,
+ smoothAvatarExpression,
  type AvatarExpression,type AvatarHeadPose,
 } from '@/lib/filter-engine/reality-avatar-retarget'
+import {
+ neutralFaceChannelFrame,faceChannelFrameFromMediaPipe,
+ faceChannelFrameFromStarter,smoothFaceChannelFrame,
+ getFullFaceMorphBindings,inspectFullFaceRig,
+ type FaceChannelFrame,
+} from '@/lib/filter-engine/reality-avatar-full-retarget'
 
 type TrackedPoint={x:number;y:number;z:number}
 type AvatarState={
@@ -24,12 +30,13 @@ type AvatarState={
  root:THREE.Group;defaultModel:THREE.Group
  uploaded:THREE.Object3D|null
  controls:ReadonlyArray<{
-  mesh:THREE.Mesh;bindings:ReturnType<typeof getAvatarMorphBindings>
+  mesh:THREE.Mesh;bindings:ReturnType<typeof getFullFaceMorphBindings>
  }>
  eyes:THREE.Object3D[]
  brows:THREE.Object3D[]
  mouth:THREE.Object3D|null
  expression:AvatarExpression;pose:AvatarHeadPose
+ fullFace:FaceChannelFrame
 }
 type CameraState='idle'|'loading'|'running'|'denied'|'unsupported'|'error'
 const maxFps=13
@@ -63,6 +70,7 @@ export default function RealityAvatarStudio(){
  const lastDetectRef=useRef(0)
  const lastTrackingRef=useRef(0)
  const expressionsRef=useRef<AvatarExpression>(NEUTRAL_AVATAR_EXPRESSION)
+ const fullFaceRef=useRef<FaceChannelFrame>(neutralFaceChannelFrame())
  const poseRef=useRef<AvatarHeadPose>(NEUTRAL_AVATAR_HEAD)
  const trackerIssueRef=useRef<AvatarTrackingIssue>('no-video')
  const diagnosticsRef=useRef({frames:0,faces:0,expressions:0,errors:0,
@@ -85,6 +93,7 @@ export default function RealityAvatarStudio(){
  const [morphCount,setMorphCount]=useState(0)
  const [handoffBusy,setHandoffBusy]=useState(false)
  const [mappedCount,setMappedCount]=useState(0)
+ const [faceChannelCoverage,setFaceChannelCoverage]=useState(0)
  const [strength,setStrength]=useState(.85)
  const [mirror,setMirror]=useState(true)
  const mirrorRef=useRef(mirror)
@@ -108,6 +117,7 @@ export default function RealityAvatarStudio(){
 
  const resetTracking=()=>{
   expressionsRef.current=NEUTRAL_AVATAR_EXPRESSION
+  fullFaceRef.current=neutralFaceChannelFrame()
   poseRef.current=NEUTRAL_AVATAR_HEAD
   lastTrackingRef.current=0
   setTracking(false)
@@ -149,6 +159,7 @@ export default function RealityAvatarStudio(){
    renderer,scene,camera,root,defaultModel:demo.root,uploaded:null,
    controls:[],eyes:[...demo.eyes],brows:[...demo.brows],mouth:demo.mouth,
    expression:NEUTRAL_AVATAR_EXPRESSION,pose:NEUTRAL_AVATAR_HEAD,
+   fullFace:neutralFaceChannelFrame(),
   }
   stateRef.current=state
   const resize=()=>{
@@ -166,6 +177,9 @@ export default function RealityAvatarStudio(){
    state.expression=smoothAvatarExpression(state.expression,
     manualPreviewRef.current?manualValuesRef.current:
     active?expressionsRef.current:NEUTRAL_AVATAR_EXPRESSION,.29)
+   state.fullFace=smoothFaceChannelFrame(state.fullFace,
+    manualPreviewRef.current?faceChannelFrameFromStarter(manualValuesRef.current):
+    active?fullFaceRef.current:neutralFaceChannelFrame(),.29)
    state.pose=easeAvatarPose(state.pose,active?poseRef.current:NEUTRAL_AVATAR_HEAD,.3)
    root.rotation.set(state.pose.pitch*factor,state.pose.yaw*factor,
     state.pose.roll*factor)
@@ -175,7 +189,7 @@ export default function RealityAvatarStudio(){
      if(!influences)continue
      for(const b of bindings)
       if(b.index<influences.length)
-       influences[b.index]=bound(state.expression[b.key]*factor,0,1)
+       influences[b.index]=bound(state.fullFace[b.key]*factor,0,1)
     }
    }else{
     const eyesAvg=[state.expression.eyeBlinkLeft,state.expression.eyeBlinkRight]
@@ -315,6 +329,9 @@ export default function RealityAvatarStudio(){
         eyeBlinkLeft:fallback?.eyeBlinkLeft??0,
         eyeBlinkRight:fallback?.eyeBlinkRight??0,
        }
+       fullFaceRef.current=categories.length?
+        faceChannelFrameFromMediaPipe(coeffs):
+        faceChannelFrameFromStarter(expressionsRef.current)
        lastTrackingRef.current=now
        setTracking(value=>value||true)
       }else if(now-lastTrackingRef.current>450)setTracking(false)
@@ -383,7 +400,7 @@ export default function RealityAvatarStudio(){
     const dict=node.morphTargetDictionary
     if(dict)for(const key of Object.keys(dict))targetSet.add(key)
     morphs+=Object.keys(dict??{}).length
-    controls.push({mesh:node,bindings:getAvatarMorphBindings(dict)})
+    controls.push({mesh:node,bindings:getFullFaceMorphBindings(dict)})
    })
    const previous=current.uploaded
    if(previous){current.root.remove(previous);disposeModel(previous)}
@@ -394,10 +411,16 @@ export default function RealityAvatarStudio(){
    setModelName(file.name)
    setMorphCount(morphs)
    setMappedCount(controls.reduce((s,x)=>s+x.bindings.length,0))
+   const coverage=inspectFullFaceRig(
+    controls.map(x=>x.mesh.morphTargetDictionary))
+   setFaceChannelCoverage(coverage.supported)
    setTargetNames([...targetSet].slice(0,16))
-   setMessage(hasExpressiveAvatarTargets(controls.map(x=>x.mesh.morphTargetDictionary))
-    ?'تم ربط Morph Targets بالتعابير المتوافقة؛ جرّب الرمش والابتسام أمام الكاميرا.'
-    :'تم تحميل المجسم وتحريك الرأس. لا يوجد ما يكفي من Morph Targets المتوافقة لتحريك الوجه.')
+   setMessage(coverage.supported>=3?
+    'تم ربط '+coverage.supported+' من 51 تعبيرًا قابلاً للتحريك. '+
+    (coverage.level==='complete'?
+     'ملف GLB يتضمن جميع القنوات بالاسم؛ يلزم اختبار جودة تشوهاتها بصريًا.':
+     'بقية القنوات غير موجودة في المجسم، ولن يخترعها نظام التتبع.') :
+    'تم تحميل المجسم وتحريك الرأس. لا تتوفر قنوات وجه كافية للتحريك.')
   }catch(error){
    setMessage('تعذّر قراءة هذا GLB بصورة آمنة: '+(error instanceof Error?error.message:'ملف غير متوافق'))
   }
@@ -442,7 +465,7 @@ export default function RealityAvatarStudio(){
   setAvatarStyle(style)
   const preset=LUXE_AVATAR_PRESETS.find(x=>x.id===style)!
   setModelName(preset.label)
-  setMorphCount(0);setMappedCount(0);setTargetNames([])
+  setMorphCount(0);setMappedCount(0);setFaceChannelCoverage(0);setTargetNames([])
   setMessage('نموذج LUXA تجريبي منحوت داخل التطبيق، مستوحى من المراجع. يتتبع حركة الرأس والرمش والفم، لكنه لا يطابق جودة الصور التفصيلية بعد.')
  }
  const useDemo=()=>selectLuxeAvatar(avatarStyle)
@@ -528,7 +551,7 @@ export default function RealityAvatarStudio(){
        className="mt-3 rounded-lg border border-white/20 px-3 py-2 text-xs text-cyan-300">
        الرجوع إلى نموذج LUXA المختار
       </button>
-      <p className="mt-2 text-xs text-slate-400">Morph Targets: {morphCount} · حركات معروفة: {mappedCount}</p>
+      <p className="mt-2 text-xs text-slate-400">Morph Targets: {morphCount} · روابط تعابير: {mappedCount} · القنوات المتوافقة: {faceChannelCoverage}/51</p>
       {!!morphCount&&<p className="mt-2 text-[11px] leading-5 text-cyan-200">
        يمكنك اختبار الحركات واحدة تلو الأخرى من اللوحة التالية، أو إيقاف الاختبار لتتحرك الشخصية مع تتبّع كاميرتك.
       </p>}
