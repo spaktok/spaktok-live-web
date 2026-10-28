@@ -11,6 +11,7 @@ import {saveLocalStudioGlb,REALITY_HANDOFF_MAX_BYTES} from '@/lib/filter-engine/
 import RealityRodinHandoff from './reality-rodin-handoff'
 import WordRodinExecution from './word-rodin-execution'
 import SpaktokWordConsole from './spaktok-word-console'
+import SpaktokWordFaceRig from './spaktok-word-face-rig'
 
 const stages:Readonly<Record<StudioStageId,string>>={
  source:'الأصل',
@@ -213,6 +214,7 @@ export default function RealityProductionDirector({
      validated:audit.valid,
     },
    }))}/>
+  <SpaktokWordFaceRig file={file} project={project} onRiggedGlb={onGeneratedGlb}/>
   <RealityRodinHandoff project={project} sourceFile={file}/>
   <WordRodinExecution project={project} file={file} onGeneratedGlb={onGeneratedGlb}/>
   <div className="flex flex-wrap gap-2">
