@@ -37,6 +37,8 @@ export function planSpaktokDirector(input:Readonly<{
  source:'image'|'glb'|'none'
  rightsApproved:boolean
  gpuAvailable:boolean
+ transferApproved?:boolean
+ computeApproved?:boolean
 }>):DirectorPlan{
  const targets=Array.from(new Set(input.targets)).filter(
   (t):t is DirectorTarget=>DIRECTOR_TARGETS.includes(t))
@@ -45,6 +47,8 @@ export function planSpaktokDirector(input:Readonly<{
  const readySource=hasSource&&input.rightsApproved
  const needsGpu=input.source==='image'
  const imageNeedsGpu=needsGpu&&!input.gpuAvailable
+ const paidConsented=input.transferApproved===true&&
+  input.computeApproved===true
  const geometryReady=input.source==='glb'&&readySource
  const stages:DirectorStageCheck[]=[
   {id:'source',status:!hasSource?'blocked':input.rightsApproved?'ready':'blocked',
@@ -52,11 +56,12 @@ export function planSpaktokDirector(input:Readonly<{
     input.rightsApproved?'source_selected_with_rights_attestation':
     'creator_rights_confirmation_required'},
   {id:'generation',status:!readySource?'blocked':
-   needsGpu?(input.gpuAvailable?'ready':'blocked'):'ready',
+   needsGpu?(input.gpuAvailable&&paidConsented?'ready':'blocked'):'ready',
    reason:!hasSource?'source_missing':
     !input.rightsApproved?'rights_unverified':
     needsGpu?(imageNeedsGpu?'licensed_gpu_not_configured':
-     'one_paid_gpu_inference_if_creator_approves'):'reuse_existing_glb_zero_gpu'},
+     paidConsented?'one_approved_gpu_job':'explicit_image_transfer_and_gpu_consent_required'):
+     'reuse_existing_glb_zero_gpu'},
   {id:'geometry',status:geometryReady?'ready':'blocked',
    reason:geometryReady?'requires_actual_glb_audit':'awaiting_valid_glb'},
  ]
@@ -79,8 +84,8 @@ export function planSpaktokDirector(input:Readonly<{
  return {
   format:'SpaktokDirectorPlan',version:1,
   description:input.description.trim().slice(0,1000),targets,stages,
-  estimatedGpuJobs:needsGpu&&readySource&&input.gpuAvailable?1:0,
-  uploadsSourceImage:needsGpu&&readySource&&input.gpuAvailable,
+  estimatedGpuJobs:needsGpu&&readySource&&input.gpuAvailable&&paidConsented?1:0,
+  uploadsSourceImage:needsGpu&&readySource&&input.gpuAvailable&&paidConsented,
   publication:'private-draft',
  }
 }
