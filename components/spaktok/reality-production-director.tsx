@@ -39,11 +39,12 @@ const download=(data:object,name:string)=>{
  window.setTimeout(()=>URL.revokeObjectURL(url),1500)
 }
 export default function RealityProductionDirector({
- file,project,setProject,
+ file,project,setProject,onGeneratedGlb,
 }:{
  file:File|null
  project:StudioProductionPackage
  setProject:Dispatch<SetStateAction<StudioProductionPackage>>
+ onGeneratedGlb?:(file:File)=>void
 }){
  const [auditStatus,setAuditStatus]=useState('')
  const [handoffStatus,setHandoffStatus]=useState('')
@@ -213,7 +214,7 @@ export default function RealityProductionDirector({
     },
    }))}/>
   <RealityRodinHandoff project={project} sourceFile={file}/>
-  <WordRodinExecution project={project} file={file}/>
+  <WordRodinExecution project={project} file={file} onGeneratedGlb={onGeneratedGlb}/>
   <div className="flex flex-wrap gap-2">
    <button type="button" onClick={exportDraft} disabled={!review?.mayExportCandidate}
     className="rounded-lg bg-cyan-400 px-4 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">
