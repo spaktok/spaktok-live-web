@@ -11,7 +11,8 @@ import {inspectWordRigQuality,rankWordFaceMeshes,verifyWordRigGlbChannels,
 import {
  buildCalibratedWordFaceRig,eligibleWordRigMeshes,
  DEFAULT_WORD_RIG_CALIBRATION,WORD_RIG_CHANNELS,
- type WordRigCalibration,type WordRigChannel,
+ WORD_RIG_EXPRESSIVE_CHANNELS,wordRigChannels,
+ type WordRigCalibration,type WordRigExtendedChannel,type WordRigProfile,
 } from '@/lib/filter-engine/spaktok-word-face-rig'
 import {
  saveLocalStudioGlb,REALITY_HANDOFF_MAX_BYTES,
@@ -26,13 +27,24 @@ type RigSession={
  guides:THREE.Group
  raf:number;observer:ResizeObserver
 }
-const titles:Record<WordRigChannel,string>={
+const titles:Record<WordRigExtendedChannel,string>={
  jawOpen:'فتح الفك',eyeBlinkLeft:'رمش العين اليسرى',
  eyeBlinkRight:'رمش العين اليمنى',
  mouthSmileLeft:'الابتسام جهة اليسار',
  mouthSmileRight:'الابتسام جهة اليمين',
  browInnerUp:'رفع الحاجبين',
  mouthPucker:'ضم الشفتين',
+ browDownLeft:'خفض الحاجب الأيسر',browDownRight:'خفض الحاجب الأيمن',
+ browOuterUpLeft:'رفع طرف الحاجب الأيسر',
+ browOuterUpRight:'رفع طرف الحاجب الأيمن',
+ eyeWideLeft:'توسيع العين اليسرى',eyeWideRight:'توسيع العين اليمنى',
+ mouthFrownLeft:'خفض زاوية الفم اليسرى',
+ mouthFrownRight:'خفض زاوية الفم اليمنى',
+ mouthFunnel:'تدوير الشفاه للأمام',
+ mouthStretchLeft:'تمديد جانب الفم الأيسر',
+ mouthStretchRight:'تمديد جانب الفم الأيمن',
+ cheekPuff:'نفخ الخدين',jawLeft:'تحريك الفك يسارًا',
+ jawRight:'تحريك الفك يمينًا',
 }
 const sliders:ReadonlyArray<Readonly<{
  key:keyof Pick<WordRigCalibration,'eyeY'|'eyeSeparation'|'mouthY'|
@@ -82,7 +94,8 @@ export default function SpaktokWordFaceRig({
  const [quality,setQuality]=useState<WordRigQualityReport|null>(null)
  const [visualApproved,setVisualApproved]=useState(false)
  const [playback,setPlayback]=useState(false)
- const [mode,setMode]=useState<WordRigChannel>('jawOpen')
+ const [profile,setProfile]=useState<WordRigProfile>('starter')
+ const [mode,setMode]=useState<WordRigExtendedChannel>('jawOpen')
  const [intensity,setIntensity]=useState(.75)
  const [yaw,setYaw]=useState(0)
  const [ready,setReady]=useState(false)
@@ -262,7 +275,7 @@ export default function SpaktokWordFaceRig({
    if(!selected)throw Error('اختر شبكة الوجه الصحيحة')
    const original=s.sourceGeometries.get(selected)
    if(!original)throw Error('شبكة الوجه الأصلية غير موجودة')
-   const result=buildCalibratedWordFaceRig(original,calibration)
+   const result=buildCalibratedWordFaceRig(original,calibration,profile)
    selected.geometry=result.geometry
    selected.updateMorphTargets()
    s.preview=selected;s.modified=result.geometry
@@ -272,14 +285,14 @@ export default function SpaktokWordFaceRig({
    setDirty(true)
    setStats(
     'رؤوس الشبكة: '+result.diagnostics.vertices.toLocaleString('en-US')+
-    ' · القنوات: '+WORD_RIG_CHANNELS.length+
+    ' · القنوات: '+result.diagnostics.channels.length+
     ' · تأثير الفك: '+result.diagnostics.activeVertices.jawOpen+
     (result.diagnostics.warnings.length?
      ' · تحذيرات: '+result.diagnostics.warnings.join('، '):'')
    )
    setMessage(inspection.status==='needs-recalibration'?
     'هناك تحذيرات هندسية. عدّل معايرة العينين والفم وافحص القنوات قبل اعتماد التصدير.':
-    'تم إنشاء سبع حركات للشبكة. اختبر كل تعبير بصريًا وراجع مواضع الوجه قبل التصدير.')
+    'تم إنشاء '+result.diagnostics.channels.length+' حركة للشبكة. اختبر كل تعبير بصريًا وراجع مواضع الوجه قبل التصدير.')
   }catch(e){setMessage(e instanceof Error?e.message:'فشل معايرة Rig')}
  }
  useEffect(()=>{
@@ -294,14 +307,14 @@ export default function SpaktokWordFaceRig({
  useEffect(()=>{
   if(!playback||!dirty)return
   let index=0
-  setMode(WORD_RIG_CHANNELS[index])
+  setMode(wordRigChannels(profile)[index])
   setIntensity(.85)
   const timer=window.setInterval(()=>{
-   index=(index+1)%WORD_RIG_CHANNELS.length
-   setMode(WORD_RIG_CHANNELS[index])
+   index=(index+1)%wordRigChannels(profile).length
+   setMode(wordRigChannels(profile)[index])
   },1200)
   return()=>window.clearInterval(timer)
- },[playback,dirty])
+ },[playback,dirty,profile])
  const exportRig=async(destination:'download'|'avatar')=>{
   const s=sessionRef.current
   if(!s?.preview||!s.modified||!dirty||busy)return
@@ -324,9 +337,9 @@ export default function SpaktokWordFaceRig({
    if(!(binary instanceof ArrayBuffer))
     throw Error('word_rig_export_not_binary')
    const audited=inspectWordGeneratedGlb(binary,'spaktok-word-face-rig.glb')
-   if(audited.audit.rigTargets<WORD_RIG_CHANNELS.length)
+   if(audited.audit.rigTargets<wordRigChannels(profile).length)
     throw Error('word_rig_export_lost_morph_targets')
-   const names=verifyWordRigGlbChannels(binary)
+   const names=verifyWordRigGlbChannels(binary,wordRigChannels(profile))
    if(names.missing.length)
     throw Error('word_rig_export_missing_names_'+names.missing.join('_'))
    if(destination==='avatar'){
@@ -341,7 +354,8 @@ export default function SpaktokWordFaceRig({
    const link=document.createElement('a')
    link.href=url;link.download=audited.fileName;link.click()
    window.setTimeout(()=>URL.revokeObjectURL(url),1200)
-   setMessage('تم تصدير GLB والتحقق من وجود القنوات السبع. لا يضمن ذلك تطابق الملامح أو الجودة البصرية على الهاتف.')
+   setMessage('تم تصدير GLB والتحقق من وجود '+wordRigChannels(profile).length+
+    ' قناة مسماة. لا يضمن ذلك تشوهات صحيحة تشريحيًا أو أداءً مناسبًا للهاتف.')
    if(onRiggedGlb){
     // Preserve source provenance but reset prior approvals in the parent.
     onRiggedGlb(new File([binary],audited.fileName,{type:'model/gltf-binary'}))
@@ -353,7 +367,7 @@ export default function SpaktokWordFaceRig({
  return <section dir="rtl" className="space-y-3 rounded-2xl border border-fuchsia-400/35 bg-[#151328] p-4 text-white">
   <div className="flex flex-wrap items-center justify-between gap-3">
    <div>
-    <p className="text-xs font-semibold text-fuchsia-200">Spaktok Word • Face Rig Builder V1</p>
+    <p className="text-xs font-semibold text-fuchsia-200">Spaktok Word • Face Rig Builder V2</p>
     <h3 className="mt-1 text-xl font-bold">ربط شبكة وجه GLB بتعابير اللايف</h3>
    </div>
    <button type="button" disabled={!canOpen}
@@ -364,8 +378,8 @@ export default function SpaktokWordFaceRig({
   </div>
   <p className="text-xs leading-6 text-slate-300">
    محرر تحريك هندسي حقيقي، وليس إسقاط صورة أو توليدًا من الصفر. حدد شبكة الوجه فقط
-   واضبط أماكن العين والفم. ينتج 7 Morph Targets متوافقة مع محرك Avatar Studio.
-   يحتاج النموذج إلى معايرة فنية، خاصة إذا كان الرأس مدمجًا مع الشعر أو الجسم.
+   واضبط أماكن العين والفم. اختر 7 حركات أساسية أو 21 حركة هندسية تجريبية باسم MediaPipe.
+   يتطلب الأمر معايرة ومراجعة فنية؛ هذه ليست شبكة عضلات الوجه التشريحية الكاملة.
   </p>
   {opened&&canOpen&&<div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
    <div className="overflow-hidden rounded-xl border border-white/10 bg-slate-900">
@@ -413,14 +427,26 @@ export default function SpaktokWordFaceRig({
       onChange={e=>{resetPreview();setCalibration(c=>({...c,[setting.key]:Number(e.target.value)}))}}
       className="h-7 w-full accent-violet-400"/>
     </label>)}
+    <label className="block text-xs">نمط تجهيز الوجه
+     <select value={profile}
+      onChange={e=>{resetPreview();setProfile(e.target.value as WordRigProfile);setMode('jawOpen')}}
+      className="mt-1 block w-full rounded-lg border border-white/20 bg-slate-950 p-2">
+      <option value="starter">أساسي — 7 حركات للوجه</option>
+      <option value="expressive">موسّع — 21 حركة هندسية تجريبية</option>
+     </select>
+    </label>
+    {profile==='expressive'&&<p className="text-xs leading-6 text-amber-200">
+     يتطلب النمط الموسّع شبكة وجه لا تتجاوز 22 ألف رأس، ولا ينتج تشريحًا كاملاً
+     أو جميع 51 قناة. اختبر العين والفم والخدين من زوايا متعددة قبل التصدير.
+    </p>}
     <button type="button" onClick={build} disabled={!ready||busy}
      className="w-full rounded-lg bg-violet-600 px-4 py-3 text-sm font-bold disabled:opacity-40">
-     توليد 7 حركات على الشبكة المختارة
+     توليد {wordRigChannels(profile).length} حركة على الشبكة المختارة
     </button>
     {dirty&&<label className="block text-xs">التعبير الذي تريد معاينته
-     <select value={mode} onChange={e=>setMode(e.target.value as WordRigChannel)}
+     <select value={mode} onChange={e=>setMode(e.target.value as WordRigExtendedChannel)}
       className="mt-1 block w-full rounded-lg border border-white/20 bg-slate-950 p-2">
-      {WORD_RIG_CHANNELS.map(k=><option value={k} key={k}>{titles[k]}</option>)}
+      {wordRigChannels(profile).map(k=><option value={k} key={k}>{titles[k]}</option>)}
      </select>
     </label>}
     {dirty&&quality&&<div className="rounded-lg border border-white/15 bg-slate-950 p-3 text-xs">
@@ -465,8 +491,9 @@ export default function SpaktokWordFaceRig({
    قبل التصدير: أكّد حقوق الملف الأصلي وأكمل مراجعة المصدر في Production Director.
   </p>}
   <p className="text-[11px] leading-6 text-slate-400">
-   هذه نسخة Rig بداية تتطلب معايرة اليدوية والمراجعة الحية. ليست Auto-Rig تشريحيًا
-   كاملاً أو 52 تعبير ARKit، ولا تعني أن الشخصية تتطابق مع صورة المرجع.
+   يظل النحت الهندسي معتمدًا على معايرة المستخدم وتوزيع رؤوس شبكة الوجه.
+   إن نمط الـ21 حركة ليس Auto-Rig تشريحيًا ولا يخلق الحركات الـ51 كاملة،
+   ولا يضمن مطابقة الصورة أو جاهزية البث دون اختبار حقيقي على الهاتف.
   </p>
  </section>
 }
