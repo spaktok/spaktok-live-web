@@ -11,6 +11,7 @@ import {hasStudioImageExtension} from '@/lib/filter-engine/reality-image-project
 import RealityImageReference from './reality-image-reference'
 import RealityProductionDirector from './reality-production-director'
 import SpaktokForge from './spaktok-forge'
+import SpaktokAIDirector from './spaktok-ai-director'
 import {
  createStudioProductionPackage,withStudioProductionSource,reviewStudioProduction,
 } from '@/lib/filter-engine/reality-production-pipeline'
@@ -323,6 +324,7 @@ export default function RealityCreatorLab(){
      </a>
     </div>
    </header>
+   <SpaktokAIDirector sourceFile={file} onGeneratedGlb={acceptForgeAsset}/>
    <SpaktokForge sourceFile={file} onGeneratedGlb={acceptForgeAsset}/>
    <RealityProductionDirector file={file} project={production}
     setProject={setProduction}/>
