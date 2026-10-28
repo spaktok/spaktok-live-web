@@ -20,8 +20,7 @@ export function inspectWordRigQuality(
  const count=geometry.getAttribute('position')?.count??0
  const channels=diagnostics.channels
  const warnings:string[]=[]
- const coverage=Object.fromEntries(channels.map(k=>[k,0]))
-  as Record<WordRigExtendedChannel,number>
+ const coverage=Object.fromEntries(channels.map(k=>[k,0])) as Record<WordRigExtendedChannel,number>
  for(let i=0;i<channels.length;i++){
   const channel=channels[i]
   const attr=geometry.morphAttributes.position?.[i]
