@@ -96,8 +96,7 @@ export function buildCalibratedWordFaceRig(
  const base=source.clone()
  const channels=wordRigChannels(profile)
  const deltas=channels.map(()=>new Float32Array(position.count*3))
- const active=Object.fromEntries(WORD_RIG_EXPRESSIVE_CHANNELS.map(k=>[k,0]))
-  as Record<WordRigExtendedChannel,number>
+ const active=Object.fromEntries(WORD_RIG_EXPRESSIVE_CHANNELS.map(k=>[k,0])) as Record<WordRigExtendedChannel,number>
  const eyeLeft=.5-calibration.eyeSeparation/2
  const eyeRight=.5+calibration.eyeSeparation/2
  const strength=calibration.strength
