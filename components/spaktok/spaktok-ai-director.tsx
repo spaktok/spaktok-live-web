@@ -1,0 +1,327 @@
+'use client'
+import {useEffect,useMemo,useState,type ChangeEvent} from 'react'
+import {
+ DIRECTOR_TARGETS,detectDirectorTargets,evaluateDirectorAsset,
+ planSpaktokDirector,type DirectorTarget,type DirectorAssetQA,
+} from '@/lib/filter-engine/spaktok-ai-director'
+import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
+import {saveLocalStudioGlb} from '@/lib/filter-engine/reality-local-asset-handoff'
+
+const TARGET_LABELS:Readonly<Record<DirectorTarget,string>>={
+ avatar:'أفاتار',live:'لايف',filter:'فلتر AR',
+ gift:'هدية Gift',world:'عالم Spaktok',
+}
+const TARGET_DESTINATIONS:Readonly<Record<DirectorTarget,string>>={
+ avatar:'/avatar-studio',live:'/avatar-studio',
+ filter:'/reality-studio',gift:'/gift-studio',
+ world:'/spaktok-world',
+}
+const ISSUE_AR:Readonly<Record<string,string>>={
+ invalid_or_external_glb:'شبكة GLB غير صالحة أو تحتوي على روابط خارجية',
+ mobile_asset_over_15mb:'حجم GLB أكبر من حد تسليم 15MB',
+ mobile_triangle_budget_review:'الشبكة تتجاوز 150 ألف مثلث',
+ mobile_texture_budget_review:'توجد صور خامات كثيرة للهاتف',
+ missing_uv:'خرائط UV غير مكتملة',missing_normals:'Normals ناقصة',
+ missing_pbr:'خامات PBR ناقصة',
+ no_embedded_texture_images:'لا توجد صور خامات مضمّنة في GLB',
+ face_morph_targets_missing:'تعابير الوجه Morph Targets غير موجودة',
+ real_time_tracking_unverified:'تتبع الوجه الحقيقي واللايف غير مختبر',
+ face_anchor_and_occlusion_unverified:'موضع الفلتر والإخفاء خلف الوجه غير معاير',
+ gift_animation_missing:'حركة الهدية لم تُنشأ بعد',
+ world_collision_and_scale_unverified:'تصادم العالم وقياساته غير معايرة',
+ real_android_fps_and_thermal_unverified:'FPS والحرارة على Android لم يُختبرا',
+ rights_and_public_release_unapproved:'النشر العام يحتاج مراجعة الحقوق والجودة',
+}
+const STAGE_NAMES:Readonly<Record<string,string>>={
+ source:'فحص المصدر والحقوق',generation:'توليد أو إعادة استخدام المجسم',
+ geometry:'فحص شبكة GLB',rig:'تجهيز تحريك الوجه',
+ filter:'تثبيت الفلتر والكاميرا', 'gift-animation':'تحريك الهدية',
+ 'world-placement':'تجهيز عنصر العالم','mobile-qa':'اختبار Android',
+ publish:'مراجعة النشر',
+}
+const isImage=(file:File)=>/\.(png|jpe?g|webp)$/i.test(file.name)
+const isGlb=(file:File)=>/\.glb$/i.test(file.name)
+type GPUHealth=Readonly<{
+ enabled:boolean;globalDailyCap:number|null
+}>
+export default function SpaktokAIDirector({
+ sourceFile,onGeneratedGlb,
+}:Readonly<{sourceFile?:File|null;onGeneratedGlb?:(asset:File)=>void}>){
+ const [ownFile,setOwnFile]=useState<File|null>(null)
+ const [description,setDescription]=useState(
+  'حوّل هذه الصورة إلى شخصية 3D يمكن استخدامها كأفاتار وفلتر وفي اللايف')
+ const [targets,setTargets]=useState<DirectorTarget[]>(['avatar','filter','live'])
+ const [rights,setRights]=useState<'original'|'licensed'>('original')
+ const [rightsApproved,setRightsApproved]=useState(false)
+ const [gpuConsent,setGpuConsent]=useState(false)
+ const [transferConsent,setTransferConsent]=useState(false)
+ const [health,setHealth]=useState<GPUHealth|null>(null)
+ const [busy,setBusy]=useState(false)
+ const [asset,setAsset]=useState<File|null>(null)
+ const [qa,setQA]=useState<DirectorAssetQA|null>(null)
+ const [status,setStatus]=useState('')
+ const [show,setShow]=useState(true)
+ const source=ownFile??sourceFile??null
+ const sourceKind=source?(isGlb(source)?'glb':isImage(source)?'image':'none'):'none'
+ const plan=useMemo(()=>planSpaktokDirector({
+  description,targets,source:sourceKind,
+  rightsApproved,gpuAvailable:health?.enabled===true,
+ }),[description,targets,sourceKind,rightsApproved,health])
+ useEffect(()=>{
+  let active=true
+  fetch('/api/spaktok-forge/gpu',{cache:'no-store'})
+   .then(r=>r.ok?r.json():Promise.reject(Error('forge_gpu_health')))
+   .then(x=>{if(active)setHealth({
+    enabled:x.enabled===true,
+    globalDailyCap:typeof x.globalDailyCap==='number'?x.globalDailyCap:null,
+   })})
+   .catch(()=>{if(active)setHealth({enabled:false,globalDailyCap:null})})
+  return()=>{active=false}
+ },[])
+ const select=(event:ChangeEvent<HTMLInputElement>)=>{
+  const file=event.target.files?.[0]??null
+  event.target.value=''
+  if(file&&(!isImage(file)&&!isGlb(file))){
+   setStatus('اختر صورة PNG/JPG/WEBP أو مجسم GLB.')
+   return
+  }
+  if(file&&file.size>(isImage(file)?8:35)*1024*1024){
+   setStatus('الصورة يجب أن تكون أقل من 8MB، وGLB أقل من 35MB.')
+   return
+  }
+  setOwnFile(file);setAsset(null);setQA(null)
+  setRightsApproved(false);setTransferConsent(false);setGpuConsent(false)
+  setStatus(file?'المصدر جاهز للتخطيط، لم يتم رفعه إلى أي خادم.':'')
+ }
+ const toggle=(target:DirectorTarget)=>{
+  setTargets(prev=>prev.includes(target)?
+   prev.filter(x=>x!==target):[...prev,target])
+ }
+ const commitGlb=async(file:File)=>{
+  const bytes=await file.arrayBuffer()
+  const inspection=inspectWordGeneratedGlb(bytes,file.name)
+  const checked=evaluateDirectorAsset(inspection.audit,bytes.byteLength,
+   plan.targets)
+  if(!checked.valid)throw Error('director_failed_glb_qa')
+  setAsset(file);setQA(checked)
+  onGeneratedGlb?.(file)
+  setStatus('اكتمل فحص GLB البنيوي. هذا مسودّة خاصة، وليست أفاتارًا '+
+   'متحركًا أو هدية أو فلترًا أو أصلًا منشورًا تلقائيًا.')
+ }
+ const generate=async()=>{
+  if(busy||!source||!rightsApproved||!plan.targets.length)return
+  setBusy(true);setAsset(null);setQA(null)
+  try{
+   if(sourceKind==='glb'){
+    setStatus('فحص GLB الحالي دون GPU أو رفع إلى مزوّد خارجي…')
+    await commitGlb(source)
+    return
+   }
+   if(sourceKind!=='image')throw Error('director_source_required')
+   if(!health?.enabled)throw Error('director_gpu_disabled')
+   if(!gpuConsent||!transferConsent)
+    throw Error('director_explicit_gpu_and_image_transfer_consent_required')
+   if(source.size<128||source.size>8*1024*1024)
+    throw Error('director_invalid_image_size')
+   setStatus('إرسال مهمة GPU واحدة بعد موافقتك، وتوليد GLB من الصورة…')
+   // Existing gateway enforces signed-in user, one job/user/day, operator
+   // global D1 quota, fixed HTTPS host and a 90s upstream time limit.
+   // The text prompt is used for DESTINATION planning ONLY, not as a
+   // provider image instruction — SF3D does not accept a text prompt.
+   const body=new FormData()
+   body.set('image',source)
+   body.set('rights',rights)
+   body.set('approveCompute','yes')
+   body.set('approveTransfer','yes')
+   const response=await fetch('/api/spaktok-forge/gpu',{
+    method:'POST',body,cache:'no-store',credentials:'same-origin',
+   })
+   if(!response.ok){
+    const data=await response.json().catch(()=>({error:'unknown'}))
+    throw Error(typeof data.error==='string'?data.error:
+     'director_gpu_provider_failed')
+   }
+   const declared=Number(response.headers.get('content-length')??0)
+   if(declared>35*1024*1024)
+    throw Error('director_result_too_large')
+   const output=await response.arrayBuffer()
+   if(output.byteLength>35*1024*1024)
+    throw Error('director_result_too_large')
+   await commitGlb(new File([output],'spaktok-director-ai-result.glb',{
+    type:'model/gltf-binary',
+   }))
+  }catch(error){
+   setStatus('لم تكتمل المهمة: '+(error instanceof Error?error.message:String(error))+
+    '. إذا بدأ تشغيل GPU فالمحاولة قد تُحتسب؛ لا تعاود الإرسال دون فحص الحالة.')
+  }finally{setBusy(false)}
+ }
+ const send=(target:DirectorTarget)=>async()=>{
+  if(!asset||!qa?.previewReady||busy||!rightsApproved)return
+  setBusy(true)
+  try{
+   await saveLocalStudioGlb(asset.name,await asset.arrayBuffer())
+   window.location.assign(TARGET_DESTINATIONS[target])
+  }catch(error){
+   setStatus('تعذّر النقل المحلي: '+String(error)+
+    '. استعمل تنزيل GLB والاستيراد اليدوي.')
+   setBusy(false)
+  }
+ }
+ const download=()=>{
+  if(!asset)return
+  const u=URL.createObjectURL(asset)
+  const a=document.createElement('a')
+  a.href=u;a.download=asset.name;a.click()
+  window.setTimeout(()=>URL.revokeObjectURL(u),1000)
+ }
+ return <section id="ai-director" dir="rtl"
+  className="mx-auto mb-6 max-w-7xl space-y-4 rounded-2xl border border-violet-400/40 bg-[#101b31] p-4 text-white sm:p-5">
+  <div className="flex flex-wrap items-center justify-between gap-3">
+   <div>
+    <p className="text-xs font-bold tracking-widest text-violet-300">
+     SPAKTOK AI DIRECTOR • V1 PRIVATE DRAFT
+    </p>
+    <h2 className="mt-1 text-xl font-black">صورة واحدة → خطة إنتاج لكل أقسام Spaktok</h2>
+   </div>
+   <button type="button" onClick={()=>setShow(x=>!x)}
+    className="rounded-lg border border-white/30 px-3 py-2 text-xs">
+    {show?'إخفاء الأدوات':'فتح أدوات الإنتاج'}
+   </button>
+  </div>
+  <p className="text-xs leading-6 text-slate-300">
+   يحلل طلبك لتوجيه العمل بين الأقسام، ويستخدم GLB الحالي دون GPU أو
+   يرسل صورة واحدة إلى Stable Fast 3D عند تفعيل خادم مرخص وموافقتك.
+   الوصف يحدد الاستخدامات حاليًا، ولا يغير شكل التوليد نفسه.
+   لا يوجد نشر جماهيري تلقائي ولا توليد وجه متحرك دون Rig حقيقي.
+  </p>
+  {show&&<>
+   <div className="grid gap-4 lg:grid-cols-2">
+    <div className="space-y-3">
+     <label className="block text-xs font-semibold">
+      المصدر: صورة أو GLB موجود (يُستخدم ملف Word تلقائيًا إن وُجد)
+      <input type="file"
+       accept=".png,.jpg,.jpeg,.webp,.glb,image/png,image/jpeg,image/webp,model/gltf-binary"
+       onChange={select}
+       className="mt-2 block w-full rounded-xl border border-white/20 bg-slate-950 p-3 text-xs"/>
+     </label>
+     {source&&<p className="break-all text-xs text-cyan-200">
+      {source.name} · {(source.size/1048576).toFixed(2)} MB ·
+      {sourceKind==='glb'?' إعادة استخدام دون GPU':' يتطلب GPU لتوليد 360°'}
+     </p>}
+     <label className="block text-xs font-semibold">ماذا تريد من الشخصية؟
+      <textarea value={description} maxLength={1000}
+       onChange={e=>setDescription(e.target.value)}
+       rows={3} className="mt-2 w-full rounded-xl border border-white/20 bg-slate-950 p-3 text-sm"/>
+     </label>
+     <div className="space-y-2">
+      <p className="text-xs font-semibold">الأقسام التي تريد استخدام المجسم فيها</p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+       {DIRECTOR_TARGETS.map(target=><label key={target}
+        className="flex items-center gap-2 rounded-lg border border-white/15 bg-slate-950/60 p-2 text-xs">
+        <input type="checkbox" checked={targets.includes(target)}
+         onChange={()=>toggle(target)} className="accent-violet-400"/>
+        {TARGET_LABELS[target]}
+       </label>)}
+      </div>
+      {!!detectDirectorTargets(description).length&&<button type="button"
+       onClick={()=>setTargets([...detectDirectorTargets(description)])}
+       className="text-xs text-violet-200 underline">
+       تحديد الأقسام تلقائيًا من الوصف
+      </button>}
+     </div>
+    </div>
+    <div className="space-y-3">
+     <div className="rounded-xl border border-white/15 bg-slate-950/60 p-3 text-xs">
+      <p className="font-semibold">خطة الإنتاج المبدئية</p>
+      <p className="mt-2 text-cyan-200">
+       GPU: {plan.estimatedGpuJobs} مهمة ·
+       {sourceKind==='glb'?' إعادة استعمال GLB':
+        health?.enabled?' GPU مرخص متصل':' GPU متوقف'}
+      </p>
+      {plan.stages.map(step=><div key={step.id}
+       className="mt-2 flex items-start justify-between gap-3">
+       <span>{STAGE_NAMES[step.id]}</span>
+       <span className={step.status==='ready'?'text-emerald-300':
+        step.status==='blocked'?'text-rose-300':'text-amber-300'}>
+        {step.status==='ready'?'مبدئي':
+         step.status==='blocked'?'محجوب':'يحتاج عملًا'}
+       </span>
+      </div>)}
+     </div>
+     <label className="block text-xs">صفة حقوق المصدر
+      <select value={rights} onChange={e=>setRights(e.target.value as 'original'|'licensed')}
+       className="mt-2 block w-full rounded-lg border border-white/20 bg-slate-950 p-2">
+       <option value="original">أنشأته بنفسي وأملك حق استخدامه</option>
+       <option value="licensed">أملك ترخيصًا يسمح بالتحويل والاستخدام</option>
+      </select>
+     </label>
+     <label className="flex items-start gap-2 text-xs leading-5">
+      <input type="checkbox" checked={rightsApproved}
+       onChange={e=>setRightsApproved(e.target.checked)} className="mt-1"/>
+      أؤكد حقوق استخدام الصورة أو GLB وتحويله إلى أصل خاص للتجربة
+     </label>
+     {sourceKind==='image'&&<div className="space-y-2 rounded-lg border border-amber-400/30 bg-amber-950/20 p-3">
+      <p className="text-xs text-amber-100">
+       {health?.enabled?'الإنشاء الكامل GPU متصل لكنه قد يكون مدفوعًا للمشغّل.':
+        'محرك AI 360° غير متصل بعد؛ يمكن إنشاء خطة أو استيراد GLB مجاني الآن.'}
+      </p>
+      {health?.enabled&&<>
+       <label className="flex items-start gap-2 text-xs">
+        <input type="checkbox" checked={transferConsent}
+         onChange={e=>setTransferConsent(e.target.checked)}/>
+        أوافق على نقل صورتي إلى خادم GPU الخاص بالمشغّل
+       </label>
+       <label className="flex items-start gap-2 text-xs">
+        <input type="checkbox" checked={gpuConsent}
+         onChange={e=>setGpuConsent(e.target.checked)}/>
+        أوافق صراحةً على استهلاك مهمة GPU واحدة من الحصة المدفوعة
+       </label>
+      </>}
+     </div>}
+     <button type="button" onClick={()=>void generate()}
+      disabled={busy||!rightsApproved||!source||!plan.targets.length||
+       (sourceKind==='image'&&(!health?.enabled||!gpuConsent||!transferConsent))||
+       sourceKind==='none'}
+      className="w-full rounded-xl bg-violet-500 px-4 py-3 font-bold text-white disabled:opacity-40">
+      {busy?'يتم العمل…':sourceKind==='glb'?
+       'فحص المجسم وتجهيزه للأقسام — مجاني':
+       'بدء مهمة AI 360° واحدة بعد الموافقة'}
+     </button>
+    </div>
+   </div>
+   {qa&&asset&&<div className="space-y-3 rounded-xl border border-cyan-400/25 p-3">
+    <p className="font-semibold text-cyan-200">
+     الملف الناتج: {asset.name} · {qa.triangles.toLocaleString()} مثلث
+    </p>
+    <p className="text-xs">
+     {qa.previewReady?'جاهز للمعاينة التقنية الخاصة فقط':
+      'يلزم تحسين الشبكة/الملف قبل تسليمه إلى معاينات الهاتف'}
+     {' · '}Morph Targets: {qa.morphs}
+     {' · '}صور الخامات: {qa.textureImages}
+    </p>
+    <div className="flex flex-wrap gap-2">
+     <button type="button" onClick={download}
+      className="rounded-lg border border-white/25 px-3 py-2 text-xs">
+      تنزيل GLB
+     </button>
+     {plan.targets.map(target=><button key={target} type="button"
+      disabled={!qa.previewReady||busy||!rightsApproved}
+      onClick={()=>void send(target)()}
+      className="rounded-lg bg-indigo-600 px-3 py-2 text-xs disabled:opacity-40">
+      معاينة {TARGET_LABELS[target]}
+     </button>)}
+    </div>
+    {!!qa.issues.length&&<div className="text-xs leading-6 text-amber-100">
+     <p className="font-semibold">ما ينقص قبل الاستخدام أمام الجمهور:</p>
+     <p>{qa.issues.map(issue=>ISSUE_AR[issue]??issue).join(' · ')}</p>
+    </div>}
+   </div>}
+   {!!status&&<p role="status" className="text-xs leading-6 text-cyan-100">{status}</p>}
+   <p className="text-[11px] leading-5 text-slate-400">
+    ملفات النقل المؤقت محفوظة في IndexedDB داخل هذا المتصفح، لا تُنشَر في
+    Spaktok ولا تُزامَن مع تطبيق Android. لا تشارك الجهاز قبل حذف النسخ المحلية.
+    النشر والهدايا المدفوعة وAgora live تحتاج تكاملًا ومراجعة مستقلين.
+   </p>
+  </>}
+ </section>
+}
