@@ -59,11 +59,11 @@ async def health():
 def _make_glb(photo: bytes) -> bytes:
     """Inference is serialized to avoid OOM and uncontrolled GPU concurrency."""
     with Image.open(io.BytesIO(photo)) as source:
-        source = ImageOps.exif_transpose(source)
         if source.width < 64 or source.height < 64 or (
             source.width * source.height > 4096 * 4096
         ):
             raise ValueError("unsupported dimensions")
+        source = ImageOps.exif_transpose(source)
         rgba = source.convert("RGBA")
     prepared = remove_background(rgba, _rembg_session)
     prepared = resize_foreground(prepared, .85)
