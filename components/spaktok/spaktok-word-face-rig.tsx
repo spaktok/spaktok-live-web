@@ -6,6 +6,8 @@ import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js'
 import {auditStudioGlbBytes} from '@/lib/filter-engine/reality-production-glb-audit'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
+import {inspectWordRigQuality,rankWordFaceMeshes,verifyWordRigGlbChannels,
+ type WordRigQualityReport} from '@/lib/filter-engine/spaktok-word-rig-qa'
 import {
  buildCalibratedWordFaceRig,eligibleWordRigMeshes,
  DEFAULT_WORD_RIG_CALIBRATION,WORD_RIG_CHANNELS,
@@ -73,6 +75,12 @@ export default function SpaktokWordFaceRig({
  const [calibration,setCalibration]=useState<WordRigCalibration>(DEFAULT_WORD_RIG_CALIBRATION)
  const [meshIndex,setMeshIndex]=useState(0)
  const [meshLabels,setMeshLabels]=useState<string[]>([])
+ const [suggestions,setSuggestions]=useState<ReadonlyArray<{
+  index:number;score:number;reason:string
+ }>>([])
+ const [quality,setQuality]=useState<WordRigQualityReport|null>(null)
+ const [visualApproved,setVisualApproved]=useState(false)
+ const [playback,setPlayback]=useState(false)
  const [mode,setMode]=useState<WordRigChannel>('jawOpen')
  const [intensity,setIntensity]=useState(.75)
  const [yaw,setYaw]=useState(0)
@@ -93,7 +101,7 @@ export default function SpaktokWordFaceRig({
  },[calibration.front])
  useEffect(()=>{yawRef.current=yaw},[yaw])
  useEffect(()=>{
-  if(!canOpen){setOpened(false);setReady(false)}
+  if(!canOpen){setOpened(false);setReady(false);setPlayback(false);setVisualApproved(false)}
  },[canOpen,file])
  useEffect(()=>{
   if(!opened||!canOpen||!canvasRef.current||!file)return
@@ -132,7 +140,8 @@ export default function SpaktokWordFaceRig({
    s.raf=requestAnimationFrame(tick)
   }
   s.raf=requestAnimationFrame(tick)
-  setReady(false);setMeshLabels([]);setStats('')
+  setReady(false);setMeshLabels([]);setStats('');setQuality(null)
+  setVisualApproved(false);setPlayback(false);setSuggestions([])
   setMessage('فحص GLB المحلي قبل إنشاء أي حركة وجه…')
   ;(async()=>{
    try{
@@ -164,9 +173,13 @@ export default function SpaktokWordFaceRig({
      throw Error('لم أجد شبكة وجه يمكن تعديلها. تحقق من عدد نقاط Mesh وحركاته الموجودة.')
     setMeshLabels(s.meshes.map((m,i)=>
      (m.name||'Mesh '+(i+1))+' · '+m.geometry.getAttribute('position').count+' رأس'))
-    setMeshIndex(0)
+    const ranking=rankWordFaceMeshes(s.meshes)
+    setSuggestions(ranking)
+    setMeshIndex(ranking[0]?.score>=25?ranking[0].index:0)
     setReady(true)
-    setMessage('اختر شبكة الوجه فقط، ثم اضبط العينين والفم وجرّب النحت. لا تُعدل الشعر أو الملابس.')
+    setMessage(ranking[0]?.score>=25?
+     'اقترح Word شبكة محتملة للوجه اعتمادًا على الاسم والأبعاد. يجب مراجعتها بصريًا قبل النحت.':
+     'لم أجد وجهًا واضحًا تلقائيًا. اختر شبكة الوجه يدويًا وتجنب الشعر والملابس.')
    }catch(e){
     if(!disposed)setMessage(e instanceof Error?e.message:'تعذّر تحميل المجسم')
    }
@@ -190,7 +203,8 @@ export default function SpaktokWordFaceRig({
    s.modified.dispose()
   }
   if(s){s.preview=null;s.modified=null}
-  setDirty(false);setStats('')
+  setDirty(false);setStats('');setQuality(null)
+  setVisualApproved(false);setPlayback(false)
  }
  const build=()=>{
   const s=sessionRef.current
@@ -205,6 +219,9 @@ export default function SpaktokWordFaceRig({
    selected.geometry=result.geometry
    selected.updateMorphTargets()
    s.preview=selected;s.modified=result.geometry
+   const inspection=inspectWordRigQuality(result.geometry,result.diagnostics)
+   setQuality(inspection)
+   setVisualApproved(false)
    setDirty(true)
    setStats(
     'رؤوس الشبكة: '+result.diagnostics.vertices.toLocaleString('en-US')+
@@ -213,7 +230,9 @@ export default function SpaktokWordFaceRig({
     (result.diagnostics.warnings.length?
      ' · تحذيرات: '+result.diagnostics.warnings.join('، '):'')
    )
-   setMessage('تم إنشاء 7 Morph Targets على شبكة الوجه المحددة. حرّك منزلق التعبير ولفّ المجسم لتقييم التشوه. لا يُعتبر الوجه جاهزًا للإنتاج حتى تنجح المراجعة البصرية.')
+   setMessage(inspection.status==='needs-recalibration'?
+    'هناك تحذيرات هندسية. عدّل معايرة العينين والفم وافحص القنوات قبل اعتماد التصدير.':
+    'تم إنشاء سبع حركات للشبكة. اختبر كل تعبير بصريًا وراجع مواضع الوجه قبل التصدير.')
   }catch(e){setMessage(e instanceof Error?e.message:'فشل معايرة Rig')}
  }
  useEffect(()=>{
@@ -225,6 +244,17 @@ export default function SpaktokWordFaceRig({
   if(typeof index==='number'&&index<influences.length)
    influences[index]=intensity
  },[mode,intensity,dirty,stats])
+ useEffect(()=>{
+  if(!playback||!dirty)return
+  let index=0
+  setMode(WORD_RIG_CHANNELS[index])
+  setIntensity(.85)
+  const timer=window.setInterval(()=>{
+   index=(index+1)%WORD_RIG_CHANNELS.length
+   setMode(WORD_RIG_CHANNELS[index])
+  },1200)
+  return()=>window.clearInterval(timer)
+ },[playback,dirty])
  const exportRig=async(destination:'download'|'avatar')=>{
   const s=sessionRef.current
   if(!s?.preview||!s.modified||!dirty||busy)return
@@ -232,6 +262,11 @@ export default function SpaktokWordFaceRig({
    setMessage('يجب مراجعة حقوق GLB المصدر وتأكيدها قبل تصدير نسخة معدلة.')
    return
   }
+  if(!visualApproved||quality?.status!=='ready-for-visual-review'){
+   setMessage('لا يمكن التصدير قبل تصحيح تحذيرات الحركة واعتماد المراجعة البصرية اليدوية.')
+   return
+  }
+  setPlayback(false)
   setBusy(true)
   setMessage('تصدير GLB مع Morph Targets ثم إعادة فحصه…')
   try{
@@ -244,6 +279,9 @@ export default function SpaktokWordFaceRig({
    const audited=inspectWordGeneratedGlb(binary,'spaktok-word-face-rig.glb')
    if(audited.audit.rigTargets<WORD_RIG_CHANNELS.length)
     throw Error('word_rig_export_lost_morph_targets')
+   const names=verifyWordRigGlbChannels(binary)
+   if(names.missing.length)
+    throw Error('word_rig_export_missing_names_'+names.missing.join('_'))
    if(destination==='avatar'){
     if(binary.byteLength>REALITY_HANDOFF_MAX_BYTES)
      throw Error('ملف GLB يتجاوز 15MB؛ حسّن الخامات والهندسة أولًا')
@@ -306,6 +344,11 @@ export default function SpaktokWordFaceRig({
       {meshLabels.map((name,i)=><option key={i} value={i}>{name}</option>)}
      </select>
     </label>
+    {suggestions.length>0&&<p className="rounded-lg border border-white/10 p-2 text-[11px] leading-5 text-slate-300">
+     اقتراح الشبكة: {suggestions.find(s=>s.index===meshIndex)?.score??0} نقطة تقييم تقريبية.
+     {suggestions.find(s=>s.index===meshIndex)?.reason??'افحصه بصريًا'}
+     <span className="block text-amber-200">الاقتراح لا يحدد وجهًا تشريحيًا آليًا.</span>
+    </p>}
     <label className="block text-xs">جهة الوجه الأمامية
      <select value={calibration.front}
       onChange={e=>{resetPreview();setCalibration(c=>({...c,front:e.target.value as WordRigCalibration['front']}))}}
@@ -332,13 +375,36 @@ export default function SpaktokWordFaceRig({
       {WORD_RIG_CHANNELS.map(k=><option value={k} key={k}>{titles[k]}</option>)}
      </select>
     </label>}
+    {dirty&&quality&&<div className="rounded-lg border border-white/15 bg-slate-950 p-3 text-xs">
+     <p className="font-bold">{quality.status==='needs-recalibration'?
+      'تحتاج المعايرة إلى تصحيح':'الفحص الهندسي الأولي جاهز للمراجعة البصرية'}</p>
+     <div className="mt-2 grid grid-cols-2 gap-1">
+      {quality.channelNames.map(k=><span key={k} className="text-slate-300">
+       {titles[k]}: {quality.coverage[k]}% من نقاط الشبكة
+      </span>)}
+     </div>
+     {quality.warnings.map(w=><p key={w} className="mt-1 text-amber-200">{w}</p>)}
+     <button type="button" onClick={()=>setPlayback(v=>!v)}
+      className="mt-3 rounded-lg border border-cyan-300/35 px-3 py-2 text-cyan-100">
+      {playback?'إيقاف تشغيل الحركات':'تشغيل جميع الحركات بالتتابع'}
+     </button>
+     <label className="mt-3 flex items-start gap-2 leading-6 text-white/80">
+      <input type="checkbox" checked={visualApproved}
+       onChange={e=>setVisualApproved(e.target.checked)}
+       disabled={quality.status!=='ready-for-visual-review'} className="mt-1"/>
+      راجعت التعابير من الأمام والجانبين ولم ألاحظ تشوه العين أو الفم أو الشعر.
+      هذه مراجعة ذاتية وليست شهادة جاهزية للبث.
+     </label>
+    </div>}
     <button type="button" onClick={()=>void exportRig('download')}
-     disabled={!dirty||busy||!approved}
+     disabled={!dirty||busy||!approved||!visualApproved||
+      quality?.status!=='ready-for-visual-review'}
      className="w-full rounded-lg bg-cyan-600 px-3 py-3 text-xs font-bold disabled:opacity-40">
      تصدير Rigged GLB (مع فحص الشبكة)
     </button>
     <button type="button" onClick={()=>void exportRig('avatar')}
-     disabled={!dirty||busy||!approved}
+     disabled={!dirty||busy||!approved||!visualApproved||
+      quality?.status!=='ready-for-visual-review'}
      className="w-full rounded-lg border border-cyan-300/60 px-3 py-3 text-xs font-bold disabled:opacity-40">
      اختبار المجسم مباشرة في Avatar Studio
     </button>
