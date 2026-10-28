@@ -63,6 +63,16 @@ async function update(env,id,status,code='',extra={}){
    ' WHERE id=?').bind(...vals).run()
 }
 async function submitJob(env,id){
+ // A queued message must never spend after an operator disables billing.
+ if(env.WORD_PAID_ENABLED!=='true'||!env.RODIN_API_KEY||
+  !env.RODIN_FIXED_JOB_CREDITS){
+  const paused=await env.WORD_DB.prepare(
+   "UPDATE word_rodin_jobs SET status='failed',error_code='paid_generation_disabled',"+
+   "updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='queued' RETURNING source_key"
+  ).bind(id).first()
+  if(paused?.source_key)await env.WORD_ASSETS.delete(paused.source_key)
+  return
+ }
  // Atomically claim. A crash during POST is submission_uncertain, NEVER
  // silently retry a paid generation and charge twice.
  const claimed=await env.WORD_DB.prepare(
@@ -184,7 +194,9 @@ export default {
   if(!match)return json({error:'not_found'},404)
   const isCreate=req.method==='POST'&&!match[1]
   const isRead=req.method==='GET'&&match[1]
-  if(!isCreate&&!isRead)return json({error:'method_not_allowed'},405)
+  const isDelete=req.method==='DELETE'&&match[1]&&!match[2]
+  if(!isCreate&&!isRead&&!isDelete)
+   return json({error:'method_not_allowed'},405)
   if(!env.WORD_DB||!env.WORD_ASSETS||!env.WORD_QUEUE||!env.WORD_SIGNING_SECRET)
    return json({error:'word_service_unconfigured'},503)
   let image=null
@@ -240,10 +252,29 @@ export default {
    return json({id,status:'queued',billingApprovalRecorded:true},202)
   }
   const row=await env.WORD_DB.prepare(
-   'SELECT id,status,error_code,result_key,created_at,updated_at FROM word_rodin_jobs '+
+   'SELECT id,status,error_code,result_key,source_key,created_at,updated_at FROM word_rodin_jobs '+
    'WHERE id=? AND user_id=?'
   ).bind(match[1],auth.owner).first()
   if(!row)return json({error:'not_found'},404)
+  if(isDelete){
+   // A submitted vendor job cannot be reliably cancelled or refunded;
+   // refuse deletion until results are terminal. Queued jobs are claim-safe.
+   if(!['queued','failed','needs_review','submission_uncertain'].includes(row.status))
+    return json({error:'vendor_task_in_progress_cannot_cancel_or_refund'},409)
+   const result=await env.WORD_DB.prepare(
+    "UPDATE word_rodin_jobs SET status='failed',"+
+    "error_code='creator_assets_deleted',updated_at=CURRENT_TIMESTAMP "+
+    "WHERE id=? AND user_id=? AND status IN ('queued','failed','needs_review','submission_uncertain') "+
+    "RETURNING id"
+   ).bind(match[1],auth.owner).first()
+   if(!result)return json({error:'task_not_deletable'},409)
+   await Promise.allSettled([
+    env.WORD_ASSETS.delete(row.source_key),
+    ...(row.result_key?[env.WORD_ASSETS.delete(row.result_key)]:[]),
+   ])
+   return json({deleted:true,remoteGenerationCancelled:false,
+    refundPromised:false,retainedLedger:true})
+  }
   if(match[2]==='asset'){
    if(row.status!=='needs_review'||!row.result_key)
     return json({error:'asset_not_ready'},409)
