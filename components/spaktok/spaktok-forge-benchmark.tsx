@@ -7,8 +7,10 @@ import {auditStudioGlbBytes} from '@/lib/filter-engine/reality-production-glb-au
 import {repairForgeGlbNormals} from '@/lib/filter-engine/spaktok-forge-normals-repair'
 import {
  summarizeForgeCandidate,compareForgeManualRatings,
+ assessForgeComparisonTrust,
  FORGE_BENCHMARK_PREVIEW_MAX_BYTES,
  type ForgeCandidate,type ForgeManualReview,type ForgeTechnicalSnapshot,
+ type ForgeGenerationMethod,type ForgeSourceMatch,
 } from '@/lib/filter-engine/spaktok-forge-benchmark'
 
 const EMPTY_REVIEW:ForgeManualReview={
@@ -148,6 +150,9 @@ export default function SpaktokForgeBenchmark({
  const [forge,setForge]=useState<State>({file:null,stats:null,error:''})
  const [rReview,setRReview]=useState<ForgeManualReview>(EMPTY_REVIEW)
  const [fReview,setFReview]=useState<ForgeManualReview>(EMPTY_REVIEW)
+ const [rodinMethod,setRodinMethod]=useState<ForgeGenerationMethod>('unknown')
+ const [forgeMethod,setForgeMethod]=useState<ForgeGenerationMethod>('local-2.5d-relief')
+ const [sourceMatch,setSourceMatch]=useState<ForgeSourceMatch>('unknown')
  const setFile=(engine:ForgeCandidate,event:ChangeEvent<HTMLInputElement>)=>{
   const file=event.target.files?.[0]??null
   event.target.value=''
@@ -202,6 +207,10 @@ export default function SpaktokForgeBenchmark({
   window.setTimeout(()=>URL.revokeObjectURL(url),1500)
  }
  const verdict=compareForgeManualRatings(rReview,fReview)
+ const evidence=rodin.stats&&forge.stats?
+  assessForgeComparisonTrust(rodin.stats,forge.stats,{
+   rodinMethod,forgeMethod,sourceMatch,
+  }):null
  const exportEvidence=()=>{
   if(!rodin.stats||!forge.stats)return
   const record={
@@ -210,6 +219,12 @@ export default function SpaktokForgeBenchmark({
    note:'Single-rater subjective comparison; not proof of model superiority or live readiness',
    rodin:rodin.stats,forge:forge.stats,
    human:{rodin:rReview,forge:fReview,verdict},
+   comparison:{
+    sourceMatch,rodinMethod,forgeMethod,
+    comparable:evidence?.comparable??false,
+    warnings:evidence?.reasons??[],
+    note:'Technical readiness does not measure visual quality, real device FPS, or rig suitability',
+   },
   }
   const blob=new Blob([JSON.stringify(record,null,2)],
    {type:'application/json'})
@@ -236,6 +251,35 @@ export default function SpaktokForgeBenchmark({
    تثبت التفوق البصري.
   </p>
   {open&&<>
+   <div className="grid gap-3 rounded-xl border border-amber-400/25 bg-amber-950/10 p-3 md:grid-cols-3">
+    <label className="block text-xs">هل استخدمت الصورة الأصلية نفسها؟
+     <select value={sourceMatch}
+      onChange={e=>setSourceMatch(e.target.value as ForgeSourceMatch)}
+      className="mt-2 block w-full rounded-lg border border-white/20 bg-slate-900 p-2">
+      <option value="unknown">لم أتحقق</option>
+      <option value="same">نعم، الصورة نفسها</option>
+      <option value="different">لا، صورتان مختلفتان</option>
+     </select>
+    </label>
+    <label className="block text-xs">طريقة إنشاء Rodin
+     <select value={rodinMethod}
+      onChange={e=>setRodinMethod(e.target.value as ForgeGenerationMethod)}
+      className="mt-2 block w-full rounded-lg border border-white/20 bg-slate-900 p-2">
+      <option value="unknown">غير مؤكدة</option>
+      <option value="full-360-ai">AI ثلاثي الأبعاد 360°</option>
+      <option value="local-2.5d-relief">سطح بارز 2.5D</option>
+     </select>
+    </label>
+    <label className="block text-xs">طريقة إنشاء Forge
+     <select value={forgeMethod}
+      onChange={e=>setForgeMethod(e.target.value as ForgeGenerationMethod)}
+      className="mt-2 block w-full rounded-lg border border-white/20 bg-slate-900 p-2">
+      <option value="local-2.5d-relief">Forge المحلي 2.5D</option>
+      <option value="full-360-ai">Forge AI 360°</option>
+      <option value="unknown">غير مؤكدة</option>
+     </select>
+    </label>
+   </div>
    <div className="grid gap-4 md:grid-cols-2">
     {([
      ['rodin','Rodin',rodin] as const,
@@ -323,6 +367,20 @@ export default function SpaktokForgeBenchmark({
     </div>)}
    </div>
    {rodin.stats&&forge.stats&&<div className="space-y-2 text-xs">
+    <p className="font-semibold text-amber-200">
+     {evidence?.comparable?
+      'الشروط المصرّح بها تسمح بمقارنة مبدئية؛ يلزم تقييم بصري مستقل وأداء هاتف فعلي.':
+      'هذه مقارنة تقنية وتقييم شخصي، وليست تجربة جودة عادلة بين محركي 360°.'}
+    </p>
+    {!!evidence?.missingTextureImages.length&&
+     <p className="leading-5 text-amber-200">
+      تنبيه: أحد الملفات لا يتضمن صور خامات مضمّنة. التقييم الشخصي للخامات
+      قد يكون مبنيًا على معاينة أخرى، وليس محتويات GLB الحالي.
+      الملفات: {evidence.missingTextureImages.join(' · ')}
+     </p>}
+    {!!evidence?.reasons.length&&<p className="text-slate-300">
+     تنبيهات المقارنة: {evidence.reasons.join(' · ')}
+    </p>}
     <p className="text-slate-200">
      {verdict==='unrated'?'أكمل التقييمات الأربعة لكلا النموذجين لمقارنة الشكل.':
       verdict==='tie'?'تقييمك الشخصي متعادل بين النموذجين.':
