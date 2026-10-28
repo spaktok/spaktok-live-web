@@ -36,7 +36,7 @@ describe('Spaktok Word Cloudflare paid generation safety',()=>{
   const expires=String(Math.floor(Date.now()/1000)+50)
   const path='/v1/jobs/'+id
   const signature=createHmac('sha256',secret)
-   .update(['DELETE',path,owner,expires,'',''].join('\\n')).digest('hex')
+   .update(['DELETE',path,owner,expires,'',''].join('\n')).digest('hex')
   const database={
    prepare:()=>({bind:()=>({first:async()=>({
     id,status:'processing',source_key:'private/source',result_key:null,
@@ -60,7 +60,7 @@ describe('Spaktok Word Cloudflare paid generation safety',()=>{
    tier:'Gen-2.5-Medium',mesh:'Quad',quality:'medium',material:'PBR'}
   const info=Buffer.from(JSON.stringify(metadata)).toString('base64url')
   const digest=createHash('sha256').update(source).digest('hex')
-  const payload=['POST','/v1/jobs',owner,expires,digest,info].join('\\n')
+  const payload=['POST','/v1/jobs',owner,expires,digest,info].join('\n')
   const sig=createHmac('sha256',secret).update(payload).digest('hex')
   const response=await worker.fetch(new Request(endpoint+'/v1/jobs',{
    method:'POST',headers:{
