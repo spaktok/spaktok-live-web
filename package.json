@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node scripts/build-couture-glb.mjs && next build",
+    "build": "node scripts/build-couture-glb.mjs && npm run test:word:gate && next build",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
@@ -12,6 +12,7 @@
     "cf:preview": "wrangler dev",
     "cf:deploy": "vinext deploy",
     "test": "vitest run --config vitest.config.ts",
+    "test:word:gate": "vitest run --config vitest.config.ts lib/filter-engine/spaktok-word-face-rig.test.ts lib/filter-engine/spaktok-word-import.test.ts lib/filter-engine/spaktok-word-cloudflare.test.ts",
     "test:d1": "vitest run --config vitest.config.ts lib/cloudflare/d1-repository.test.ts",
     "test:cloudflare": "vitest run --config vitest.config.ts lib/cloudflare",
     "asset:crown": "node scripts/build-couture-glb.mjs"
