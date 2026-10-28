@@ -71,7 +71,8 @@ export default function SpaktokAIDirector({
  const plan=useMemo(()=>planSpaktokDirector({
   description,targets,source:sourceKind,
   rightsApproved,gpuAvailable:health?.enabled===true,
- }),[description,targets,sourceKind,rightsApproved,health])
+  computeApproved:gpuConsent,transferApproved:transferConsent,
+ }),[description,targets,sourceKind,rightsApproved,health,gpuConsent,transferConsent])
  useEffect(()=>{
   // Word/Studio can replace the source without going through this picker.
   // Never carry an earlier rights/paid-compute approval to that new asset.
