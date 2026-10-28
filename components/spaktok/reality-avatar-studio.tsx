@@ -463,6 +463,16 @@ export default function RealityAvatarStudio(){
   }catch(error){setMessage('تعذر جلب المجسم المحلي: '+String(error))}
   finally{setHandoffBusy(false)}
  }
+ const autoImportFromDirectorRef=useRef(false)
+ useEffect(()=>{
+  if(!autoImportFromDirectorRef.current&&
+   new URLSearchParams(window.location.search).get('from')==='ai-director'){
+   autoImportFromDirectorRef.current=true
+   void importFromProduction()
+  }
+ // Navigate once from user-approved private AI Director preview handoff.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[])
  const selectLuxeAvatar=(style:LuxeAvatarStyle)=>{
   const state=stateRef.current
   if(!state)return
