@@ -10,6 +10,7 @@ import {buildCanonicalRetarget,parseCanonicalOBJ} from '@/lib/filter-engine/real
 import {hasStudioImageExtension} from '@/lib/filter-engine/reality-image-projection'
 import RealityImageReference from './reality-image-reference'
 import RealityProductionDirector from './reality-production-director'
+import SpaktokForge from './spaktok-forge'
 import {
  createStudioProductionPackage,withStudioProductionSource,reviewStudioProduction,
 } from '@/lib/filter-engine/reality-production-pipeline'
@@ -175,6 +176,13 @@ export default function RealityCreatorLab(){
   setName(next.name.replace(/\.(glb|obj|png|jpe?g|webp)$/i,'').replace(/[_-]/g,' '))
   setPivot([0,0,0]);setSize(null)
  }
+ const acceptForgeAsset=(next:File)=>{
+  setFile(next)
+  setProduction(prev=>withStudioProductionSource(prev,next.name,next.size,'glb'))
+  setName(next.name.replace(/\.glb$/i,''))
+  setStatus('دخل GLB الناتج إلى Reality Studio. يلزم مراجعة الحقوق والنحت وحجم الفلتر قبل النشر.')
+  setPivot([0,0,0]);setSize(null)
+ }
  const numberEditor=(title:string,value:Vec3,apply:(v:Vec3)=>void)=>(
   <div className="space-y-2">
    <p className="text-sm font-semibold text-white">{title}</p>
@@ -315,6 +323,7 @@ export default function RealityCreatorLab(){
      </a>
     </div>
    </header>
+   <SpaktokForge sourceFile={file} onGeneratedGlb={acceptForgeAsset}/>
    <RealityProductionDirector file={file} project={production}
     setProject={setProduction}/>
    {file&&hasStudioImageExtension(file.name)?
