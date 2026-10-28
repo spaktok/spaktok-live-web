@@ -444,6 +444,10 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
           <button onClick={isLive ? () => setIsLive(false) : onClose} className="flex h-10 w-10 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur" aria-label={s('close')}>
             <X className="h-5 w-5" />
           </button>
+          {!camera.recording&&!captured&&<a href="/spaktok-word#ai-director"
+           className="rounded-full border border-violet-300/60 bg-[#201045]/80 px-3 py-2 text-xs font-semibold text-white backdrop-blur">
+           AI 3D Studio
+          </a>}
 
           {isLive ? (
             <div className="flex items-center gap-2">
