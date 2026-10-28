@@ -227,18 +227,22 @@ export default {
     'image/png':bytes[0]===255&&bytes[1]===216?'image/jpeg':null
    if(!mime)return json({error:'only_png_jpeg_source_supported'},415)
    const existing=await env.WORD_DB.prepare(
-    'SELECT id,status FROM word_rodin_jobs WHERE user_id=? AND idempotency_key=?'
+    'SELECT id,status,source_sha256 FROM word_rodin_jobs WHERE user_id=? AND idempotency_key=?'
    ).bind(auth.owner,v.idempotency).first()
-   if(existing)return json({id:existing.id,status:existing.status,duplicate:true},200)
+   if(existing){
+    if(existing.source_sha256!==digest)
+     return json({error:'idempotency_key_reused_for_different_image'},409)
+    return json({id:existing.id,status:existing.status,duplicate:true},200)
+   }
    const id=crypto.randomUUID(),key='word/rodin/'+auth.owner+'/'+id+'/source'
    const result=await env.WORD_DB.prepare(
     "INSERT INTO word_rodin_jobs(id,user_id,idempotency_key,status,"+
-    "tier,mesh_mode,quality,material,rights,approved_credits,source_key,source_type,source_bytes) "+
-    "SELECT ?,?,?,'queued',?,?,?,?,?,?,?,?,? WHERE "+
+    "tier,mesh_mode,quality,material,rights,approved_credits,source_key,source_type,source_bytes,source_sha256) "+
+    "SELECT ?,?,?,'queued',?,?,?,?,?,?,?,?,?,? WHERE "+
     "(SELECT COUNT(*) FROM word_rodin_jobs WHERE user_id=? AND "+
     "created_at>=datetime('now','-1 day'))<3 RETURNING id"
    ).bind(id,auth.owner,v.idempotency,v.tier,v.mesh,v.quality,v.material,
-    v.rights,v.approvedCredits,key,mime,bytes.length,auth.owner).first()
+    v.rights,v.approvedCredits,key,mime,bytes.length,digest,auth.owner).first()
    if(!result)return json({error:'daily_job_limit'},429)
    try{
     await env.WORD_ASSETS.put(key,image,{httpMetadata:{contentType:mime},
@@ -268,10 +272,15 @@ export default {
     "RETURNING id"
    ).bind(match[1],auth.owner).first()
    if(!result)return json({error:'task_not_deletable'},409)
-   await Promise.allSettled([
+   const outcomes=await Promise.allSettled([
     env.WORD_ASSETS.delete(row.source_key),
     ...(row.result_key?[env.WORD_ASSETS.delete(row.result_key)]:[]),
    ])
+   if(outcomes.some(item=>item.status==='rejected')){
+    await update(env,row.id,'failed','creator_delete_partial')
+    return json({deleted:false,error:'private_storage_delete_partial',
+     remoteGenerationCancelled:false},503)
+   }
    return json({deleted:true,remoteGenerationCancelled:false,
     refundPromised:false,retainedLedger:true})
   }
