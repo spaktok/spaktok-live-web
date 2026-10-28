@@ -23,6 +23,7 @@ type RigSession={
  model:THREE.Group;meshes:THREE.Mesh[]
  sourceGeometries:Map<THREE.Mesh,THREE.BufferGeometry>
  preview:THREE.Mesh|null;modified:THREE.BufferGeometry|null
+ guides:THREE.Group
  raf:number;observer:ResizeObserver
 }
 const titles:Record<WordRigChannel,string>={
@@ -122,6 +123,19 @@ export default function SpaktokWordFaceRig({
   fill.position.set(3,-2,-3);scene.add(fill)
   const pivot=new THREE.Group()
   scene.add(pivot)
+  const guides=new THREE.Group()
+  guides.name='WordRigGuidesPreviewOnly'
+  pivot.add(guides)
+  for(const color of [0x54e1ff,0x54e1ff,0xffa45b]){
+   const marker=new THREE.Mesh(
+    new THREE.SphereGeometry(1,12,8),
+    new THREE.MeshBasicMaterial({
+     color,depthTest:false,transparent:true,opacity:.92,
+    }),
+   )
+   marker.renderOrder=999
+   guides.add(marker)
+  }
   const resize=()=>{
    const w=Math.max(1,canvas.clientWidth),h=Math.max(1,canvas.clientHeight)
    renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix()
@@ -130,7 +144,7 @@ export default function SpaktokWordFaceRig({
   observer.observe(canvas);resize()
   const s:RigSession={
    renderer,scene,camera,model:pivot,meshes:[],
-   sourceGeometries:new Map(),preview:null,modified:null,raf:0,observer,
+   sourceGeometries:new Map(),preview:null,modified:null,guides,raf:0,observer,
   }
   sessionRef.current=s
   const tick=()=>{
@@ -195,6 +209,38 @@ export default function SpaktokWordFaceRig({
    if(sessionRef.current===s)sessionRef.current=null
   }
  },[opened,file,canOpen])
+ // Preview-only calibration markers are not included in the exported GLB.
+ // They help users identify wrong front orientation or hair/body meshes.
+ useEffect(()=>{
+  const s=sessionRef.current
+  const mesh=s?.meshes[meshIndex]
+  if(!s||!mesh||!ready)return
+  const p=mesh.geometry.getAttribute('position')
+  if(!p)return
+  const bounds=mesh.geometry.boundingBox?.clone()??
+   new THREE.Box3().setFromObject(mesh)
+  const size=new THREE.Vector3()
+  bounds.getSize(size)
+  if(Math.max(size.x,size.y,size.z)<1e-6)return
+  const depth=calibration.front==='positive-z'?
+   bounds.max.z+size.z*.045:bounds.min.z-size.z*.045
+  const positions=[
+   [(1-calibration.eyeSeparation)/2,calibration.eyeY],
+   [(1+calibration.eyeSeparation)/2,calibration.eyeY],
+   [.5,calibration.mouthY],
+  ] as const
+  s.scene.updateMatrixWorld(true)
+  for(let i=0;i<positions.length;i++){
+   const [u,v]=positions[i]
+   const point=new THREE.Vector3(
+    bounds.min.x+u*size.x,bounds.min.y+v*size.y,depth)
+   const world=mesh.localToWorld(point)
+   const local=s.guides.parent!.worldToLocal(world)
+   const marker=s.guides.children[i]
+   marker.position.copy(local)
+   marker.scale.setScalar(Math.max(size.x,size.y,size.z)*.015)
+  }
+ },[calibration,meshIndex,ready,opened])
  const resetPreview=()=>{
   const s=sessionRef.current
   if(s?.preview&&s.modified){
@@ -325,6 +371,7 @@ export default function SpaktokWordFaceRig({
     <canvas ref={canvasRef} className="h-[48dvh] min-h-72 w-full"
      aria-label="معاينة مجسم GLB وتحريك شبكة الوجه"/>
     <div className="space-y-2 p-3 text-xs">
+     <p className="text-cyan-200">● ● موضع العينين المقترح — <span className="text-orange-300">● الفم المقترح</span>. العلامات للمعايرة فقط ولا تُصدّر.</p>
      <label className="block">تدوير المجسم {yaw}°
       <input type="range" min="-180" max="180" step="5" value={yaw}
        onChange={e=>setYaw(Number(e.target.value))}
