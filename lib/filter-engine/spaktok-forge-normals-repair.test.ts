@@ -6,6 +6,30 @@ import {
 } from './spaktok-forge-normals-repair'
 import {auditStudioGlbBytes} from './reality-production-glb-audit'
 
+// GLTFExporter is browser-only. Node's Vitest runner has Blob but no
+// FileReader; supply only the async read API used by Three.js. This is
+// a TEST polyfill, never shipped to browsers or the GPU service.
+class TestFileReader{
+ result:ArrayBuffer|string|null=null
+ onloadend:(()=>void)|null=null
+ readAsArrayBuffer(blob:Blob){
+  void blob.arrayBuffer().then(bytes=>{
+   this.result=bytes
+   this.onloadend?.()
+  })
+ }
+ readAsDataURL(blob:Blob){
+  void blob.arrayBuffer().then(bytes=>{
+   this.result='data:'+(blob.type||'application/octet-stream')+
+    ';base64,'+Buffer.from(bytes).toString('base64')
+   this.onloadend?.()
+  })
+ }
+}
+Object.defineProperty(globalThis,'FileReader',{
+ configurable:true,value:TestFileReader,
+})
+
 function makeGeometry(){
  const g=new THREE.BufferGeometry()
  g.setAttribute('position',new THREE.Float32BufferAttribute([
