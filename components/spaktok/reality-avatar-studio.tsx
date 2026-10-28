@@ -19,8 +19,8 @@ import {
 import {
  neutralFaceChannelFrame,faceChannelFrameFromMediaPipe,
  faceChannelFrameFromStarter,smoothFaceChannelFrame,
- getFullFaceMorphBindings,inspectFullFaceRig,
- type FaceChannelFrame,
+ getFullFaceMorphBindings,inspectFullFaceRig,MEDIAPIPE_FACE_BLENDSHAPES,
+ type FaceChannelFrame,type ActiveFaceBlendshape,
 } from '@/lib/filter-engine/reality-avatar-full-retarget'
 
 type TrackedPoint={x:number;y:number;z:number}
@@ -100,8 +100,13 @@ export default function RealityAvatarStudio(){
  const strengthRef=useRef(strength)
  const manualPreviewRef=useRef(false)
  const manualValuesRef=useRef<AvatarExpression>(NEUTRAL_AVATAR_EXPRESSION)
+ const advancedPreviewRef=useRef<{
+  channel:ActiveFaceBlendshape|'none';value:number
+ }>({channel:'none',value:.75})
  const [manualPreview,setManualPreview]=useState(false)
  const [manualValues,setManualValues]=useState<AvatarExpression>(NEUTRAL_AVATAR_EXPRESSION)
+ const [advancedChannel,setAdvancedChannel]=useState<ActiveFaceBlendshape|'none'>('none')
+ const [advancedWeight,setAdvancedWeight]=useState(.75)
  const rigControls=[
   {id:'eyeBlinkLeft' as const,label:'رمش العين اليسرى'},
   {id:'eyeBlinkRight' as const,label:'رمش العين اليمنى'},
@@ -114,6 +119,9 @@ export default function RealityAvatarStudio(){
  useEffect(()=>{mirrorRef.current=mirror;strengthRef.current=strength},[mirror,strength])
  useEffect(()=>{manualPreviewRef.current=manualPreview},[manualPreview])
  useEffect(()=>{manualValuesRef.current=manualValues},[manualValues])
+ useEffect(()=>{advancedPreviewRef.current={
+  channel:advancedChannel,value:advancedWeight,
+ }},[advancedChannel,advancedWeight])
 
  const resetTracking=()=>{
   expressionsRef.current=NEUTRAL_AVATAR_EXPRESSION
@@ -177,8 +185,12 @@ export default function RealityAvatarStudio(){
    state.expression=smoothAvatarExpression(state.expression,
     manualPreviewRef.current?manualValuesRef.current:
     active?expressionsRef.current:NEUTRAL_AVATAR_EXPRESSION,.29)
+   const manualFrame=faceChannelFrameFromStarter(manualValuesRef.current)
+   const advanced=advancedPreviewRef.current
+   const manualAll=advanced.channel==='none'?manualFrame:
+    {...manualFrame,[advanced.channel]:advanced.value}
    state.fullFace=smoothFaceChannelFrame(state.fullFace,
-    manualPreviewRef.current?faceChannelFrameFromStarter(manualValuesRef.current):
+    manualPreviewRef.current?manualAll:
     active?fullFaceRef.current:neutralFaceChannelFrame(),.29)
    state.pose=easeAvatarPose(state.pose,active?poseRef.current:NEUTRAL_AVATAR_HEAD,.3)
    root.rotation.set(state.pose.pitch*factor,state.pose.yaw*factor,
@@ -576,8 +588,27 @@ export default function RealityAvatarStudio(){
          onChange={e=>setManualValues(prev=>({...prev,[control.id]:Number(e.target.value)}))}
          className="mt-1 w-full accent-cyan-300" aria-label={control.label}/>
        </label>)}
+       {faceChannelCoverage>7&&<>
+        <label className="block text-xs">
+         اختبار قناة وجه متقدمة (عندما تكون موجودة في GLB)
+         <select value={advancedChannel}
+          onChange={e=>setAdvancedChannel(e.target.value as ActiveFaceBlendshape|'none')}
+          className="mt-1 block w-full rounded-lg border border-white/20 bg-slate-950 p-2">
+          <option value="none">بدون حركة إضافية</option>
+          {MEDIAPIPE_FACE_BLENDSHAPES.slice(1)
+           .filter(name=>!rigControls.some(control=>control.id===name))
+           .map(name=><option value={name} key={name}>{name}</option>)}
+         </select>
+        </label>
+        {advancedChannel!=='none'&&<label className="block text-xs">
+         قوة القناة المتقدمة: {Math.round(advancedWeight*100)}%
+         <input type="range" min="0" max="1" step=".05" value={advancedWeight}
+          onChange={e=>setAdvancedWeight(Number(e.target.value))}
+          className="mt-2 w-full accent-violet-300"/>
+        </label>}
+       </>}
        <button type="button" className="rounded-lg bg-white/10 px-3 py-2 text-xs"
-        onClick={()=>setManualValues(NEUTRAL_AVATAR_EXPRESSION)}>
+        onClick={()=>{setManualValues(NEUTRAL_AVATAR_EXPRESSION);setAdvancedChannel('none')}}>
         إعادة جميع حركات الوجه إلى الصفر
        </button>
       </div>}
