@@ -36,6 +36,7 @@ describe('Spaktok AI Director private production router',()=>{
   const plan=planSpaktokDirector({
    description:'avatar live gift',targets:['avatar','live','gift'],
    source:'image',rightsApproved:true,gpuAvailable:true,
+   computeApproved:true,transferApproved:true,
   })
   expect(plan.estimatedGpuJobs).toBe(1)
   expect(plan.uploadsSourceImage).toBe(true)
