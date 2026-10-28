@@ -1,12 +1,17 @@
 'use client'
 import {useEffect,useState} from 'react'
 import type {StudioProductionPackage} from '@/lib/filter-engine/reality-production-pipeline'
+import {inspectWordGeneratedGlb,WORD_MAX_RESULT_BYTES} from '@/lib/filter-engine/spaktok-word-import'
+import {saveLocalStudioGlb} from '@/lib/filter-engine/reality-local-asset-handoff'
 
 type Config={configured:boolean;fixedCredits:number|null;model:string}
 type Status={id:string;status:string;hasAsset?:boolean;error?:string|null}
 export default function WordRodinExecution({
- project,file,
-}:Readonly<{project:StudioProductionPackage;file:File|null}>){
+ project,file,onGeneratedGlb,
+}:Readonly<{
+ project:StudioProductionPackage;file:File|null
+ onGeneratedGlb?:(file:File)=>void
+}>){
  const [config,setConfig]=useState<Config|null>(null)
  const [sendConsent,setSendConsent]=useState(false)
  const [chargeConsent,setChargeConsent]=useState(false)
@@ -52,6 +57,43 @@ export default function WordRodinExecution({
    setMessage('تم تسجيل المهمة على Cloudflare. ستُراجع النتيجة قبل أي نشر.')
   }catch(e){setMessage(e instanceof Error?e.message:'submission_unavailable')}
   finally{setBusy(false)}
+ }
+ const importResult=async()=>{
+  if(!job||job.status!=='needs_review'||busy)return
+  setBusy(true)
+  setMessage('تنزيل المجسم الخاص وفحص شبكة GLB قبل إدخاله إلى Spaktok Word…')
+  try{
+   const response=await fetch(
+    '/api/spaktok-word/rodin?id='+encodeURIComponent(job.id)+'&asset=1',
+    {credentials:'same-origin',cache:'no-store',
+     signal:AbortSignal.timeout(60000)})
+   if(!response.ok)throw Error('word_generated_asset_unavailable')
+   const contentLength=response.headers.get('content-length')
+   if(contentLength!==null&&Number(contentLength)>WORD_MAX_RESULT_BYTES)
+    throw Error('word_generated_asset_too_large')
+   const buffer=await response.arrayBuffer()
+   const result=inspectWordGeneratedGlb(buffer)
+   const nextFile=new File([buffer],result.fileName,
+    {type:'model/gltf-binary'})
+   if(onGeneratedGlb){
+    onGeneratedGlb(nextFile)
+    setMessage(
+     'تم إدخال GLB إلى فحوص Word المحلية. تم تصفير الموافقات السابقة لحماية الحقوق. '+
+     'المثلثات: '+result.audit.triangles.toLocaleString('en-US')+
+     (result.requiresMobileOptimization?' — يلزم تحسين الملف للهاتف.':'')+
+     (result.audit.rigTargets<3?' — يحتاج Rig للوجه.':'')
+    )
+   }else if(result.canOpenInAvatar){
+    await saveLocalStudioGlb(result.fileName,buffer)
+    window.location.assign('/avatar-studio')
+   }else{
+    setMessage('المجسم سليم لكن حجمه يتجاوز حد معاينة Avatar Studio (15MB). '+
+     'نزّل الملف وحسّن LOD والخامات أولًا.')
+   }
+  }catch(e){
+   setMessage('تعذّر استيراد الناتج: '+
+    (e instanceof Error?e.message:'word_generated_asset_failed'))
+  }finally{setBusy(false)}
  }
  const refresh=async()=>{
   if(!job)return
@@ -110,10 +152,16 @@ export default function WordRodinExecution({
     className="rounded-lg bg-white/15 px-3 py-2 font-semibold disabled:opacity-40">
     تحديث حالة المهمة
    </button>
-   {job.hasAsset&&<a href={'/api/spaktok-word/rodin?id='+encodeURIComponent(job.id)+'&asset=1'}
-    className="mr-2 inline-block rounded-lg bg-emerald-600 px-3 py-2 font-bold text-white">
-    تنزيل GLB الخاص لإرساله إلى فحص الاستوديو
-   </a>}
+   {job.hasAsset&&<>
+    <button type="button" onClick={importResult} disabled={busy}
+     className="mr-2 inline-block rounded-lg bg-cyan-600 px-3 py-2 font-bold text-white disabled:opacity-40">
+     فحص GLB وإدخاله تلقائيًا إلى {onGeneratedGlb?'Spaktok Word':'Avatar Studio'}
+    </button>
+    <a href={'/api/spaktok-word/rodin?id='+encodeURIComponent(job.id)+'&asset=1'}
+     className="mr-2 inline-block rounded-lg border border-emerald-600 px-3 py-2 font-bold text-emerald-200">
+     تنزيل ملف GLB الأصلي
+    </a>
+   </>}
   </div>}
   {message&&<p role="status" className="text-xs text-cyan-200">{message}</p>}
  </div>
