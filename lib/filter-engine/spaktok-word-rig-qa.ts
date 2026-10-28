@@ -62,7 +62,10 @@ export function rankWordFaceMeshes(meshes:readonly THREE.Mesh[]):ReadonlyArray<R
   const name=(mesh.name||'').toLowerCase()
   const geometry=mesh.geometry
   const position=geometry.getAttribute('position')
-  const bounds=geometry.boundingBox?.clone()??new THREE.Box3().setFromBufferAttribute(position)
+  if(!(position instanceof THREE.BufferAttribute))
+   return {index,score:-100,reason:'المدخل يحتاج BufferAttribute موحدًا ومجهزًا للنحت'}
+  const bounds=geometry.boundingBox?.clone()??
+   new THREE.Box3().setFromBufferAttribute(position)
   const size=new THREE.Vector3();bounds.getSize(size)
   const ratio=size.y>0?size.x/size.y:0
   let score=0
