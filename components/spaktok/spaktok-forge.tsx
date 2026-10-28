@@ -59,12 +59,26 @@ export default function SpaktokForge({
  const [sourceRights,setSourceRights]=useState<'original'|'licensed'>('original')
  const [generationMode,setGenerationMode]=useState<'relief'|'gpu'|null>(null)
  const source=selected??(isImage(sourceFile)?sourceFile:null)
+ const clearPreview=()=>{
+  if(previewRef.current&&sceneRef.current){
+   sceneRef.current.remove(previewRef.current)
+   disposePreview(previewRef.current)
+   previewRef.current=null
+  }
+ }
  const update=(part:Partial<ForgeReliefOptions>)=>{
   setSettings(o=>({...o,...part}))
-  setResult(null)
+  setResult(null);setStats(null);setGenerationMode(null)
+  clearPreview()
+  setMessage('تم تغيير إعدادات النحت. اضغط إنشاء GLB لتحديث المجسم.')
  }
  useEffect(()=>{
   setResult(null);setApproved(false);setGpuConsent(false)
+  setStats(null);setGenerationMode(null)
+  if(previewRef.current&&sceneRef.current){
+   sceneRef.current.remove(previewRef.current)
+   disposePreview(previewRef.current);previewRef.current=null
+  }
  },[sourceFile,selected])
  useEffect(()=>{
   let live=true
@@ -102,11 +116,14 @@ export default function SpaktokForge({
   }
   const resizeObserver=new ResizeObserver(resize)
   resizeObserver.observe(canvas);resize()
-  let running=true,handle=0
-  const animate=()=>{
+  let running=true,handle=0,lastFrame=0
+  const animate=(now:number)=>{
    if(!running)return
-   if(previewRef.current)previewRef.current.rotation.y+=.004
-   renderer.render(scene,camera)
+   if(previewRef.current&&!document.hidden&&now-lastFrame>=1000/24){
+    previewRef.current.rotation.y+=.009
+    renderer.render(scene,camera)
+    lastFrame=now
+   }
    handle=requestAnimationFrame(animate)
   }
   handle=requestAnimationFrame(animate)
