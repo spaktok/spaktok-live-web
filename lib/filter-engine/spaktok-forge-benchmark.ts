@@ -58,3 +58,46 @@ export function compareForgeManualRatings(
 /** A manual rating from one rater is a qualitative note, NEVER a
  * trustworthy claim that one generator is commercially superior.
  */
+
+/** Files alone do NOT prove that the same source image or generation
+ * method was used. The author must supply these facts explicitly.
+ */
+export type ForgeGenerationMethod='full-360-ai'|'local-2.5d-relief'|'unknown'
+export type ForgeSourceMatch='same'|'different'|'unknown'
+export type ForgeComparisonTrust=Readonly<{
+ comparable:boolean
+ reasons:readonly string[]
+ missingTextureImages:ReadonlyArray<ForgeCandidate>
+}>
+export function assessForgeComparisonTrust(
+ rodin:ForgeTechnicalSnapshot,forge:ForgeTechnicalSnapshot,
+ context:Readonly<{
+  rodinMethod:ForgeGenerationMethod
+  forgeMethod:ForgeGenerationMethod
+  sourceMatch:ForgeSourceMatch
+ }>,
+):ForgeComparisonTrust{
+ const reasons:string[]=[]
+ if(context.sourceMatch==='different')
+  reasons.push('different_source_images')
+ else if(context.sourceMatch==='unknown')
+  reasons.push('source_image_match_unverified')
+ if(context.rodinMethod==='unknown'||context.forgeMethod==='unknown')
+  reasons.push('generation_method_unverified')
+ if(context.rodinMethod!==context.forgeMethod &&
+  context.rodinMethod!=='unknown'&&context.forgeMethod!=='unknown')
+  reasons.push('different_generation_methods_2_5d_vs_360')
+ if(!rodin.valid||!forge.valid)
+  reasons.push('invalid_asset')
+ if(!rodin.selfContained||!forge.selfContained)
+  reasons.push('assets_not_self_contained')
+ const missingTextureImages:ForgeCandidate[]=[]
+ if(rodin.textures===0)missingTextureImages.push('rodin')
+ if(forge.textures===0)missingTextureImages.push('forge')
+ if(missingTextureImages.length)
+  reasons.push('some_assets_lack_embedded_texture_images')
+ return {
+  comparable:reasons.length===0,
+  reasons,missingTextureImages,
+ }
+}
