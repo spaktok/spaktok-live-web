@@ -10,6 +10,24 @@ export const WORD_RIG_CHANNELS=[
  'mouthSmileRight','browInnerUp','mouthPucker',
 ] as const
 export type WordRigChannel=(typeof WORD_RIG_CHANNELS)[number]
+/** Optional extended template: mathematical local surface deformations,
+ * NOT a semantic 3D face recognizer or studio-grade FACS auto-rig.
+ * Keep starter preset for larger, less anatomically separated meshes.
+ */
+export const WORD_RIG_EXPRESSIVE_CHANNELS=[
+ ...WORD_RIG_CHANNELS,
+ 'browDownLeft','browDownRight',
+ 'browOuterUpLeft','browOuterUpRight',
+ 'eyeWideLeft','eyeWideRight',
+ 'mouthFrownLeft','mouthFrownRight',
+ 'mouthFunnel','mouthStretchLeft','mouthStretchRight',
+ 'cheekPuff','jawLeft','jawRight',
+] as const
+export type WordRigExtendedChannel=(typeof WORD_RIG_EXPRESSIVE_CHANNELS)[number]
+export type WordRigProfile='starter'|'expressive'
+export function wordRigChannels(profile:WordRigProfile):readonly WordRigExtendedChannel[]{
+ return profile==='expressive'?WORD_RIG_EXPRESSIVE_CHANNELS:WORD_RIG_CHANNELS
+}
 export type WordRigFront='positive-z'|'negative-z'
 export type WordRigCalibration=Readonly<{
  front:WordRigFront
@@ -25,7 +43,9 @@ export const DEFAULT_WORD_RIG_CALIBRATION:WordRigCalibration={
 }
 export type WordRigDiagnostics=Readonly<{
  vertices:number
- activeVertices:Readonly<Record<WordRigChannel,number>>
+ profile:WordRigProfile
+ channels:readonly WordRigExtendedChannel[]
+ activeVertices:Readonly<Record<WordRigExtendedChannel,number>>
  boundingBox:Readonly<{width:number;height:number;depth:number}>
  warnings:readonly string[]
 }>
@@ -53,7 +73,10 @@ export function validateWordRigCalibration(c:WordRigCalibration):void{
 export function buildCalibratedWordFaceRig(
  source:THREE.BufferGeometry,
  calibration:WordRigCalibration=DEFAULT_WORD_RIG_CALIBRATION,
+ profile:WordRigProfile='starter',
 ):Readonly<{geometry:THREE.BufferGeometry;diagnostics:WordRigDiagnostics}>{
+ if(profile!=='starter'&&profile!=='expressive')
+  throw Error('word_rig_profile_invalid')
  validateWordRigCalibration(calibration)
  if(source.morphAttributes.position?.length)
   throw Error('word_rig_existing_morphs_preserve_original')
@@ -61,6 +84,8 @@ export function buildCalibratedWordFaceRig(
  if(!position||position.itemSize!==3||position.count<120||
   position.count>160000||!(position instanceof THREE.BufferAttribute))
   throw Error('word_rig_face_mesh_vertices_out_of_bounds')
+ if(profile==='expressive'&&position.count>22000)
+  throw Error('word_rig_expressive_requires_mobile_retoptology_under_22000_vertices')
  const bbox=source.boundingBox?.clone()??new THREE.Box3().setFromBufferAttribute(position)
  const size=new THREE.Vector3()
  bbox.getSize(size)
@@ -69,9 +94,10 @@ export function buildCalibratedWordFaceRig(
   throw Error('word_rig_degenerate_mesh_bounds')
  const front=calibration.front==='positive-z'?1:-1
  const base=source.clone()
- const channels=WORD_RIG_CHANNELS
+ const channels=wordRigChannels(profile)
  const deltas=channels.map(()=>new Float32Array(position.count*3))
- const active=Object.fromEntries(channels.map(k=>[k,0])) as Record<WordRigChannel,number>
+ const active=Object.fromEntries(WORD_RIG_EXPRESSIVE_CHANNELS.map(k=>[k,0]))
+  as Record<WordRigExtendedChannel,number>
  const eyeLeft=.5-calibration.eyeSeparation/2
  const eyeRight=.5+calibration.eyeSeparation/2
  const strength=calibration.strength
@@ -94,15 +120,40 @@ export function buildCalibratedWordFaceRig(
   const leftCorner=gaussian(u,v,.31,calibration.mouthY,.095,.09)*facing
   const rightCorner=gaussian(u,v,.69,calibration.mouthY,.095,.09)*facing
   const brow=gaussian(u,v,.5,calibration.eyeY+.13,.29,.105)*facing
-  const values:ReadonlyArray<readonly [number,number,number]>=[
-   [0,-size.y*(mouth*.048+lower*.035)*strength,0],
-   [0,-Math.sign(v-calibration.eyeY)*size.y*leftEye*.032*strength,0],
-   [0,-Math.sign(v-calibration.eyeY)*size.y*rightEye*.032*strength,0],
-   [-size.x*leftCorner*.012*strength,size.y*leftCorner*.035*strength,0],
-   [size.x*rightCorner*.012*strength,size.y*rightCorner*.035*strength,0],
-   [0,size.y*brow*.029*strength,0],
-   [-size.x*(u-.5)*mouth*.13*strength,0,front*size.z*mouth*.045*strength],
-  ]
+  const browL=gaussian(u,v,eyeLeft,calibration.eyeY+.14,.16,.095)*facing
+  const browR=gaussian(u,v,eyeRight,calibration.eyeY+.14,.16,.095)*facing
+  const browOuterL=gaussian(u,v,eyeLeft-.115,calibration.eyeY+.14,.095,.10)*facing
+  const browOuterR=gaussian(u,v,eyeRight+.115,calibration.eyeY+.14,.095,.10)*facing
+  const cheekL=gaussian(u,v,.25,calibration.mouthY+.16,.14,.16)*facing
+  const cheekR=gaussian(u,v,.75,calibration.mouthY+.16,.14,.16)*facing
+  // Each channel has independent, spatially bounded displacement. This
+  // avoids identical duplicate morphs masquerading as different expressions.
+  const displacement:Readonly<Record<WordRigExtendedChannel,readonly [number,number,number]>>={
+   jawOpen:[0,-size.y*(mouth*.048+lower*.035)*strength,0],
+   eyeBlinkLeft:[0,-Math.sign(v-calibration.eyeY)*size.y*leftEye*.032*strength,0],
+   eyeBlinkRight:[0,-Math.sign(v-calibration.eyeY)*size.y*rightEye*.032*strength,0],
+   mouthSmileLeft:[-size.x*leftCorner*.012*strength,size.y*leftCorner*.035*strength,0],
+   mouthSmileRight:[size.x*rightCorner*.012*strength,size.y*rightCorner*.035*strength,0],
+   browInnerUp:[0,size.y*brow*.029*strength,0],
+   mouthPucker:[-size.x*(u-.5)*mouth*.13*strength,0,
+    front*size.z*mouth*.045*strength],
+   browDownLeft:[0,-size.y*browL*.024*strength,0],
+   browDownRight:[0,-size.y*browR*.024*strength,0],
+   browOuterUpLeft:[0,size.y*browOuterL*.027*strength,0],
+   browOuterUpRight:[0,size.y*browOuterR*.027*strength,0],
+   eyeWideLeft:[0,Math.sign(v-calibration.eyeY)*size.y*leftEye*.022*strength,0],
+   eyeWideRight:[0,Math.sign(v-calibration.eyeY)*size.y*rightEye*.022*strength,0],
+   mouthFrownLeft:[-size.x*leftCorner*.008*strength,-size.y*leftCorner*.034*strength,0],
+   mouthFrownRight:[size.x*rightCorner*.008*strength,-size.y*rightCorner*.034*strength,0],
+   mouthFunnel:[-size.x*(u-.5)*mouth*.08*strength,0,
+    front*size.z*mouth*.025*strength],
+   mouthStretchLeft:[-size.x*leftCorner*.048*strength,0,0],
+   mouthStretchRight:[size.x*rightCorner*.048*strength,0,0],
+   cheekPuff:[0,0,front*size.z*(cheekL+cheekR)*.043*strength],
+   jawLeft:[-size.x*lower*.025*strength,0,0],
+   jawRight:[size.x*lower*.025*strength,0,0],
+  }
+  const values=channels.map(k=>displacement[k])
   for(let k=0;k<channels.length;k++){
    const [dx,dy,dz]=values[k]
    if(Math.abs(dx)+Math.abs(dy)+Math.abs(dz)>1e-7)active[channels[k]]++
@@ -129,7 +180,8 @@ export function buildCalibratedWordFaceRig(
  return {
   geometry:base,
   diagnostics:{
-   vertices:position.count,activeVertices:active,
+   vertices:position.count,profile,channels:[...channels],
+   activeVertices:active,
    boundingBox:{width:size.x,height:size.y,depth:size.z},
    warnings,
   },
