@@ -13,6 +13,16 @@ export default function SpaktokWordPage(){
  const [file,setFile]=useState<File|null>(null)
  const [project,setProject]=useState(createStudioProductionPackage)
  const [notice,setNotice]=useState('')
+ const acceptGenerated=(asset:File)=>{
+  // A provider result has DIFFERENT source provenance: never inherit the
+  // portrait's original/licensed status or prior visual approval silently.
+  setProject(previous=>withStudioProductionSource(previous,
+   asset.name,asset.size,'glb'))
+  setFile(asset)
+  setNotice('وصل GLB إلى Spaktok Word وأصبح قيد فحص الشبكة والخامات. '+
+   'أكّد حقوق المجسم الناتج مرة أخرى قبل أي تصدير أو مشاركة. '+
+   'فحص الهاتف وRig ما زالا مطلوبين.')
+ }
  const change=(event:ChangeEvent<HTMLInputElement>)=>{
   const next=event.target.files?.[0]
   event.target.value=''
@@ -63,6 +73,6 @@ export default function SpaktokWordPage(){
    {file&&<p className="mt-2 text-xs text-cyan-200">الملف: {file.name} — {(file.size/1024/1024).toFixed(2)} MB</p>}
    {notice&&<p role="status" className="mt-2 text-xs text-amber-100">{notice}</p>}
   </section>
-  <RealityProductionDirector file={file} project={project} setProject={setProject}/>
+  <RealityProductionDirector file={file} project={project} setProject={setProject} onGeneratedGlb={acceptGenerated}/>
  </main>
 }
