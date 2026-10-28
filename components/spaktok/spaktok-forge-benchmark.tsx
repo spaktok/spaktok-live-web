@@ -4,6 +4,7 @@ import {useEffect,useState,type ChangeEvent} from 'react'
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {auditStudioGlbBytes} from '@/lib/filter-engine/reality-production-glb-audit'
+import {repairForgeGlbNormals} from '@/lib/filter-engine/spaktok-forge-normals-repair'
 import {
  summarizeForgeCandidate,compareForgeManualRatings,
  FORGE_BENCHMARK_PREVIEW_MAX_BYTES,
@@ -25,6 +26,9 @@ const criteria:ReadonlyArray<Readonly<{
 type State=Readonly<{
  file:File|null;stats:ForgeTechnicalSnapshot|null
  error:string
+}>
+type RepairedAsset=Readonly<{
+ file:File;stats:ForgeTechnicalSnapshot;repairedMeshes:number
 }>
 function Preview3D({file}:Readonly<{file:File|null}>){
  const [canvas,setCanvas]=useState<HTMLCanvasElement|null>(null)
@@ -129,8 +133,17 @@ function auditFile(file:File,engine:ForgeCandidate):Promise<ForgeTechnicalSnapsh
  return file.arrayBuffer().then(bytes=>
   summarizeForgeCandidate(engine,bytes.byteLength,auditStudioGlbBytes(bytes)))
 }
-export default function SpaktokForgeBenchmark(){
+export default function SpaktokForgeBenchmark({
+ onRepairedGlb,
+}:Readonly<{onRepairedGlb?:(file:File)=>void}>){
  const [open,setOpen]=useState(false)
+ const [repairBusy,setRepairBusy]=useState<ForgeCandidate|null>(null)
+ const [repaired,setRepaired]=useState<Record<ForgeCandidate,RepairedAsset|null>>({
+  rodin:null,forge:null,
+ })
+ const [repairMessages,setRepairMessages]=useState<Record<ForgeCandidate,string>>({
+  rodin:'',forge:'',
+ })
  const [rodin,setRodin]=useState<State>({file:null,stats:null,error:''})
  const [forge,setForge]=useState<State>({file:null,stats:null,error:''})
  const [rReview,setRReview]=useState<ForgeManualReview>(EMPTY_REVIEW)
@@ -140,6 +153,8 @@ export default function SpaktokForgeBenchmark(){
   event.target.value=''
   const update=engine==='rodin'?setRodin:setForge
   update({file,stats:null,error:file?'جارٍ فحص GLB…':''})
+  setRepaired(prev=>({...prev,[engine]:null}))
+  setRepairMessages(prev=>({...prev,[engine]:''}))
   if(engine==='rodin')setRReview(EMPTY_REVIEW)
   else setFReview(EMPTY_REVIEW)
   if(!file)return
@@ -148,6 +163,43 @@ export default function SpaktokForgeBenchmark(){
   ).catch(error=>
    update(s=>s.file===file?{file,stats:null,
     error:error instanceof Error?error.message:'فشل فحص GLB'}:s))
+ }
+ const repairNormals=async(engine:ForgeCandidate)=>{
+  const source=engine==='rodin'?rodin:forge
+  if(repairBusy||!source.file||!source.stats||source.stats.normals)return
+  setRepairBusy(engine)
+  setRepairMessages(prev=>({...prev,
+   [engine]:'يجري إنشاء نسخة GLB جديدة وإعادة فحص Normals محليًا…'}))
+  try{
+   if(source.file.size>FORGE_BENCHMARK_PREVIEW_MAX_BYTES)
+    throw Error('حجم المجسم يتجاوز حد الإصلاح المحلي 15MB')
+   const before=await source.file.arrayBuffer()
+   const result=await repairForgeGlbNormals(before)
+   if(result.alreadyComplete)throw Error('Normals موجودة بالفعل')
+   const name=source.file.name.replace(/\.glb$/i,'-normals-fixed.glb')
+   const next=new File([result.bytes],name,{type:'model/gltf-binary'})
+   const stats=summarizeForgeCandidate(engine,next.size,result.after)
+   setRepaired(prev=>({...prev,[engine]:{
+    file:next,stats,repairedMeshes:result.repairedMeshes,
+   }}))
+   setRepairMessages(prev=>({...prev,[engine]:
+    'تم إصلاح '+result.repairedMeshes+' شبكة وإعادة فحص GLB. '+
+    'النسخة الأصلية محفوظة. افحص الإضاءة والخامات بصريًا قبل الاستخدام.'}))
+  }catch(error){
+   setRepaired(prev=>({...prev,[engine]:null}))
+   setRepairMessages(prev=>({...prev,[engine]:
+    'لم يُطبَّق الإصلاح: '+(
+     error instanceof Error?error.message:'خطأ غير معروف')+
+    '. الملفات المتحركة تتطلب أداة نحت متخصصة.'}))
+  }finally{setRepairBusy(null)}
+ }
+ const downloadRepair=(engine:ForgeCandidate)=>{
+  const asset=repaired[engine]
+  if(!asset)return
+  const url=URL.createObjectURL(asset.file)
+  const a=document.createElement('a')
+  a.href=url;a.download=asset.file.name;a.click()
+  window.setTimeout(()=>URL.revokeObjectURL(url),1500)
  }
  const verdict=compareForgeManualRatings(rReview,fReview)
  const exportEvidence=()=>{
@@ -201,6 +253,48 @@ export default function SpaktokForgeBenchmark(){
       {state.error}
      </p>}
      {state.stats&&<Preview3D file={state.file}/>}
+     {state.stats&&!state.stats.normals&&
+      <div className="space-y-2 rounded-xl border border-cyan-400/25 bg-cyan-950/15 p-3">
+       <p className="text-xs font-semibold text-cyan-200">
+        إصلاح Normals في GLB — دون إعادة التوليد
+       </p>
+       <p className="text-[11px] leading-5 text-slate-300">
+        يولّد اتجاهات إضاءة جديدة من المثلثات الموجودة. لا يصلح التشريح
+        أو يضيف حركات الوجه. يرفض المجسمات ذات Rig أو Animation للحفاظ عليها.
+       </p>
+       <button type="button"
+        disabled={repairBusy!==null||state.file===null||
+         state.file.size>FORGE_BENCHMARK_PREVIEW_MAX_BYTES}
+        onClick={()=>void repairNormals(engine)}
+        className="rounded-lg bg-cyan-600 px-3 py-2 text-xs font-semibold disabled:opacity-40">
+        {repairBusy===engine?'إصلاح Normals جارٍ…':'إصلاح Normals وإعادة الفحص'}
+       </button>
+       {repaired[engine]&&<div className="space-y-2 text-xs">
+        <p className="text-emerald-200">
+         أُصلحت {repaired[engine].repairedMeshes} شبكة ·
+         Normals: {repaired[engine].stats.normals?'موجودة':'ناقصة'} ·
+         حجم النسخة {(repaired[engine].stats.bytes/1048576).toFixed(2)} MB ·
+         {repaired[engine].stats.readyForMobilePreview?
+          'اجتازت شروط الفحص التقني للهاتف':'يلزم تحسين إضافي قبل الهاتف'}
+        </p>
+        <div className="flex flex-wrap gap-2">
+         <button type="button" onClick={()=>downloadRepair(engine)}
+          className="rounded-lg border border-white/30 px-3 py-2">
+          تنزيل GLB المصحح
+         </button>
+         {onRepairedGlb&&
+          <button type="button"
+           onClick={()=>onRepairedGlb(repaired[engine]!.file)}
+           className="rounded-lg bg-violet-600 px-3 py-2">
+           فتح النسخة في Spaktok Word
+          </button>}
+        </div>
+       </div>}
+       {repairMessages[engine]&&<p role="status"
+        className="text-[11px] leading-5 text-amber-200">
+        {repairMessages[engine]}
+       </p>}
+      </div>}
      {state.stats&&<div className="space-y-1 text-xs text-slate-200">
       <p>المثلثات: {fmt(state.stats.triangles)} · الخامات: {fmt(state.stats.materials)}</p>
       <p>الصور المضمّنة: {fmt(state.stats.textures)} · قنوات Rig: {fmt(state.stats.morphs)}</p>
