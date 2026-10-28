@@ -21,10 +21,24 @@ function fixedCredits(){
 export async function GET(req:NextRequest){
  const quote=fixedCredits()
  const configured=wordGatewayConfigured()&&quote!==null
- if(req.nextUrl.searchParams.get('health')==='1')
-  return json({configured,fixedCredits:configured?quote:null,
+ if(req.nextUrl.searchParams.get('health')==='1'){
+  let workerReady=false
+  if(configured){
+   try{
+    const upstream=await fetch(
+     'https://spaktok-word-rodin.spaktok.workers.dev/health',
+     {cache:'no-store',signal:AbortSignal.timeout(4000)})
+    if(upstream.ok){
+     const state=await upstream.json() as {paidEnabled?:boolean}
+     workerReady=state.paidEnabled===true
+    }
+   }catch{/* Fail closed if the worker is unavailable. */}
+  }
+  return json({configured:configured&&workerReady,
+   fixedCredits:configured&&workerReady?quote:null,
    model:'Gen-2.5-Medium',mesh:'Quad',material:'PBR',
    externalPaidGeneration:true,requiresExplicitApproval:true})
+ }
  if(!configured)return json({error:'word_backend_unconfigured'},503)
  try{
   const user=await getNativeUser()
