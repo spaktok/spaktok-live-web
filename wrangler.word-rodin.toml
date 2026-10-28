@@ -1,0 +1,36 @@
+# Standalone Cloudflare Worker for Spaktok Word.
+# Deploy only AFTER applying migrations/native/0004_word_rodin_jobs.sql
+# and creating queue spaktok-word-rodin-jobs.
+# No live paid tasks: explicit operator approval and secrets required.
+name = "spaktok-word-rodin"
+main = "cloudflare/workers/spaktok-word-rodin.mjs"
+compatibility_date = "2026-10-28"
+workers_dev = true
+
+[observability]
+enabled = true
+
+[vars]
+WORD_PAID_ENABLED = "false"
+
+[[d1_databases]]
+binding = "WORD_DB"
+database_name = "spaktok-primary"
+database_id = "e18619f5-76ec-42e5-b601-3e5f06ae7731"
+
+[[r2_buckets]]
+binding = "WORD_ASSETS"
+bucket_name = "spaktok-private-drafts"
+
+[[queues.producers]]
+binding = "WORD_QUEUE"
+queue = "spaktok-word-rodin-jobs"
+
+[[queues.consumers]]
+queue = "spaktok-word-rodin-jobs"
+max_batch_size = 2
+max_batch_timeout = 5
+max_retries = 1
+
+[triggers]
+crons = ["*/1 * * * *"]
