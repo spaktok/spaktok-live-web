@@ -10,8 +10,7 @@ import {inspectWordRigQuality,rankWordFaceMeshes,verifyWordRigGlbChannels,
  type WordRigQualityReport} from '@/lib/filter-engine/spaktok-word-rig-qa'
 import {
  buildCalibratedWordFaceRig,eligibleWordRigMeshes,
- DEFAULT_WORD_RIG_CALIBRATION,WORD_RIG_CHANNELS,
- WORD_RIG_EXPRESSIVE_CHANNELS,wordRigChannels,
+ DEFAULT_WORD_RIG_CALIBRATION,wordRigChannels,
  type WordRigCalibration,type WordRigExtendedChannel,type WordRigProfile,
 } from '@/lib/filter-engine/spaktok-word-face-rig'
 import {
