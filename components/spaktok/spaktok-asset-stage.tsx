@@ -116,7 +116,7 @@ export default function SpaktokAssetStage({
      free(gltf.scene);throw Error('أبعاد مجسم غير صالحة')
     }
     // Display calibration only; never claim these are real body dimensions.
-    const targetH=isWorld?.9:.68
+    const targetH=isWorld ? .9 : .68
     const normalized=targetH/max
     const holder=new THREE.Group()
     const base=new THREE.Group()
