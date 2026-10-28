@@ -12,6 +12,7 @@ import RealityImageReference from './reality-image-reference'
 import RealityProductionDirector from './reality-production-director'
 import SpaktokForge from './spaktok-forge'
 import SpaktokAIDirector from './spaktok-ai-director'
+import {loadLocalStudioGlb} from '@/lib/filter-engine/reality-local-asset-handoff'
 import {
  createStudioProductionPackage,withStudioProductionSource,reviewStudioProduction,
 } from '@/lib/filter-engine/reality-production-pipeline'
@@ -184,6 +185,17 @@ export default function RealityCreatorLab(){
   setStatus('دخل GLB الناتج إلى Reality Studio. يلزم مراجعة الحقوق والنحت وحجم الفلتر قبل النشر.')
   setPivot([0,0,0]);setSize(null)
  }
+ const importFromAIDirector=async()=>{
+  setStatus('استيراد GLB الخاص من Spaktok AI Director…')
+  try{
+   const asset=await loadLocalStudioGlb()
+   if(!asset){setStatus('لا يوجد GLB محلي. أنشئه أولًا باستخدام AI Director.');return}
+   acceptForgeAsset(asset)
+   setCategory('mask');setAnchor('nose_bridge')
+   setStatus('تم استيراد GLB الخاص. موضع جسر الأنف افتراضي فقط؛'+
+    ' اضبط نقاط الوجه والحجم وراجع الحقوق قبل اعتماد الفلتر.')
+  }catch(error){setStatus('تعذّر استيراد GLB: '+String(error))}
+ }
  const numberEditor=(title:string,value:Vec3,apply:(v:Vec3)=>void)=>(
   <div className="space-y-2">
    <p className="text-sm font-semibold text-white">{title}</p>
@@ -324,6 +336,12 @@ export default function RealityCreatorLab(){
      </a>
     </div>
    </header>
+   <div className="mx-auto mb-4 max-w-7xl">
+    <button type="button" onClick={()=>void importFromAIDirector()}
+     className="rounded-xl border border-violet-400/40 bg-violet-800/30 px-4 py-3 text-xs font-semibold text-violet-100">
+     استيراد آخر مجسم خاص من AI Director للفلاتر
+    </button>
+   </div>
    <SpaktokAIDirector sourceFile={file} onGeneratedGlb={acceptForgeAsset}/>
    <SpaktokForge sourceFile={file} onGeneratedGlb={acceptForgeAsset}/>
    <RealityProductionDirector file={file} project={production}
