@@ -2,8 +2,9 @@ import {describe,expect,it} from 'vitest'
 import * as THREE from 'three'
 import {
  buildCalibratedWordFaceRig,eligibleWordRigMeshes,WORD_RIG_CHANNELS,
- DEFAULT_WORD_RIG_CALIBRATION,
+ DEFAULT_WORD_RIG_CALIBRATION,WORD_RIG_EXPRESSIVE_CHANNELS,
 } from './spaktok-word-face-rig'
+import {inspectWordRigQuality} from './spaktok-word-rig-qa'
 
 function sampleFace(){
  const verts:number[]=[]
@@ -36,6 +37,49 @@ describe('Spaktok Word - creator-calibrated facial morph generator',()=>{
   const jaw=geometry.morphAttributes.position[0].array
   expect(Array.from(jaw).some(x=>Math.abs(Number(x))>1e-6)).toBe(true)
   geometry.dispose();face.dispose()
+ })
+ it('creates 21 distinct, finite named optional expressive morphs and audits every channel',()=>{
+  const face=sampleFace()
+  const {geometry,diagnostics}=buildCalibratedWordFaceRig(
+   face,DEFAULT_WORD_RIG_CALIBRATION,'expressive')
+  const channels=geometry.morphAttributes.position
+  expect(channels).toHaveLength(21)
+  expect(channels.map(x=>x.name)).toEqual([...WORD_RIG_EXPRESSIVE_CHANNELS])
+  expect(diagnostics.channels).toEqual([...WORD_RIG_EXPRESSIVE_CHANNELS])
+  expect(diagnostics.profile).toBe('expressive')
+  expect(channels.every(x=>x.count===face.getAttribute('position').count))
+   .toBe(true)
+  for(const name of WORD_RIG_EXPRESSIVE_CHANNELS)
+   expect(diagnostics.activeVertices[name]).toBeGreaterThan(8)
+  const inspection=inspectWordRigQuality(geometry,diagnostics)
+  expect(inspection.channelNames).toHaveLength(21)
+  expect(inspection.coverage.cheekPuff).toBeGreaterThan(0)
+  for(const morph of channels){
+   const values=morph.array as Float32Array
+   expect(Array.from(values).every(Number.isFinite)).toBe(true)
+  }
+  // Channel geometry cannot merely be duplicated aliases.
+  expect(Array.from(channels[0].array)).not.toEqual(Array.from(channels[19].array))
+  expect(Array.from(channels[7].array)).not.toEqual(Array.from(channels[8].array))
+  geometry.dispose();face.dispose()
+ })
+ it('keeps the expanded rig opt-in and enforces a mobile vertex budget',()=>{
+  const face=sampleFace()
+  expect(()=>buildCalibratedWordFaceRig(face,DEFAULT_WORD_RIG_CALIBRATION,
+   'non-existent' as 'expressive')).toThrow('word_rig_profile_invalid')
+  const count=22001
+  const packed=new Float32Array(count*3)
+  for(let i=0;i<count;i++){
+   packed[i*3]=i%151/150
+   packed[i*3+1]=Math.floor(i/151)/146
+   packed[i*3+2]=.1+.4*Math.sin(i*.01)
+  }
+  const dense=new THREE.BufferGeometry()
+  dense.setAttribute('position',new THREE.Float32BufferAttribute(packed,3))
+  expect(()=>buildCalibratedWordFaceRig(dense,
+   DEFAULT_WORD_RIG_CALIBRATION,'expressive'))
+   .toThrow('word_rig_expressive_requires_mobile_retoptology_under_22000_vertices')
+  face.dispose();dense.dispose()
  })
  it('does not accept a prior morph rig or tiny/unworkable head geometry',()=>{
   const face=sampleFace()
