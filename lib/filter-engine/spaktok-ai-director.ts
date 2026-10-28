@@ -21,7 +21,7 @@ export type DirectorPlan=Readonly<{
  publication:'private-draft'
 }>
 const TARGET_SYNONYMS:Readonly<Record<DirectorTarget,RegExp>>={
- avatar:/\bavatar\b|افاتار|أفاتار|افتار|أفتار|شخصي[ةه]|افتراضي/,
+ avatar:/\bavatar\b|افاتار|أفاتار|افتار|أفتار|اڤاتار/,
  live:/\blive\b|لايف|بث|مباشر/,
  filter:/\bfilter\b|فلاتر|فلتر|قناع|mask|\bar\b/,
  gift:/\bgift\b|هدي[ةه]|هدايا|هدية|جفت/,
