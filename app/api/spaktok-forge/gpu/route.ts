@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto'
 import {getNativeUser,rateLimit} from '@/lib/native/auth'
 import {queryD1} from '@/lib/native/d1'
 import {inspectWordGeneratedGlb,WORD_MAX_RESULT_BYTES} from '@/lib/filter-engine/spaktok-word-import'
+import {parseForgeDailyJobLimit,FORGE_QUOTA_CLAIM_SQL} from '@/lib/server/spaktok-forge-budget'
 
 /** Optional operator-owned GPU inference bridge.
  * NOT enabled until a licensed GPU host is configured and budget approved.
@@ -17,6 +18,9 @@ const json=(value:unknown,status=200)=>NextResponse.json(value,{
 })
 function operatorConfig(){
  if(process.env.SPAKTOK_FORGE_GPU_ENABLED!=='true')return null
+ const globalDailyLimit=parseForgeDailyJobLimit(
+  process.env.SPAKTOK_FORGE_GPU_DAILY_LIMIT)
+ if(globalDailyLimit===null)return null
  const raw=process.env.SPAKTOK_FORGE_GPU_URL??''
  const allowed=process.env.SPAKTOK_FORGE_GPU_HOST??''
  const token=process.env.SPAKTOK_FORGE_GPU_TOKEN??''
@@ -28,7 +32,7 @@ function operatorConfig(){
    url.pathname!=='/v1/generate')return null
   if(url.hostname==='localhost'||/^(?:127\.|10\.|192\.168\.|169\.254\.|0\.|::1$)/.test(url.hostname))
    return null
-  return {url:url.toString(),token}
+  return {url:url.toString(),token,globalDailyLimit}
  }catch{return null}
 }
 const originAllowed=(request:NextRequest)=>
@@ -50,6 +54,7 @@ export async function GET(){
   engine:'Stable Fast 3D (licensed self-host)',
   full360:true,
   dailyCapPerOwner:1,
+  globalDailyCap:operatorConfig()?.globalDailyLimit??null,
   maxImageMB:8,
   output:'private GLB',
   paidComputeRequiresApproval:true,
@@ -92,14 +97,12 @@ export async function POST(request:NextRequest){
  try{
   if(!await rateLimit('forge-gpu:'+user.id,2))
    return json({error:'forge_request_rate_limited'},429)
-  const reserved=await queryD1<{job_id:string}>(`
-   INSERT INTO forge_gpu_daily_claims(owner_id,day_utc,job_id,image_sha256,status)
-   VALUES(?,?,?,?,'reserved')
-   ON CONFLICT(owner_id,day_utc) DO NOTHING
-   RETURNING job_id
-  `,[user.id,day,jobId,hash])
+  const reserved=await queryD1<{job_id:string}>(
+   FORGE_QUOTA_CLAIM_SQL,
+   [user.id,day,jobId,hash,day,cfg.globalDailyLimit],
+  )
   if(reserved.rows.length!==1)
-   return json({error:'forge_daily_gpu_cap_reached'},429)
+   return json({error:'forge_gpu_quota_reached'},429)
  }catch{return json({error:'forge_budget_database_unavailable'},503)}
  const finish=async(status:'succeeded'|'upstream_failed'|'invalid_result')=>{
   try{
