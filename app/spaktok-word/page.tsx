@@ -3,6 +3,7 @@ import {useState,type ChangeEvent} from 'react'
 import Link from 'next/link'
 import RealityProductionDirector from '@/components/spaktok/reality-production-director'
 import SpaktokForge from '@/components/spaktok/spaktok-forge'
+import SpaktokForgeBenchmark from '@/components/spaktok/spaktok-forge-benchmark'
 import {
  createStudioProductionPackage,withStudioProductionSource,
 } from '@/lib/filter-engine/reality-production-pipeline'
@@ -75,6 +76,7 @@ export default function SpaktokWordPage(){
    {notice&&<p role="status" className="mt-2 text-xs text-amber-100">{notice}</p>}
   </section>
   <SpaktokForge sourceFile={file} onGeneratedGlb={acceptGenerated}/>
+  <SpaktokForgeBenchmark/>
   <RealityProductionDirector file={file} project={project} setProject={setProject} onGeneratedGlb={acceptGenerated}/>
  </main>
 }
