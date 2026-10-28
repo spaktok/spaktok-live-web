@@ -196,6 +196,16 @@ export default function RealityCreatorLab(){
     ' اضبط نقاط الوجه والحجم وراجع الحقوق قبل اعتماد الفلتر.')
   }catch(error){setStatus('تعذّر استيراد GLB: '+String(error))}
  }
+ const autoImportRef=useRef(false)
+ useEffect(()=>{
+  if(!autoImportRef.current&&
+   new URLSearchParams(window.location.search).get('from')==='ai-director'){
+   autoImportRef.current=true
+   void importFromAIDirector()
+  }
+ // The navigation button already provided the creator's preview intent.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[])
  const numberEditor=(title:string,value:Vec3,apply:(v:Vec3)=>void)=>(
   <div className="space-y-2">
    <p className="text-sm font-semibold text-white">{title}</p>
