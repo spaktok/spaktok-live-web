@@ -69,6 +69,13 @@ export default function SpaktokAIDirector({
   rightsApproved,gpuAvailable:health?.enabled===true,
  }),[description,targets,sourceKind,rightsApproved,health])
  useEffect(()=>{
+  // Word/Studio can replace the source without going through this picker.
+  // Never carry an earlier rights/paid-compute approval to that new asset.
+  setRightsApproved(false)
+  setTransferConsent(false)
+  setGpuConsent(false)
+ },[sourceFile])
+ useEffect(()=>{
   let active=true
   fetch('/api/spaktok-forge/gpu',{cache:'no-store'})
    .then(r=>r.ok?r.json():Promise.reject(Error('forge_gpu_health')))
