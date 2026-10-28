@@ -50,9 +50,9 @@ export async function repairForgeGlbNormals(
    throw Error('forge_repair_invalid_triangle_indices')
   let replacement=touched.get(geometry)
   if(!replacement){
-   replacement=geometry.clone()
-   replacement.computeVertexNormals()
-   const normals=replacement.getAttribute('normal')
+   const created:THREE.BufferGeometry=geometry.clone()
+   created.computeVertexNormals()
+   const normals=created.getAttribute('normal')
    if(!normals||normals.count!==position.count)
     throw Error('forge_repair_normals_not_computed')
    // Keep zero normals on a truly degenerate triangle from accidentally
@@ -66,7 +66,8 @@ export async function repairForgeGlbNormals(
    }
    if(nonzero<Math.max(3,normals.count*.5))
     throw Error('forge_repair_degenerate_surface')
-   touched.set(geometry,replacement)
+   touched.set(geometry,created)
+   replacement=created
   }
   node.geometry=replacement
   repairedMeshes++
