@@ -76,7 +76,7 @@ export default function SpaktokWordPage(){
    {notice&&<p role="status" className="mt-2 text-xs text-amber-100">{notice}</p>}
   </section>
   <SpaktokForge sourceFile={file} onGeneratedGlb={acceptGenerated}/>
-  <SpaktokForgeBenchmark/>
+  <SpaktokForgeBenchmark onRepairedGlb={acceptGenerated}/>
   <RealityProductionDirector file={file} project={project} setProject={setProject} onGeneratedGlb={acceptGenerated}/>
  </main>
 }
