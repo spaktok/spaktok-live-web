@@ -100,3 +100,21 @@ export async function POST(req:NextRequest){
   return json(data,response.status)
  }catch{return json({error:'word_submit_unavailable'},503)}
 }
+
+// Data deletion intentionally does NOT claim to cancel an in-progress paid
+// Rodin generation. It is owner-scoped and requires a same-origin request.
+export async function DELETE(req:NextRequest){
+ if(!originAllowed(req))return json({error:'invalid_origin'},403)
+ if(!wordGatewayConfigured())return json({error:'word_backend_unconfigured'},503)
+ const id=req.nextUrl.searchParams.get('id')??''
+ if(!UUID.test(id))return json({error:'invalid_job_id'},400)
+ try{
+  const user=await getNativeUser()
+  if(!user)return json({error:'unauthorized'},401)
+  const response=await callWordWorker({
+   owner:user.id,method:'DELETE',path:'/v1/jobs/'+id,
+  })
+  const body=await response.json()
+  return json(body,response.status)
+ }catch{return json({error:'delete_unavailable'},503)}
+}
