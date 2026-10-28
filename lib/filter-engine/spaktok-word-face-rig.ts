@@ -59,7 +59,7 @@ export function buildCalibratedWordFaceRig(
   throw Error('word_rig_existing_morphs_preserve_original')
  const position=source.getAttribute('position')
  if(!position||position.itemSize!==3||position.count<120||
-  position.count>160000||!position.isBufferAttribute)
+  position.count>160000||!(position instanceof THREE.BufferAttribute))
   throw Error('word_rig_face_mesh_vertices_out_of_bounds')
  const bbox=source.boundingBox?.clone()??new THREE.Box3().setFromBufferAttribute(position)
  const size=new THREE.Vector3()
