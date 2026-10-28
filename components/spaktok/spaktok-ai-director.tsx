@@ -15,9 +15,11 @@ const TARGET_LABELS:Readonly<Record<DirectorTarget,string>>={
  gift:'هدية Gift',world:'عالم Spaktok',
 }
 const TARGET_DESTINATIONS:Readonly<Record<DirectorTarget,string>>={
- avatar:'/avatar-studio',live:'/avatar-studio',
- filter:'/reality-studio',gift:'/gift-studio',
- world:'/spaktok-world',
+ avatar:'/avatar-studio?from=ai-director',
+ live:'/avatar-studio?from=ai-director',
+ filter:'/reality-studio?from=ai-director',
+ gift:'/gift-studio?from=ai-director',
+ world:'/spaktok-world?from=ai-director',
 }
 const ISSUE_AR:Readonly<Record<string,string>>={
  invalid_or_external_glb:'شبكة GLB غير صالحة أو تحتوي على روابط خارجية',
