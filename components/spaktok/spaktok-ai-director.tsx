@@ -5,7 +5,10 @@ import {
  planSpaktokDirector,type DirectorTarget,type DirectorAssetQA,
 } from '@/lib/filter-engine/spaktok-ai-director'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
-import {saveLocalStudioGlb} from '@/lib/filter-engine/reality-local-asset-handoff'
+import {
+ saveLocalStudioGlb,saveActiveOwnerRodinHead,
+ loadActiveOwnerRodinHead,clearActiveOwnerRodinHead,
+} from '@/lib/filter-engine/reality-local-asset-handoff'
 
 const TARGET_LABELS:Readonly<Record<DirectorTarget,string>>={
  avatar:'أفاتار',live:'لايف',filter:'فلتر AR',
@@ -62,6 +65,7 @@ export default function SpaktokAIDirector({
  const [qa,setQA]=useState<DirectorAssetQA|null>(null)
  const [status,setStatus]=useState('')
  const [show,setShow]=useState(true)
+ const [ownerBusy,setOwnerBusy]=useState(false)
  const source=ownFile??sourceFile??null
  const sourceKind=source?(isGlb(source)?'glb':isImage(source)?'image':'none'):'none'
  const plan=useMemo(()=>planSpaktokDirector({
@@ -100,6 +104,40 @@ export default function SpaktokAIDirector({
   setOwnFile(file);setAsset(null);setQA(null)
   setRightsApproved(false);setTransferConsent(false);setGpuConsent(false)
   setStatus(file?'المصدر جاهز للتخطيط، لم يتم رفعه إلى أي خادم.':'')
+ }
+ const storeRodin=async()=>{
+  if(!source||sourceKind!=='glb'||!rightsApproved||ownerBusy)return
+  setOwnerBusy(true)
+  try{
+   const calibrated=await saveActiveOwnerRodinHead(source)
+   setOwnFile(calibrated);setAsset(null);setQA(null)
+   setStatus('تم حفظ نسخة رأس Rodin الأصلية المضبوطة بشكل خاص في هذا المتصفح. '+
+    'ارتفاع المعاينة 34 سم افتراضي وليس قياسًا تشريحيًا؛ لا توجد حركات وجه أو خامات الصور الأصلية.')
+  }catch(error){
+   setStatus('لم يتم حفظ أصل Rodin: '+String(error)+
+    '. هذه الخاصية تقبل فقط مجسم Rodin المحدد سابقًا، وليس أي GLB.')
+  }finally{setOwnerBusy(false)}
+ }
+ const restoreRodin=async()=>{
+  if(ownerBusy)return
+  setOwnerBusy(true)
+  try{
+   const last=await loadActiveOwnerRodinHead()
+   if(!last){setStatus('لا يوجد رأس Rodin محفوظ في هذا المتصفح.');return}
+   setOwnFile(last);setAsset(null);setQA(null)
+   setRightsApproved(false);setTransferConsent(false);setGpuConsent(false)
+   setStatus('استعدنا نسخة Rodin الخاصة. أكّد حقوقها قبل فحصها أو نقلها للأقسام.')
+  }catch(error){setStatus('تعذّر استعادة المجسم: '+String(error))}
+  finally{setOwnerBusy(false)}
+ }
+ const forgetRodin=async()=>{
+  if(ownerBusy)return
+  setOwnerBusy(true)
+  try{
+   await clearActiveOwnerRodinHead()
+   setStatus('حُذفت نسخة Rodin المحفوظة من هذا المتصفح؛ الملفات على جهازك لم تتغير.')
+  }catch(error){setStatus('تعذّر حذف النسخة المحلية: '+String(error))}
+  finally{setOwnerBusy(false)}
  }
  const toggle=(target:DirectorTarget)=>{
   setManualTargets(prev=>{
@@ -219,6 +257,23 @@ export default function SpaktokAIDirector({
       {source.name} · {(source.size/1048576).toFixed(2)} MB ·
       {sourceKind==='glb'?' إعادة استخدام دون GPU':' يتطلب GPU لتوليد 360°'}
      </p>}
+     <div className="flex flex-wrap gap-2 text-xs">
+      <button type="button" onClick={()=>void restoreRodin()}
+       disabled={ownerBusy}
+       className="rounded-lg border border-cyan-400/30 px-3 py-2 text-cyan-100 disabled:opacity-40">
+       استعادة رأس Rodin المحفوظ
+      </button>
+      <button type="button" onClick={()=>void storeRodin()}
+       disabled={ownerBusy||sourceKind!=='glb'||!rightsApproved}
+       className="rounded-lg border border-violet-400/30 px-3 py-2 text-violet-100 disabled:opacity-40">
+       حفظ رأس Rodin الخاص
+      </button>
+      <button type="button" onClick={()=>void forgetRodin()}
+       disabled={ownerBusy}
+       className="rounded-lg border border-white/20 px-3 py-2 text-slate-300 disabled:opacity-40">
+       حذف النسخة المحلية
+      </button>
+     </div>
      <label className="block text-xs font-semibold">ماذا تريد من الشخصية؟
       <textarea value={description} maxLength={1000}
        onChange={e=>setDescription(e.target.value)}
