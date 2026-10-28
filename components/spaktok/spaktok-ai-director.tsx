@@ -50,7 +50,8 @@ export default function SpaktokAIDirector({
  const [ownFile,setOwnFile]=useState<File|null>(null)
  const [description,setDescription]=useState(
   'حوّل هذه الصورة إلى شخصية 3D يمكن استخدامها كأفاتار وفلتر وفي اللايف')
- const [targets,setTargets]=useState<DirectorTarget[]>(['avatar','filter','live'])
+ const [manualTargets,setManualTargets]=useState<DirectorTarget[]|null>(null)
+ const targets=manualTargets??[...detectDirectorTargets(description)]
  const [rights,setRights]=useState<'original'|'licensed'>('original')
  const [rightsApproved,setRightsApproved]=useState(false)
  const [gpuConsent,setGpuConsent]=useState(false)
@@ -94,8 +95,11 @@ export default function SpaktokAIDirector({
   setStatus(file?'المصدر جاهز للتخطيط، لم يتم رفعه إلى أي خادم.':'')
  }
  const toggle=(target:DirectorTarget)=>{
-  setTargets(prev=>prev.includes(target)?
-   prev.filter(x=>x!==target):[...prev,target])
+  setManualTargets(prev=>{
+   const chosen=prev??[...detectDirectorTargets(description)]
+   return chosen.includes(target)?
+    chosen.filter(x=>x!==target):[...chosen,target]
+  })
  }
  const commitGlb=async(file:File)=>{
   const bytes=await file.arrayBuffer()
@@ -224,9 +228,9 @@ export default function SpaktokAIDirector({
        </label>)}
       </div>
       {!!detectDirectorTargets(description).length&&<button type="button"
-       onClick={()=>setTargets([...detectDirectorTargets(description)])}
+       onClick={()=>setManualTargets(null)}
        className="text-xs text-violet-200 underline">
-       تحديد الأقسام تلقائيًا من الوصف
+       إعادة اختيار الأقسام تلقائيًا من الوصف
       </button>}
      </div>
     </div>
