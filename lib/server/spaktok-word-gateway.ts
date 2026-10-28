@@ -12,7 +12,7 @@ function config(){
 }
 export function wordGatewayConfigured(){return Boolean(config())}
 export function signWordRequest(args:{
- secret:string;owner:string;method:'GET'|'POST';path:string
+ secret:string;owner:string;method:'GET'|'POST'|'DELETE';path:string
  body?:ArrayBuffer;metadata?:Record<string,unknown>;expires?:string
 }){
  const expires=args.expires??String(Math.floor(Date.now()/1000)+60)
@@ -26,7 +26,7 @@ export function signWordRequest(args:{
  }
 }
 export async function callWordWorker(args:{
- owner:string;method:'GET'|'POST';path:string;body?:ArrayBuffer
+ owner:string;method:'GET'|'POST'|'DELETE';path:string;body?:ArrayBuffer
  metadata?:Record<string,unknown>
 }):Promise<Response>{
  const cfg=config()
