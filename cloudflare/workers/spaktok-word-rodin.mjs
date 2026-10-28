@@ -73,7 +73,7 @@ async function submitJob(env,id){
   const source=await env.WORD_ASSETS.get(claimed.source_key)
   if(!source)throw Error('source_missing')
   const form=new FormData()
-  form.append('images',new File([await source.arrayBuffer()],'source.png',
+  form.append('images',new File([await source.arrayBuffer()],claimed.source_type==='image/jpeg'?'source.jpg':'source.png',
    {type:claimed.source_type}))
   form.append('tier',claimed.tier);form.append('mesh_mode',claimed.mesh_mode)
   form.append('quality',claimed.quality);form.append('material',claimed.material)
@@ -121,6 +121,16 @@ async function downloadResult(env,row){
  if(v.getUint32(0,true)!==0x46546c67||v.getUint32(4,true)!==2||
   v.getUint32(8,true)!==data.byteLength||v.getUint32(16,true)!==0x4e4f534a)
   throw Error('result_invalid_glb')
+ const n=v.getUint32(12,true)
+ if(n<12||n>data.byteLength-20)throw Error('invalid_glb_json_chunk')
+ let doc
+ try{doc=JSON.parse(new TextDecoder().decode(new Uint8Array(data,20,n)))}
+ catch{throw Error('invalid_glb_json')}
+ if(!Array.isArray(doc.meshes)||doc.meshes.length===0||
+  (doc.buffers||[]).some(x=>x.uri&&!x.uri.startsWith('data:'))||
+  (doc.images||[]).some(x=>x.uri&&!x.uri.startsWith('data:'))||
+  (doc.extensionsRequired||[]).length)
+  throw Error('glb_external_resources_or_no_mesh')
  const key='word/rodin/'+row.user_id+'/'+row.id+'/result.glb'
  await env.WORD_ASSETS.put(key,data,{
   httpMetadata:{contentType:'model/gltf-binary'},
@@ -135,7 +145,7 @@ async function pollJob(env,row){
   "UPDATE word_rodin_jobs SET status='polling',tries=tries+1,"+
   "next_check_at=datetime('now','+60 seconds'),updated_at=CURRENT_TIMESTAMP "+
   "WHERE id=? AND status IN ('processing','polling') AND "+
-  "(next_check_at IS NULL OR next_check_at<=CURRENT_TIMESTAMP) "+
+  "(next_check_at IS NULL OR datetime(next_check_at)<=CURRENT_TIMESTAMP) "+
   "RETURNING *").bind(row.id).first()
  if(!claimed)return
  if(claimed.tries>50){
@@ -259,7 +269,7 @@ export default {
  async scheduled(_event,env){
   const rows=await env.WORD_DB.prepare(
    "SELECT * FROM word_rodin_jobs WHERE status IN ('processing','polling') "+
-   "AND (next_check_at IS NULL OR next_check_at<=CURRENT_TIMESTAMP) LIMIT 10"
+   "AND (next_check_at IS NULL OR datetime(next_check_at)<=CURRENT_TIMESTAMP) LIMIT 10"
   ).all()
   await Promise.allSettled((rows.results||[]).map(row=>pollJob(env,row)))
  },
