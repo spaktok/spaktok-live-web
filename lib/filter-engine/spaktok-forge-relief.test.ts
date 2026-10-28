@@ -31,7 +31,7 @@ describe('Spaktok Forge local relief: no GPU, no vendor calls',()=>{
   const count=a.stats.vertices/2
   const pa=a.geometry.getAttribute('position'),pb=b.geometry.getAttribute('position')
   expect(pb.getZ(count)).toBe(pa.getZ(count))
-  expect(pb.getZ(Math.floor(count/2)+16)).toBeGreaterThan(pa.getZ(Math.floor(count/2)+16)))
+  expect(pb.getZ(Math.floor(count/2)+16)).toBeGreaterThan(pa.getZ(Math.floor(count/2)+16))
   a.geometry.dispose();b.geometry.dispose()
  })
  it('preserves portrait geometry and handles transparent backgrounds',()=>{
