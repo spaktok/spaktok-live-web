@@ -217,8 +217,9 @@ export default function SpaktokWordFaceRig({
   if(!s||!mesh||!ready)return
   const p=mesh.geometry.getAttribute('position')
   if(!p)return
-  const bounds=mesh.geometry.boundingBox?.clone()??
-   new THREE.Box3().setFromObject(mesh)
+  if(!mesh.geometry.boundingBox)mesh.geometry.computeBoundingBox()
+  const bounds=mesh.geometry.boundingBox?.clone()
+  if(!bounds)return
   const size=new THREE.Vector3()
   bounds.getSize(size)
   if(Math.max(size.x,size.y,size.z)<1e-6)return
