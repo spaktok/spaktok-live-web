@@ -194,7 +194,7 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
        targets.every(t=>typeof t==='string'&&
         DIRECTOR_TARGETS.includes(t as DirectorTarget))){
        // An explicit all-studios instruction cannot be silently narrowed.
-       const explicitAll=/جميع\\s+(?:الأقسام|الاقسام)|all\\s+studios/i.test(prompt)
+       const explicitAll=/جميع\s+(?:الأقسام|الاقسام)|all\s+studios/i.test(prompt)
        if(!explicitAll){
         intent={...intent,targets:[...new Set(targets as DirectorTarget[])]}
        }
