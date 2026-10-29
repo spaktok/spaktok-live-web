@@ -22,6 +22,15 @@
 - `spaktok-forge-readiness.ts` now carries explicit disabled / pending-model-access / unverified / offline / ready statuses. The API does **not** issue paid tickets when `SPAKTOK_FORGE_GPU_MODEL_ACCESS` is not exactly `approved`.
 - The operator's temporary `trycloudflare.com` portal and terminal URLs **must never be used as the model API**.
 
+## Cloudflare read-only inventory, 29 October 2026
+
+Direct Cloudflare account inspection confirmed:
+- D1 database `spaktok-primary` exists.
+- D1 quota table `forge_gpu_daily_claims` exists with `owner_id`, `day_utc`, `job_id`, `image_sha256`, `status`, `created_at`, and `completed_at` columns. This only confirms table structure, **not** a full creator job lifecycle.
+- R2 bucket `spaktok-private-drafts` exists. No model assets were uploaded or modified.
+- Existing Worker `spaktok-d1-bridge` exists. Its identity alone does **not** confirm that website secrets, permissions, or application endpoints are configured correctly.
+- No production GPU endpoint, persistent inference queue, R2 signed asset-ingest, or native Android asset delivery was tested. Do not claim these are live.
+
 ## Safe operator state: leave GPU disabled until these gates pass
 
 Server-only secrets / environment (examples; no real credentials):
