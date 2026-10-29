@@ -201,7 +201,9 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
      return
     }
     const answer=await runDirectorAgent({
-     prompt,source:file??null,rights,rightsApproved,visionConsent,
+     prompt,
+     history:messages.slice(-8).map(m=>({role:m.role,text:m.text.slice(0,350)})),
+     source:file??null,rights,rightsApproved,visionConsent,
      gpuAvailable:gpuEnabled,
      gpuTransferConsent:transferApproved,
      gpuComputeConsent:computeApproved,
