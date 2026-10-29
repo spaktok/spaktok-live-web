@@ -20,6 +20,14 @@ class SignedGpuHealthTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             sign_ready_health(nonce, key, 'untrusted-engine')
 
+    def test_trellis1_has_distinct_signed_proof(self):
+        nonce = 'b' * 32
+        key = 'x' * 40
+        signature = sign_ready_health(nonce, key, 'trellis1')
+        self.assertEqual(len(signature), 64)
+        self.assertNotEqual(signature, sign_ready_health(nonce, key, 'trellis2'))
+        self.assertNotEqual(signature, sign_ready_health(nonce, key, 'stable-fast-3d'))
+
     def test_bad_nonces_fail_closed(self):
         for nonce in ("", "z" * 32, "0" * 31, "0" * 33, "0" * 32 + "\r\n"):
             with self.assertRaises(ValueError):
