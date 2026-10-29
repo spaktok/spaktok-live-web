@@ -16,6 +16,7 @@
     "test:d1": "vitest run --config vitest.config.ts lib/cloudflare/d1-repository.test.ts",
     "test:cloudflare": "vitest run --config vitest.config.ts lib/cloudflare",
     "test:studio:worker:canary": "node scripts/test-private-studio-worker.mjs",
+    "test:studio:ai:free:canary": "node scripts/test-director-ai-worker.mjs",
     "asset:crown": "node scripts/build-couture-glb.mjs"
   },
   "dependencies": {
