@@ -195,7 +195,7 @@ export function assertStudioFanoutManifest(value:unknown):
   const out=v.outputs[i] as StudioOutputProfile
   if(!out||!DIRECTOR_TARGETS.includes(out.target)||
    out.target!==v.project.outputTargets[i]||
-   out.destination!==DESTINATIONS[out.target]||
+   out.destination!==DESTINATIONS[out.target as DirectorTarget]||
    !['private-preview','needs-optimization'].includes(out.state)||
    out.published!==false||!Array.isArray(out.blockers)||
    !out.blockers.includes('human_rights_and_publication_review_required'))
