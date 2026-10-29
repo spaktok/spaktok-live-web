@@ -333,6 +333,7 @@ finalize(){
   [[ ! -e "$mobile" && ! -e "$archive" ]] ||
     fail 'Finalized output already exists; preserve it and do not overwrite.'
   activate
+  export PYTHONPATH="$FORGE${PYTHONPATH:+:$PYTHONPATH}"
   python "$FORGE/glb_mobile_finalize.py" "$original" "$mobile"
   export SPAKTOK_ARTIFACT_ORIGINAL="$original"
   export SPAKTOK_ARTIFACT_MOBILE="$mobile"
