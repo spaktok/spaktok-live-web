@@ -210,6 +210,36 @@ destroying the instance. If it errors, use only the FIRST traceback error
 with its underlying exception for diagnosis. The printed
 "loading verified local component" line identifies the failing layer.
 
+### Sparse convolution import blocker after first full local model load
+
+On the owner's A100, the repaired Microsoft model loader successfully reached
+`slat_decoder_gs`, `slat_decoder_rf`, then `slat_decoder_mesh`, where the
+real missing dependency surfaced:
+
+    ModuleNotFoundError: No module named 'spconv'
+
+PyPI has the exact CUDA12.1 Linux Python3.10 prebuilt package
+`spconv-cu121==2.3.8` (and matching cumm-cu121 dependencies). The official
+TRELLIS `setup.sh` installed the generic CUDA12 family wheel `spconv-cu120`,
+which was absent after earlier interrupted installation attempts.
+
+Do NOT reinstall Torch, Conda, NVIDIA drivers or nvdiffrast. The repository
+has a surgical `repair-spconv` operation which verifies there are no
+conflicting spconv/cumm binary variants, installs the matching **binary wheel**,
+and checks `spconv.pytorch.SparseConv3d` imports while preserving Torch2.4+cu121.
+
+    cd /workspace/spaktok-forge
+    git pull --ff-only origin feat/vast-a100-forge-bridge-20261029
+    bash -n scripts/vast-a100-trellis1.sh
+    bash scripts/vast-a100-trellis1.sh repair-spconv
+
+Expected (only after real confirmation): `SPCONV_READY: 2.3.8`.
+If the script finds conflicting distributions, it stops intentionally; send
+the list it prints, do not layer multiple CUDA variant wheels.
+
+After `SPCONV_READY` only, run the existing `smoke` once with logging.
+Future `smoke` and `serve` now preflight SpConv BEFORE expensive model loads.
+
 ## Remaining release blockers
 
 - GitHub Actions reports failure with missing job steps/logs; offline tests
