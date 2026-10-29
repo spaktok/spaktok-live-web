@@ -52,7 +52,11 @@ const MATERIAL_EDIT=/غيّر|غير|بدّل|بدل|لوّن|لون|اجعل|خ
  */
 export function creatorClarification(prompt:string):string|null{
  if(!MATERIAL_EDIT.test(prompt))return null
+ const colorSubject=/لون|خامة|paint|recolor|color|colour|material|färb|faerb|farbe|kolorier|tön/i
+ const unsupported=/أصفر|اصفر|وردي|رمادي|برتقالي|yellow|pink|orange|grey|gray|grau|gelb|rosa/i
  const colors=Object.entries(COLOR_TESTS).filter(([,pattern])=>pattern.test(prompt))
+ if(colors.length===0&&!colorSubject.test(prompt)&&!unsupported.test(prompt))
+  return null
  if(colors.length===0)
   return 'أستطيع تعديل خامة المجسم، لكنك لم تحدد اللون. ما اللون المطلوب؟ يمكنك اختيار الذهبي أو الفضي أو الأحمر أو الأزرق أو الأخضر أو البنفسجي أو الأسود أو الأبيض.'
  if(colors.length>1)
