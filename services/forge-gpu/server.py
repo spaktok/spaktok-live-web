@@ -15,20 +15,35 @@ import asyncio
 import io
 import os
 import secrets
+import hashlib
 import time
 
 import rembg
 import torch
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from PIL import Image, ImageOps, UnidentifiedImageError
 from gpu_preflight import require_compatible_gpu
+from gpu_ticket import validate_gpu_ticket, InvalidGPUTicket
 
 MAX_PHOTO = 8 * 1024 * 1024
 MAX_GLB = 35 * 1024 * 1024
 app = FastAPI(title="Spaktok Forge GPU", docs_url=None, redoc_url=None)
+# No wildcard origins. Set to the EXACT Spaktok creator website origin,
+# e.g. https://v0-spaktok-elite-app.vercel.app, when trial is approved.
+_BROWSER_ORIGIN = os.environ.get("FORGE_GPU_ALLOWED_ORIGIN", "")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[_BROWSER_ORIGIN] if _BROWSER_ORIGIN.startswith("https://") else [],
+    allow_methods=["POST"],
+    allow_headers=["Authorization", "Content-Type"],
+    max_age=300,
+)
 MAX_MULTIPART = MAX_PHOTO + 32768
 _gpu_lock = asyncio.Lock()
+_ticket_lock = asyncio.Lock()
+_used_tickets: dict[str, int] = {}
 _model = None
 _rembg_session = None
 _remove_background_fn = None
@@ -37,22 +52,48 @@ _resize_foreground_fn = None
 
 @app.middleware("http")
 async def admission_guard(request: Request, call_next):
-    """Reject unauthenticated and oversized bodies BEFORE multipart spooling."""
+    """Authorize before multipart spooling and burn a short-lived grant once."""
     if request.url.path == "/v1/generate":
+        # Browser CORS preflight contains no authorization token.
+        if request.method == "OPTIONS":
+            return await call_next(request)
+        if request.method != "POST":
+            return Response(status_code=405, content="method_not_allowed")
         token = os.environ.get("FORGE_GPU_TOKEN", "")
         incoming = request.headers.get("authorization", "")
-        if len(token) < 32 or not secrets.compare_digest(
-            incoming, "Bearer " + token
-        ):
-            return Response(status_code=401, content="unauthorized")
+        if len(token) < 32:
+            return Response(status_code=503, content="gpu_secret_unconfigured")
+        operator = secrets.compare_digest(incoming, "Bearer " + token)
+        claim = None
+        if not operator:
+            try:
+                claim = validate_gpu_ticket(
+                    incoming, token, _BROWSER_ORIGIN,
+                    request.headers.get("origin", ""),
+                )
+            except InvalidGPUTicket:
+                return Response(status_code=401, content="invalid_gpu_ticket")
         raw_length = request.headers.get("content-length", "")
         if not raw_length.isdigit():
             return Response(status_code=411, content="content_length_required")
         size = int(raw_length)
         if size < 128 or size > MAX_MULTIPART:
             return Response(status_code=413, content="request_too_large")
-        if request.method != "POST":
-            return Response(status_code=405, content="method_not_allowed")
+        if claim:
+            # In-memory replay guard is appropriate for this one-worker,
+            # disposable one-hour trial ONLY. Production requires durable
+            # nonce admission (e.g. a Cloudflare Durable Object).
+            async with _ticket_lock:
+                now = int(time.time())
+                for key, expiry in list(_used_tickets.items()):
+                    if expiry <= now:
+                        del _used_tickets[key]
+                if claim["nonce"] in _used_tickets:
+                    return Response(status_code=409, content="ticket_already_used")
+                if len(_used_tickets) >= 256:
+                    return Response(status_code=429, content="gpu_ticket_admission_full")
+                _used_tickets[claim["nonce"]] = claim["exp"]
+            request.state.gpu_ticket = claim
     return await call_next(request)
 
 
@@ -117,13 +158,20 @@ def _make_glb(photo: bytes) -> bytes:
 
 
 @app.post("/v1/generate")
-async def generate(image: UploadFile = File(...)):
+async def generate(request: Request, image: UploadFile = File(...)):
     if image.content_type not in ("image/png", "image/jpeg", "image/webp"):
         raise HTTPException(status_code=415, detail="unsupported_image")
     data = await image.read(MAX_PHOTO + 1)
     await image.close()
     if len(data) < 128 or len(data) > MAX_PHOTO:
         raise HTTPException(status_code=413, detail="invalid_image_size")
+    ticket = getattr(request.state, "gpu_ticket", None)
+    if ticket and (
+        image.content_type != ticket["mime"]
+        or len(data) != ticket["size"]
+        or hashlib.sha256(data).hexdigest() != ticket["sha256"]
+    ):
+        raise HTTPException(status_code=422, detail="gpu_ticket_image_mismatch")
     if _gpu_lock.locked():
         raise HTTPException(status_code=429, detail="gpu_busy_retry_later")
     try:
