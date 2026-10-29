@@ -10,6 +10,8 @@ import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-loca
 import {
  createStudioFanoutManifest,type StudioFanoutManifest,
 } from '@/lib/filter-engine/spaktok-studio-fanout'
+import {createDirectorDispatch,DIRECTOR_DEPARTMENT_ROUTES,
+ type DirectorDispatch} from '@/lib/filter-engine/spaktok-director-dispatch'
 import {
  saveStudioFanoutBundle,loadStudioFanoutManifest,clearStudioFanoutManifest,
  loadLocalStudioGlb,clearLocalStudioGlb,saveActiveOwnerRodinHead,
@@ -19,13 +21,6 @@ import {
 const TARGET_LABELS:Readonly<Record<DirectorTarget,string>>={
  avatar:'أفاتار',live:'لايف',filter:'فلتر AR',
  gift:'هدية Gift',world:'عالم Spaktok',
-}
-const TARGET_DESTINATIONS:Readonly<Record<DirectorTarget,string>>={
- avatar:'/avatar-studio?from=ai-director',
- live:'/avatar-studio?from=ai-director',
- filter:'/reality-studio?from=ai-director',
- gift:'/gift-studio?from=ai-director',
- world:'/spaktok-world?from=ai-director',
 }
 const ISSUE_AR:Readonly<Record<string,string>>={
  invalid_or_external_glb:'شبكة GLB غير صالحة أو تحتوي على روابط خارجية',
@@ -73,6 +68,8 @@ export default function SpaktokAIDirector({
  const [asset,setAsset]=useState<File|null>(null)
  const [qa,setQA]=useState<DirectorAssetQA|null>(null)
  const [manifest,setManifest]=useState<StudioFanoutManifest|null>(null)
+ const [dispatch,setDispatch]=useState<DirectorDispatch|null>(null)
+ const [autoHandoff,setAutoHandoff]=useState(false)
  const [status,setStatus]=useState('')
  const [show,setShow]=useState(true)
  const [ownerBusy,setOwnerBusy]=useState(false)
@@ -115,6 +112,7 @@ export default function SpaktokAIDirector({
    return
   }
   setOwnFile(file);setAsset(null);setQA(null);setManifest(null)
+  setDispatch(null);setAutoHandoff(false)
   setRightsApproved(false);setTransferConsent(false);setGpuConsent(false)
   setImageMode('local-2.5d')
   setStatus(file?'المصدر جاهز للتخطيط، لم يتم رفعه إلى أي خادم.':'')
@@ -160,6 +158,7 @@ export default function SpaktokAIDirector({
    await Promise.all([
     clearStudioFanoutManifest(),clearLocalStudioGlb(),
    ])
+   setAutoHandoff(false);setDispatch(null)
    setStatus('حُذفت مسودة GLB وخطة الأقسام المحفوظتان من هذا المتصفح. '+
     'لم تتغير الملفات الأصلية على جهازك.')
   }catch(error){
@@ -187,17 +186,30 @@ export default function SpaktokAIDirector({
    audit:inspection.audit,description,rights,targets:plan.targets,
    gpuJobsUsed,sourceEngine,
   })
+  const nextDispatch=createDirectorDispatch(draft)
+  let staged=false,stageError=''
+  if(checked.previewReady&&file.size<=15*1024*1024){
+   try{
+    await saveStudioFanoutBundle(file,draft)
+    staged=true
+   }catch(error){stageError=String(error)}
+  }
   setAsset(file);setQA(checked);setManifest(draft)
+  setDispatch(nextDispatch);setAutoHandoff(staged)
   if(sourceEngine!=='existing-glb')onGeneratedGlb?.(file)
   setStatus((sourceEngine==='browser-2.5d'?
    'نجح إنشاء GLB بارز 2.5D محليًا مجانًا دون رفع الصورة. '+
    'هذا ليس نموذج وجه/جسم 360° ولا تصلح حركاته تلقائيًا. ':
    'أنشأنا مسودة إنتاج للأقسام المختارة من GLB واحد. ')+
-   'تم إنشاء خطة لكل قسم، لكن Rig والحركات واختبارات Android والنشر غير مكتملة.')
+   (staged?'وُزعت المسودة الخاصة على جميع الأقسام المختارة تلقائيًا. ':
+     'خطة الأقسام جاهزة لكن النقل المحلي لم يكتمل. ')+
+   (stageError?'مشكلة التخزين: '+stageError+'. ':'')+
+   'Rig والحركات واختبارات Android والنشر غير مكتملة.')
  }
  const generate=async()=>{
   if(busy||!source||!rightsApproved||!plan.targets.length)return
   setBusy(true);setAsset(null);setQA(null);setManifest(null)
+  setDispatch(null);setAutoHandoff(false)
   try{
    if(sourceKind==='glb'){
     setStatus('فحص GLB الحالي دون GPU أو رفع إلى مزوّد خارجي…')
@@ -232,7 +244,8 @@ export default function SpaktokAIDirector({
   setBusy(true)
   try{
    await saveStudioFanoutBundle(asset,manifest)
-   setStatus('تم حفظ GLB والمسودة الخاصة معًا في هذا المتصفح لمدة 24 ساعة. لا يوجد رفع إلى السحابة.')
+   setAutoHandoff(true);setDispatch(createDirectorDispatch(manifest))
+   setStatus('تم حفظ ملف واحد لجميع الأقسام المختارة لمدة 24 ساعة داخل هذا المتصفح. لا رفع إلى السحابة.')
   }catch(error){
    setStatus('تعذّر حفظ المسودة الخاصة: '+String(error))
   }finally{setBusy(false)}
@@ -256,6 +269,7 @@ export default function SpaktokAIDirector({
    const checked=evaluateDirectorAsset(
     inspection.audit,bytes.byteLength,saved.project.outputTargets)
    setOwnFile(file);setAsset(file);setQA(checked);setManifest(saved)
+   setDispatch(createDirectorDispatch(saved));setAutoHandoff(true)
    setDescription(saved.project.description)
    setManualTargets([...saved.project.outputTargets])
    setRightsApproved(false);setGpuConsent(false);setTransferConsent(false)
@@ -270,8 +284,11 @@ export default function SpaktokAIDirector({
    !manifest.project.outputTargets.includes(target))return
   setBusy(true)
   try{
-   await saveStudioFanoutBundle(asset,manifest)
-   window.location.assign(TARGET_DESTINATIONS[target])
+   if(!autoHandoff){
+    await saveStudioFanoutBundle(asset,manifest)
+    setAutoHandoff(true)
+   }
+   window.location.assign(DIRECTOR_DEPARTMENT_ROUTES[target])
   }catch(error){
    setStatus('تعذّر النقل المحلي: '+String(error)+
     '. استعمل تنزيل GLB والاستيراد اليدوي.')
@@ -310,8 +327,8 @@ export default function SpaktokAIDirector({
    </button>
   </div>
   <p className="text-xs leading-6 text-slate-300">
-   يحلل طلبك لتوجيه العمل بين الأقسام، ويستخدم GLB الحالي دون GPU أو
-   يرسل صورة واحدة إلى Stable Fast 3D عند تفعيل خادم مرخص وموافقتك.
+   يوجه أوامرك تلقائيًا إلى Avatar وLive وFilters وGifts وWorld من ملف GLB واحد.
+   إنشاء 360° يستخدم Spaktok GPU فقط عند تفعيله وموافقتك؛ GLB الجاهز لا يحتاج GPU.
    الوصف يحدد الاستخدامات حاليًا، ولا يغير شكل التوليد نفسه.
    لا يوجد نشر جماهيري تلقائي ولا توليد وجه متحرك دون Rig حقيقي.
   </p>
@@ -493,7 +510,22 @@ export default function SpaktokAIDirector({
       معاينة {TARGET_LABELS[target]}
      </button>)}
     </div>
-    {manifest&&<div className="grid gap-2 sm:grid-cols-2">
+         {dispatch&&<div className="rounded-lg border border-violet-300/25 bg-violet-950/30 p-3 text-xs">
+      <p className="font-bold text-cyan-200">AI Director — توزيع أوامر {dispatch.steps.length} أقسام</p>
+      <p className="mt-1 leading-6 text-slate-300">
+       {autoHandoff?'ملف واحد محفوظ ببصمة SHA-256 لجميع معاينات الأقسام المختارة.':
+        'الأوامر جاهزة، لكن التخزين المحلي لم يكتمل أو الملف يحتاج تحسينًا.'}
+       {' '}لا تشغيل GPU إضافي ولا نشر عام. Rig والحركات والتصادمات مهام مستقلة.
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+       {dispatch.steps.map(step=><span key={step.target}
+        className="rounded-md border border-white/20 px-2 py-1">
+        {TARGET_LABELS[step.target]}: {autoHandoff&&step.status==='private-preview-staged'?
+         'مسودة قابلة للفتح':'يتطلب معالجة'}
+       </span>)}
+      </div>
+     </div>}
+     {manifest&&<div className="grid gap-2 sm:grid-cols-2">
      {manifest.outputs.map(output=><div key={output.target}
       className="rounded-lg border border-white/15 bg-slate-950/50 p-3 text-xs">
       <p className="font-semibold text-cyan-200">
