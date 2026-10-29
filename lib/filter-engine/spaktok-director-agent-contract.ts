@@ -70,7 +70,7 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
    request.workingSource!=='glb')
   return {ok:false,reason:'glb_required'}
  if(step.action==='dispatch_asset'&&
-  /(?:جميع|كل|كافة)\\s+(?:الأقسام|الاقسام)|all\\s+studios/i.test(request.prompt)&&
+  /(?:جميع|كل|كافة)\s+(?:الأقسام|الاقسام)|all\s+studios/i.test(request.prompt)&&
   step.targets.length!==DIRECTOR_TARGETS.length)
   return {ok:false,reason:'all_studios_requested'}
  if(step.action==='inspect_asset'){
