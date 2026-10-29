@@ -28,6 +28,12 @@ describe('Real Spaktok AI tool execution guards',()=>{
   ])
   expect(validateAgentStep(normalized,req()).ok).toBe(true)
  })
+ it('never distributes to a studio explicitly excluded by the creator',()=>{
+  const step0=step({action:'dispatch_asset',
+   targets:['avatar','live','filter','gift','world','video']})
+  const route=normalizeAgentDecision(step0,'أرسل المجسم إلى جميع الأقسام ما عدا اللايف')
+  expect(route.targets).toEqual(['avatar','filter','gift','world','video'])
+ })
  it('preserves exactly the two specialized departments user explicitly asked for',()=>{
   const normalized=normalizeAgentDecision(step({
    action:'dispatch_asset',targets:['gift','gift'],
