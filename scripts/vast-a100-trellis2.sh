@@ -125,6 +125,34 @@ ensure_cuda124_build_toolkit(){
   "$conda_nvcc" --version | grep -q 'release 12.4,' || fail 'CUDA compiler is not 12.4.'
   log 'Ready to build nvdiffrast with matching CUDA 12.4 headers.'
 }
+finish_extensions(){
+  # Previous focused diagnostic installed nvdiffrast successfully. Do NOT
+  # rebuild it, re-create Conda, or re-run FlashAttention.
+  prepare_source
+  ensure_torch
+  ensure_cuda124_build_toolkit
+  conda activate trellis2
+  export MAX_JOBS="${MAX_JOBS:-2}"
+  export TORCH_CUDA_ARCH_LIST=8.0
+  cd "$TRELLIS"
+  python - <<'PY'
+import importlib.util
+assert importlib.util.find_spec("nvdiffrast") is not None, "nvdiffrast is not installed"
+assert importlib.util.find_spec("flash_attn") is not None, "flash-attn is not installed"
+print("[Spaktok A100] Prior nvdiffrast and flash-attn installations detected.")
+PY
+  local component
+  for component in --nvdiffrec --cumesh --o-voxel --flexgemm;do
+    log "Installing remaining CUDA component $component with matched CUDA toolkit."
+    set +u
+    # shellcheck disable=SC1091
+    source ./setup.sh "$component"
+    set -u
+  done
+  conda activate trellis2
+  python -m pip install 'fastapi>=0.115,<1' 'uvicorn>=0.30,<1' 'python-multipart>=0.0.9,<1'
+  log 'Remaining TRELLIS.2 dependency steps completed; model weights NOT YET tested.'
+}
 diagnose_nvdiffrast(){
   activate
   conda activate trellis2
@@ -196,10 +224,11 @@ PY
 case "$ACTION" in
  preflight) preflight;;
  diagnose-nvdiffrast) diagnose_nvdiffrast;;
+ finish-extensions) finish_extensions;;
  install) install;;
  repair-flash) repair_flash;;
  resume) resume;;
  serve) serve;;
  smoke) smoke;;
- *) fail 'Usage: vast-a100-trellis2.sh {preflight|diagnose-nvdiffrast|install|repair-flash|resume|smoke|serve}';;
+ *) fail 'Usage: vast-a100-trellis2.sh {preflight|diagnose-nvdiffrast|finish-extensions|install|repair-flash|resume|smoke|serve}';;
 esac
