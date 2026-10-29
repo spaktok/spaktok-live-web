@@ -6,6 +6,7 @@ const asset={
  file:{size:2842496},
  qa:{triangles:28379},
  manifest:{source:{sha256:'a'.repeat(64)}},
+ handoffStored:true,
  dispatch:{publication:'private-draft',
   steps:[{target:'world'},{target:'gift'}]},
 } as unknown as AgentAssetResult
@@ -27,6 +28,17 @@ describe('Spaktok AI Director must report only verified results',()=>{
   const message=verifiedDirectorReply(asset,success.slice(0,2))
   expect(message).toContain('لم يكتمل التحقق')
   expect(message).not.toContain('تم فحص GLB وحفظ المسودة')
+ })
+ it('shows edited GLB to the creator without claiming distribution',()=>{
+  const preview={...asset,handoffStored:false} as AgentAssetResult
+  const acts:AgentEvent[]=[
+   {action:'recolor_asset',ok:true,detail:'gold GLB'},
+   {action:'inspect_asset',ok:true,detail:'QA passed'},
+   {action:'present_asset',ok:true,detail:'local preview only'},
+  ]
+  const result=verifiedDirectorReply(preview,acts)
+  expect(result).toContain('لم يُوزَّع')
+  expect(result).not.toContain('حفظ المسودة الخاصة لـ')
  })
  it('clearly explains an actual failed tool instead of a fake success',()=>{
   const message=verifiedDirectorReply(null,[
