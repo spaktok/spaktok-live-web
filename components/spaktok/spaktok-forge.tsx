@@ -58,6 +58,7 @@ export default function SpaktokForge({
  const [webglAvailable,setWebglAvailable]=useState(true)
  const [gpuAvailable,setGpuAvailable]=useState(false)
  const [gpuReadiness,setGpuReadiness]=useState<ForgeGpuReadiness|null>(null)
+ const [gpuEngine,setGpuEngine]=useState<string|null>(null)
  const [gpuConsent,setGpuConsent]=useState(false)
  const [transferConsent,setTransferConsent]=useState(false)
  const [sourceRights,setSourceRights]=useState<'original'|'licensed'>('original')
@@ -92,6 +93,7 @@ export default function SpaktokForge({
     const status=typeof data?.status==='string'&&Object.prototype.hasOwnProperty.call(FORGE_GPU_READINESS_AR,data.status)?
      data.status as ForgeGpuReadiness:'provider-offline'
     setGpuReadiness(status)
+    setGpuEngine(['trellis1','trellis2','stable-fast-3d'].includes(String(data.engine))?data.engine:null)
     setGpuAvailable(data.enabled===true&&status==='ready')
    }})
    .catch(()=>{if(live){setGpuAvailable(false);setGpuReadiness('provider-offline')}})
@@ -345,7 +347,11 @@ export default function SpaktokForge({
        'المحرك متصل. الاستخدام مُقيّد بمهمة واحدة لكل حساب يوميًا. GPU يُحاسب المشغّل على وقت التشغيل.':
        gpuReadiness?FORGE_GPU_READINESS_AR[gpuReadiness]:'جارٍ فحص حالة محرك التوليد...'}
      </p>
-     {gpuAvailable&&<>
+     {gpuEngine&&<p className="mt-1 text-[11px] leading-5 text-violet-200">
+       المحرك المختار: {gpuEngine==='trellis1'?'Microsoft TRELLIS (DINOv2)':
+        gpuEngine==='trellis2'?'Microsoft TRELLIS.2 (DINOv3)':'Stable Fast 3D'}
+      </p>}
+      {gpuAvailable&&<>
       <label className="mt-2 flex gap-2 text-xs leading-5 text-amber-100">
        <input type="checkbox" checked={gpuConsent}
         onChange={e=>setGpuConsent(e.target.checked)} className="mt-1"/>
