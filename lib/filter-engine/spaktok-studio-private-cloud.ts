@@ -7,7 +7,7 @@ type Signed={url:string;headers:Record<string,string>;id:string}
 export type PrivateCloudDraft=Readonly<{
  id:string;sha256:string;bytes:number;targets:string[];createdAt:string
 }>
-const requireEndpoint=(url:string)=>{
+export const requireTrustedStudioR2Endpoint=(url:string)=>{
  const u=new URL(url)
  if(u.protocol!=='https:'||u.hostname!==HOST||u.port||
     !/^\/v1\/studio\/[a-f0-9-]{36}\/[a-f0-9-]{36}\.glb$/.test(u.pathname)||
@@ -58,7 +58,7 @@ export async function uploadPrivateStudioDraft(
  const ticket=await reserve.json() as Signed
  if(!ticket||typeof ticket.id!=='string'||!ticket.headers)
   throw Error('studio_cloud_bad_ticket')
- const url=requireEndpoint(ticket.url)
+ const url=requireTrustedStudioR2Endpoint(ticket.url)
  const remote=await fetch(url,{
   method:'PUT',headers:ticket.headers,body:file,
   mode:'cors',credentials:'omit',redirect:'error',cache:'no-store',
@@ -86,7 +86,7 @@ export async function downloadPrivateStudioDraft(
  const ticket=await res.json() as Signed & {sha256:string;bytes:number}
  if(ticket.sha256!==shaExpected||ticket.bytes!==bytesExpected)
   throw Error('studio_cloud_record_mismatch')
- const remote=await fetch(requireEndpoint(ticket.url),{
+ const remote=await fetch(requireTrustedStudioR2Endpoint(ticket.url),{
   method:'GET',headers:ticket.headers,mode:'cors',credentials:'omit',
   cache:'no-store',redirect:'error',signal:AbortSignal.timeout(120000),
  })
