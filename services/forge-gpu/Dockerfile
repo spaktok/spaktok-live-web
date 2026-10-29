@@ -41,6 +41,7 @@ RUN useradd -m -u 10001 forge \
 
 COPY --chown=forge:forge services/forge-gpu/server.py /opt/spaktok/server.py
 COPY --chown=forge:forge services/forge-gpu/gpu_preflight.py /opt/spaktok/gpu_preflight.py
+COPY --chown=forge:forge services/forge-gpu/gpu_ticket.py /opt/spaktok/gpu_ticket.py
 WORKDIR /opt/spaktok
 USER forge
 # Model weights are gated: download into your own runtime cache after accepting
