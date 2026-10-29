@@ -24,6 +24,7 @@ prepare(){
   command -v nvcc >/dev/null || fail 'CUDA toolkit/nvcc is required to compile submodules.'
   nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
   nvcc --version | tail -n 4
+  df -h /workspace | tail -n 1
   log 'No model downloaded or inference performed during preflight.'
 }
 activate(){
@@ -51,6 +52,11 @@ install(){
   git cat-file -e "$TRELLIS_COMMIT^{commit}" || fail 'Pinned official TRELLIS source unavailable.'
   git checkout --detach "$TRELLIS_COMMIT"
   git submodule update --init --recursive
+  # Upstream setup.sh compares exact version "2.4.0" but the official
+  # CUDA PyTorch wheel reports "2.4.0+cu121". Normalize that suffix only
+  # in the local pinned source checkout, so it selects the correct
+  # xformers and kaolin wheels instead of silently skipping both.
+  sed -i 's/print(torch.__version__)/print(torch.__version__.split("+")[0])/' setup.sh
   source "$(conda info --base)/etc/profile.d/conda.sh"
   if [[ ! -d "$HOME/.config/spaktok" ]]; then
     mkdir -p "$HOME/.config/spaktok"
@@ -82,12 +88,13 @@ assert torch.cuda.is_available(), "cuda_missing"
 assert torch.version.cuda == "12.1", "wrong_pytorch_cuda"
 print("PRECHECK", torch.__version__, torch.version.cuda)
 PY
-  # Install the official extensions with matching nvcc 12.1.
-  # Re-running after a failed install is allowed; never treat env existence
-  # alone as proof of a completed installation.
+  # Microsoft's pipeline supports xformers; this avoids rebuilding
+  # flash-attn on a rented GPU with fragile PEP517 build isolation.
+  # Re-running after a partial failure is possible but not a guarantee.
   export TORCH_CUDA_ARCH_LIST=8.0
   export MAX_JOBS=2
-  source ./setup.sh --basic --xformers --flash-attn \
+  export ATTN_BACKEND=xformers
+  source ./setup.sh --basic --xformers \
     --diffoctreerast --spconv --mipgaussian --kaolin --nvdiffrast
   activate
   python -m pip install 'fastapi>=0.115,<1' 'uvicorn[standard]>=0.30,<1' \
@@ -101,6 +108,7 @@ smoke(){
   activate
   export PYTHONPATH="$FORGE:$TRELLIS"
   export SPCONV_ALGO=native
+  export ATTN_BACKEND=xformers
   cd "$TRELLIS"
   # Public Microsoft sample, not a private user's photo.
   python - <<'PY'
@@ -127,6 +135,7 @@ serve(){
   activate
   export PYTHONPATH="$FORGE:$TRELLIS"
   export SPCONV_ALGO=native
+  export ATTN_BACKEND=xformers
   export FORGE_GPU_ENGINE=trellis1
   token="$(printenv FORGE_GPU_TOKEN || true)"
   if [[ -z "$token" ]]; then
