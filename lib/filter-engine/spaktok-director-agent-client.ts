@@ -1,6 +1,6 @@
 'use client'
 import {
- agentStepSchema,validateAgentStep,type AgentEvent,type AgentRequest,
+ agentStepSchema,validateAgentStep,creatorClarification,type AgentEvent,type AgentRequest,
 } from './spaktok-director-agent-contract'
 import {evaluateDirectorAsset,type DirectorTarget,type DirectorAssetQA} from './spaktok-ai-director'
 import {createDirectorReliefGlb} from './spaktok-director-local-relief'
@@ -88,6 +88,9 @@ async function inspect(file:File){
 export async function runDirectorAgent(params:Params):Promise<AgentRunResult>{
  if(!params.rightsApproved&&params.source)
   throw Error('يجب تأكيد حقوق استخدام الملف أولًا')
+ const clarification=creatorClarification(params.prompt)
+ if(clarification)
+  return {reply:clarification,result:null,actions:[]}
  const original=params.source
  let working=original
  let engine:AgentAssetResult['sourceEngine']='existing-glb'
