@@ -1,0 +1,30 @@
+name: Forge GPU Contract Checks (no GPU)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/forge-gpu/**'
+      - '.github/workflows/forge-gpu-contract.yml'
+  pull_request:
+    paths:
+      - 'services/forge-gpu/**'
+      - '.github/workflows/forge-gpu-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout reviewed source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate Python syntax without third-party dependencies
+        run: |
+          python3 -m py_compile services/forge-gpu/gpu_preflight.py services/forge-gpu/gpu_ticket.py services/forge-gpu/server.py
+      - name: Run Blackwell CUDA and direct-ticket contract tests
+        working-directory: services/forge-gpu
+        run: python3 -m unittest test_gpu_preflight test_gpu_ticket -v
