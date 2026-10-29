@@ -37,6 +37,7 @@ export function planSpaktokDirector(input:Readonly<{
  source:'image'|'glb'|'none'
  rightsApproved:boolean
  gpuAvailable:boolean
+ localReliefSelected?:boolean
  transferApproved?:boolean
  computeApproved?:boolean
 }>):DirectorPlan{
@@ -45,10 +46,11 @@ export function planSpaktokDirector(input:Readonly<{
  if(!targets.length)targets.push(...detectDirectorTargets(input.description))
  const hasSource=input.source!=='none'
  const readySource=hasSource&&input.rightsApproved
- const needsGpu=input.source==='image'
+ const needsGpu=input.source==='image'&&!input.localReliefSelected
  const imageNeedsGpu=needsGpu&&!input.gpuAvailable
  const paidConsented=input.transferApproved===true&&
   input.computeApproved===true
+ const localRelief=input.source==='image'&&input.localReliefSelected===true
  const geometryReady=input.source==='glb'&&readySource
  const stages:DirectorStageCheck[]=[
   {id:'source',status:!hasSource?'blocked':input.rightsApproved?'ready':'blocked',
@@ -61,6 +63,7 @@ export function planSpaktokDirector(input:Readonly<{
     !input.rightsApproved?'rights_unverified':
     needsGpu?(imageNeedsGpu?'licensed_gpu_not_configured':
      paidConsented?'one_approved_gpu_job':'explicit_image_transfer_and_gpu_consent_required'):
+     localRelief?'browser_only_2_5d_relief_not_360':
      'reuse_existing_glb_zero_gpu'},
   {id:'geometry',status:geometryReady?'ready':'blocked',
    reason:geometryReady?'requires_actual_glb_audit':'awaiting_valid_glb'},
