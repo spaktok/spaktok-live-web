@@ -256,6 +256,52 @@ selected. Image-to-3D still runs on the separate TRELLIS GPU with consent.
   nor the signed end-to-end AI->tool->GLB loop is claimed to be live for
   end users. The draft PR is NOT merged.
 
+### Confirmed read-only Cloudflare and model QA — 29 October 2026
+
+These are **real account and deployed-worker** tests, NOT simulations
+of a fully signed user session:
+
+- Real `@cf/meta/llama-3.3-70b-instruct-fp8-fast` in Cloudflare
+  successfully planned this three-step workflow using synthetic
+  observations grounded in the actual 28,379-triangle sample:
+  `inspect_asset` (~15.12 neurons) →
+  `dispatch_asset` (~13.95 neurons) →
+  `finish` (~15.23 neurons).
+  The two latter observations were *provided as test input*, not produced
+  by a live browser execution in that provider test.
+- IMPORTANT: Llama's first response to
+  `أرسل المجسم إلى جميع الأقسام` hallucinated six duplicate
+  `gift` targets and a misleading "sent" status BEFORE any work.
+  This is a real observed model failure, not a hypothetical one.
+  `normalizeAgentDecision` now enforces the user's explicit requested
+  departments (including all six) and removes duplicates before
+  `validateAgentStep` and the browser executor.
+  Regression tests reproduce the actual failure and verify the repair.
+- A live Cloudflare Browser Rendering call to
+  `https://spaktok-director-ai.spaktok.workers.dev/health`
+  confirmed the deployed Worker identified
+  `provider=cloudflare-workers-ai`, `auth=signed-server-only`
+  and the expected Llama model.
+- A separate **deployed-worker** call to `/self-test` returned
+  `{ok:true,unsignedDenied:true,forgedDenied:true,
+  modelInvoked:false,budgetDebited:false}`. This checks the **same
+  Ed25519 verification function** with fake negative-case signatures.
+  It uses no inference and no D1 budget.
+- Cloudflare D1 query confirmed `director_ai_daily_usage` exists
+  and still has zero rows; the provider tests via account AI API do
+  not use the signed Spaktok Worker, which is correct.
+- Server signing now checks that the configured private Ed25519 key
+  corresponds **exactly** to the pinned Worker public key before
+  attempting inference, avoiding silent signature/key misconfiguration.
+  No private key is read or committed into the public repository.
+
+**Remaining gate:** No live authenticated Spaktok account has yet
+completed signed POST via Vercel -> Worker -> Llama -> actual browser
+GLB edit/audit -> private handoff. No claim of fully autonomous native
+Spaktok production is justified. The latest Vercel PR still reports
+`build-rate-limit`, not a source-code compile log. The app's optional
+AI flag remains OFF. No new GPU rented.
+
 ### How to activate safely AFTER canary
 
 1. Run `npm run test:studio:ai:free:canary`. Confirm the deployed
