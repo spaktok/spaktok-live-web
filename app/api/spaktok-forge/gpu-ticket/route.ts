@@ -46,6 +46,7 @@ function config(origin:string){
    url.protocol!=='https:'||url.hostname!==host||
    url.port||url.username||url.password||url.hash||url.search||
    url.pathname!=='/v1/generate'||host==='localhost'||
+   !host.endsWith('.proxy.runpod.net')||
    /^(?:127\.|10\.|192\.168\.|169\.254\.|0\.|::1$)/.test(host))
    return null
   return {url:url.toString(),token,globalCap}
@@ -55,10 +56,28 @@ const allowed=(request:NextRequest)=>
  request.headers.get('origin')===request.nextUrl.origin&&
  request.headers.get('sec-fetch-site')!=='cross-site'
 
+async function gpuHealthy(cfg:{url:string}):Promise<boolean>{
+ try{
+  const healthUrl=new URL('/health',cfg.url)
+  const r=await fetch(healthUrl.toString(),{
+   method:'GET',cache:'no-store',redirect:'error',
+   signal:AbortSignal.timeout(4000),
+  })
+  if(!r.ok)return false
+  const raw=await r.text()
+  if(raw.length>1024)return false
+  const parsed:unknown=JSON.parse(raw)
+  return !!parsed&&typeof parsed==='object'&&
+   (parsed as {ready?:unknown;engine?:unknown}).ready===true&&
+   (parsed as {ready?:unknown;engine?:unknown}).engine==='stable-fast-3d'
+ }catch{return false}
+}
+
 export async function GET(request:NextRequest){
  const cfg=config(request.nextUrl.origin)
+ const online=cfg?await gpuHealthy(cfg):false
  return json({
-  enabled:Boolean(cfg),delivery:'direct-private-ticket',
+  enabled:online,delivery:'direct-private-ticket',
   engine:'Stable Fast 3D (licensed self-host)',
   full360:true,dailyCapPerOwner:1,
   globalDailyCap:cfg?.globalCap??null,maxImageMB:8,
@@ -70,6 +89,8 @@ export async function POST(request:NextRequest){
  if(!allowed(request))return json({error:'forge_invalid_origin'},403)
  const cfg=config(request.nextUrl.origin)
  if(!cfg)return json({error:'forge_gpu_disabled'},503)
+ if(!await gpuHealthy(cfg))
+  return json({error:'forge_gpu_provider_not_ready'},503)
  const length=Number(request.headers.get('content-length')??0)
  if(length>MAX_BODY)return json({error:'forge_ticket_too_large'},413)
  let input:unknown
