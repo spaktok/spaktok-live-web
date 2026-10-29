@@ -12,7 +12,7 @@ import RealityImageReference from './reality-image-reference'
 import RealityProductionDirector from './reality-production-director'
 import SpaktokForge from './spaktok-forge'
 import SpaktokAIDirector from './spaktok-ai-director'
-import {loadLocalStudioGlb} from '@/lib/filter-engine/reality-local-asset-handoff'
+import {loadLocalStudioGlb,loadStudioFanoutManifest} from '@/lib/filter-engine/reality-local-asset-handoff'
 import {
  createStudioProductionPackage,withStudioProductionSource,reviewStudioProduction,
 } from '@/lib/filter-engine/reality-production-pipeline'
@@ -188,12 +188,24 @@ export default function RealityCreatorLab(){
  const importFromAIDirector=async()=>{
   setStatus('استيراد GLB الخاص من Spaktok AI Director…')
   try{
-   const asset=await loadLocalStudioGlb()
+   const [asset,manifest]=await Promise.all([
+    loadLocalStudioGlb(),loadStudioFanoutManifest(),
+   ])
    if(!asset){setStatus('لا يوجد GLB محلي. أنشئه أولًا باستخدام AI Director.');return}
+   const fingerprint=new Uint8Array(await crypto.subtle.digest(
+    'SHA-256',await asset.arrayBuffer()))
+   const sha=Array.from(fingerprint).map(x=>x.toString(16).padStart(2,'0')).join('')
+   const verified=manifest?.source.sha256===sha&&
+    manifest.source.fileName===asset.name
    acceptForgeAsset(asset)
    setCategory('mask');setAnchor('nose_bridge')
-   setStatus('تم استيراد GLB الخاص. موضع جسر الأنف افتراضي فقط؛'+
-    ' اضبط نقاط الوجه والحجم وراجع الحقوق قبل اعتماد الفلتر.')
+   const issues=verified?
+    manifest.outputs.find(x=>x.target==='filter')?.blockers.join(' · '):null
+   setStatus('تم استيراد GLB الخاص'+
+    (verified?' مع التحقق من بصمته. ':' دون خطة أقسام مطابقة. ')+
+    'موضع جسر الأنف افتراضي ويتطلب معايرة وإخفاء الوجه واختبار الكاميرا. '+
+    (issues??'')+
+    ' لا يصبح الفلتر منشورًا تلقائيًا.')
   }catch(error){setStatus('تعذّر استيراد GLB: '+String(error))}
  }
  const autoImportRef=useRef(false)
