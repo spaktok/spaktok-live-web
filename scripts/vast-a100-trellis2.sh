@@ -99,6 +99,33 @@ install(){
   fi
   resume
 }
+diagnose_nvdiffrast(){
+  activate
+  conda activate trellis2
+  log 'Focused nvdiffrast build diagnostic: does not reinstall whole TRELLIS.2.'
+  [[ -f /tmp/extensions/nvdiffrast/setup.py ]] || fail 'nvdiffrast checkout missing; inspect prior official installation first.'
+  python - <<'PY'
+import torch
+print("torch:",torch.__version__,"cuda:",torch.version.cuda)
+print("GPU:",torch.cuda.get_device_name(0),"capability:",torch.cuda.get_device_capability(0))
+PY
+  nvcc --version | tail -n 4
+  gcc --version | head -n 1
+  export MAX_JOBS="${MAX_JOBS:-2}"
+  export TORCH_CUDA_ARCH_LIST=8.0
+  log 'Saving full verbose compiler output to /workspace/nvdiffrast-build.log'
+  set +e
+  python -m pip install -v --no-build-isolation /tmp/extensions/nvdiffrast > /workspace/nvdiffrast-build.log 2>&1
+  status=$?
+  set -e
+  if (( status != 0 ));then
+    log "nvdiffrast build failed (exit $status); showing last compiler errors"
+    grep -n -i -E 'FAILED:|fatal error:|error:|nvcc fatal|unsupported GNU|killed|undefined reference|not found|No such file' /workspace/nvdiffrast-build.log | tail -n 40 || true
+    log 'For full context, use: tail -n 80 /workspace/nvdiffrast-build.log'
+    return "$status"
+  fi
+  log 'nvdiffrast successfully installed. Other TRELLIS.2 extensions still need verification.'
+}
 serve(){
   activate
   conda activate trellis2
@@ -141,10 +168,11 @@ PY
 }
 case "$ACTION" in
  preflight) preflight;;
+ diagnose-nvdiffrast) diagnose_nvdiffrast;;
  install) install;;
  repair-flash) repair_flash;;
  resume) resume;;
  serve) serve;;
  smoke) smoke;;
- *) fail 'Usage: vast-a100-trellis2.sh {preflight|install|repair-flash|resume|smoke|serve}';;
+ *) fail 'Usage: vast-a100-trellis2.sh {preflight|diagnose-nvdiffrast|install|repair-flash|resume|smoke|serve}';;
 esac
