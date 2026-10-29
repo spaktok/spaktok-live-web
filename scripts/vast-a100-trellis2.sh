@@ -99,48 +99,30 @@ install(){
   fi
   resume
 }
-locate_cusparse_header(){
-  # Prefer the CUDA headers provided with the active PyTorch build (cu124),
-  # then compatible Conda/system CUDA toolkit layouts.
-  local root candidate
-  local -a roots=(
-    "$CONDA_PREFIX/lib/python3.10/site-packages/nvidia/cusparse/include"
-    "$CONDA_PREFIX/targets/x86_64-linux/include"
-    "$CONDA_PREFIX/include"
-    "/usr/local/cuda-12.4/targets/x86_64-linux/include"
-    "/usr/local/cuda-12.4/include"
-    "/usr/local/cuda/targets/x86_64-linux/include"
-    "/usr/local/cuda/include"
-    "/usr/local/cuda-12.9/targets/x86_64-linux/include"
-    "/usr/local/cuda-12.9/include"
-  )
-  for root in "${roots[@]}"; do
-    if [[ -f "$root/cusparse.h" ]];then
-      printf '%s\n' "$root"
-      return 0
-    fi
+ensure_cuda124_build_toolkit(){
+  # PyTorch uses cu124, so prefer a matched 12.4 compiler plus development headers.
+  local prefix="$CONDA_PREFIX"
+  [[ -n "$prefix" && "$prefix" != "/" ]] || fail 'Conda trellis2 environment is not active.'
+  local headers="$prefix/targets/x86_64-linux/include"
+  local conda_nvcc="$prefix/bin/nvcc"
+  if [[ ! -x "$conda_nvcc" || ! -f "$headers/cusparse.h" ||
+        ! -f "$headers/cusolverDn.h" || ! -f "$headers/cublas_v2.h" ]];then
+    log 'Installing matching CUDA 12.4 toolkit and cuSPARSE/cuSOLVER development headers.'
+    conda install -y -n trellis2 -c nvidia/label/cuda-12.4.1 \
+      cuda-libraries-dev cuda-nvcc || fail 'CUDA 12.4 development toolkit install failed.'
+  fi
+  [[ -x "$conda_nvcc" ]] || fail 'CUDA 12.4 Conda compiler not found.'
+  export CUDA_HOME="$prefix"
+  export PATH="$prefix/bin:$PATH"
+  export CPATH="$headers:$prefix/include${CPATH:+:$CPATH}"
+  export CPLUS_INCLUDE_PATH="$headers:$prefix/include${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}"
+  export LIBRARY_PATH="$prefix/targets/x86_64-linux/lib${LIBRARY_PATH:+:$LIBRARY_PATH}"
+  local file
+  for file in cusparse.h cusolverDn.h cublas_v2.h cuda_runtime_api.h; do
+    [[ -f "$headers/$file" || -f "$prefix/include/$file" ]] || fail "Missing $file after toolkit install."
   done
-  candidate="$(find "$CONDA_PREFIX" /usr/local/cuda-12.9 /usr/local/cuda-12.4 \
-    -type f -name cusparse.h -print -quit 2>/dev/null || true)"
-  if [[ -n "$candidate" ]];then
-    dirname "$candidate"
-    return 0
-  fi
-  return 1
-}
-ensure_cusparse_dev_headers(){
-  local header_dir
-  header_dir="$(locate_cusparse_header)" || true
-  if [[ -z "$header_dir" ]];then
-    log 'cuSPARSE headers missing from the active environment. Installing matching 12.4 development headers only.'
-    # PyTorch in this environment is built with cu124.
-    conda install -y -n trellis2 -c nvidia/label/cuda-12.4.1 libcusparse-dev || fail 'Could not install CUDA 12.4 cuSPARSE development headers.'
-    header_dir="$(locate_cusparse_header)" || fail 'cusparse.h still not found after installing libcusparse-dev.'
-  fi
-  log "Using cuSPARSE headers from: $header_dir"
-  export CPATH="$header_dir${CPATH:+:$CPATH}"
-  export CPLUS_INCLUDE_PATH="$header_dir${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}"
-  [[ -f "$header_dir/cusparse.h" ]] || fail 'cuSPARSE header path unexpectedly missing.'
+  "$conda_nvcc" --version | grep -q 'release 12.4,' || fail 'CUDA compiler is not 12.4.'
+  log 'Ready to build nvdiffrast with matching CUDA 12.4 headers.'
 }
 diagnose_nvdiffrast(){
   activate
@@ -156,7 +138,7 @@ PY
   gcc --version | head -n 1
   export MAX_JOBS="${MAX_JOBS:-2}"
   export TORCH_CUDA_ARCH_LIST=8.0
-  ensure_cusparse_dev_headers
+  ensure_cuda124_build_toolkit
   log 'Saving full verbose compiler output to /workspace/nvdiffrast-build.log'
   set +e
   python -m pip install -v --no-build-isolation /tmp/extensions/nvdiffrast > /workspace/nvdiffrast-build.log 2>&1
