@@ -1,5 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {createHmac} from 'node:crypto'
+import {resolveForgeGpuBackend,type ForgeGpuBackend} from '@/lib/server/spaktok-forge-provider'
 import {getNativeUser,rateLimit} from '@/lib/native/auth'
 import {queryD1} from '@/lib/native/d1'
 import {
@@ -26,37 +27,12 @@ const json=(body:unknown,status=200)=>NextResponse.json(body,{
   'cache-control':'private,no-store','x-content-type-options':'nosniff',
  },
 })
-function config(origin:string){
- if(process.env.SPAKTOK_FORGE_GPU_ENABLED!=='true'||
-  process.env.SPAKTOK_FORGE_GPU_DIRECT_ENABLED!=='true')
-  return null
- const globalCap=parseForgeDailyJobLimit(
-  process.env.SPAKTOK_FORGE_GPU_DAILY_LIMIT)
- if(globalCap===null)return null
- const expectedOrigin=process.env.SPAKTOK_FORGE_GPU_BROWSER_ORIGIN??''
- const host=process.env.SPAKTOK_FORGE_GPU_HOST??''
- const urlText=process.env.SPAKTOK_FORGE_GPU_URL??''
- const token=process.env.SPAKTOK_FORGE_GPU_TOKEN??''
- if(!expectedOrigin||expectedOrigin!==origin||
-  token.length<32||!urlText||!host)return null
- try{
-  const url=new URL(urlText)
-  const originURL=new URL(expectedOrigin)
-  if(originURL.protocol!=='https:'||originURL.origin!==expectedOrigin||
-   url.protocol!=='https:'||url.hostname!==host||
-   url.port||url.username||url.password||url.hash||url.search||
-   url.pathname!=='/v1/generate'||host==='localhost'||
-   !host.endsWith('.proxy.runpod.net')||
-   /^(?:127\.|10\.|192\.168\.|169\.254\.|0\.|::1$)/.test(host))
-   return null
-  return {url:url.toString(),token,globalCap}
- }catch{return null}
-}
+const config=(origin:string)=>resolveForgeGpuBackend(process.env,origin)
 const allowed=(request:NextRequest)=>
  request.headers.get('origin')===request.nextUrl.origin&&
  request.headers.get('sec-fetch-site')!=='cross-site'
 
-async function gpuHealthy(cfg:{url:string}):Promise<boolean>{
+async function gpuHealthy(cfg:ForgeGpuBackend):Promise<boolean>{
  try{
   const healthUrl=new URL('/health',cfg.url)
   const r=await fetch(healthUrl.toString(),{
@@ -69,7 +45,7 @@ async function gpuHealthy(cfg:{url:string}):Promise<boolean>{
   const parsed:unknown=JSON.parse(raw)
   return !!parsed&&typeof parsed==='object'&&
    (parsed as {ready?:unknown;engine?:unknown}).ready===true&&
-   (parsed as {ready?:unknown;engine?:unknown}).engine==='stable-fast-3d'
+   (parsed as {ready?:unknown;engine?:unknown}).engine===cfg.engine
  }catch{return false}
 }
 
@@ -78,7 +54,7 @@ export async function GET(request:NextRequest){
  const online=cfg?await gpuHealthy(cfg):false
  return json({
   enabled:online,delivery:'direct-private-ticket',
-  engine:'Stable Fast 3D (licensed self-host)',
+  engine:cfg?.engine??null,provider:cfg?.provider??null,
   full360:true,dailyCapPerOwner:1,
   globalDailyCap:cfg?.globalCap??null,maxImageMB:8,
   maxResultMB:35,
