@@ -52,9 +52,15 @@ Code added for a separate private GLB Worker:
   download and delete **when enabled**.
   Restored assets require a new explicit rights confirmation before fanout.
 - Default server flag `SPAKTOK_STUDIO_R2_ENABLED` is **OFF**.
-  The new Worker `spaktok-private-studio-assets` does **NOT** exist in the
-  connected Cloudflare account as of this audit. So the new R2 sync is
-  source code and D1 preparation, **NOT yet a live storage service**.
+  The isolated classic-format Worker `spaktok-private-studio-assets`
+  **has now been deployed** to the connected Cloudflare account with
+  `STUDIO_DRAFTS` R2 bucket binding and a preview-only
+  `STUDIO_ALLOWED_ORIGIN`. The `workers.dev` route is enabled, while
+  preview URLs are disabled. Cloudflare Browser Rendering verified:
+  `GET /health` returns `{"ok":true,"storage":"private-r2","modelAssets":"not-public"}`;
+  an unsigned GLB GET returns `{"error":"bad_claim"}`.
+  **No signed real-GLB end-to-end upload/download/delete canary has passed
+  yet, so cloud UI remains OFF and is not ready for public use.**
 
 ### 3. Real GPU result
 
@@ -133,10 +139,16 @@ previously disclosed Vast/provider secrets.
 - No persistent Cloudflare Queues/Workflows GPU scheduling or provider
   auto-provisioning/auto-destroy has been integrated. GPU feature flags
   remain off; one-time manual Vast trial was successful.
-- GitHub Actions on the latest feature branch commit are still **failing**;
-  Vercel previews of **earlier** commits reached READY, but the complete new
-  six-department/R2 source is not yet demonstrated as passing the full
-  strict TypeScript/security gate or ready for production.
+- GitHub Actions on the feature branch report `failure` and their job step
+  summaries are empty; the downloadable logs were unavailable. This is not
+  enough evidence to attribute failure to source code.
+- A Vercel Preview for commit `62dbfa42a8ba` is `READY`.
+  Its build logs confirmed `17/17 test files` and `78/78 tests` passing
+  including Director fanout, R2 host allowlist and AI Director command tests.
+  Next.js completed building routes for all six studios.
+- The latest Worker deployment itself is verified through Cloudflare API
+  and Browser Rendering health/unsigned denial; authenticated file transfer
+  and native Android still need end-to-end canary tests.
 - Until tests and model licensing/rights assessment pass, **keep PR draft,
   cloud flag off and no automatic publication**.
 
