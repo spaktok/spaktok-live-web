@@ -21,18 +21,18 @@ export type DirectorPlan=Readonly<{
  publication:'private-draft'
 }>
 const TARGET_SYNONYMS:Readonly<Record<DirectorTarget,RegExp>>={
- avatar:/\bavatar\b|افاتار|أفاتار|افتار|أفتار|اڤاتار/,
- live:/\blive\b|لايف|بث|مباشر/,
- filter:/\bfilter\b|فلاتر|فلتر|قناع|mask|\bar\b/,
- gift:/\bgift\b|هدي[ةه]|هدايا|هدية|جفت/,
- world:/\bworld\b|عالم|خريطة|بيئة افتراضي[ةه]/,
- video:/\bvideo\b|فيديو|مقاطع|ريلز|reels|clip/,
+ avatar:/\bavatar\b|افاتار|أفاتار|افتار|أفتار|اڤاتار|\bcharakter\b|\bspielfigur\b|\bprofilfigur\b/,
+ live:/\blive\b|لايف|بث|مباشر|\blivestream\b|\blivestreaming\b|\blive-stream\b/,
+ filter:/\bfilters?\b|فلاتر|فلتر|قناع|\bmask\b|\bmaske\b|\bgesichtsfilter\b|\bar\b/,
+ gift:/\bgifts?\b|هدي[ةه]|هدايا|هدية|جفت|\bgeschenk(?:e|en|s)?\b/,
+ world:/\bworld\b|عالم|خريطة|بيئة افتراضي[ةه]|\bwelt\b|\bwelten\b|\bweltobjekt\b|\bumgebung\b/,
+ video:/\bvideos?\b|فيديو|مقاطع|ريلز|\breels?\b|\bclips?\b|\bfilm\b/,
 }
 export function detectDirectorTargets(description:string):readonly DirectorTarget[]{
  const normalized=description.normalize('NFKC').toLowerCase()
  // A creator can ask the Director to route ONE asset to all existing
  // departments using natural Arabic or English without five checkboxes.
- if(/(?:جميع|كل|كافة)\s+(?:الأقسام|الاقسام|الاستوديوهات|الستوديوهات|المحركات|الاقسام الموجودة)|(?:all|every)\s+(?:studios|departments|targets|sections)/i.test(normalized))
+ if(/(?:جميع|كل|كافة)\s+(?:الأقسام|الاقسام|الاستوديوهات|الستوديوهات|المحركات|الاقسام الموجودة)|(?:all|every)\s+(?:studios|departments|targets|sections)|\balle\s+(?:studios|bereiche|abteilungen|module)\b/i.test(normalized))
   return DIRECTOR_TARGETS
  return DIRECTOR_TARGETS.filter(t=>TARGET_SYNONYMS[t].test(normalized))
 }
