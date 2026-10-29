@@ -18,7 +18,6 @@ import secrets
 import hashlib
 import time
 
-import rembg
 import torch
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +43,7 @@ MAX_MULTIPART = MAX_PHOTO + 32768
 _gpu_lock = asyncio.Lock()
 _ticket_lock = asyncio.Lock()
 _used_tickets: dict[str, int] = {}
+_ENGINE_NAME = os.environ.get("FORGE_GPU_ENGINE", "stable-fast-3d")
 _model = None
 _rembg_session = None
 _remove_background_fn = None
@@ -105,7 +105,15 @@ def load_model_once():
         raise RuntimeError("FORGE_GPU_TOKEN must be set to >=32 characters")
     # This catches Blackwell sm_120 with CUDA 12.1/PyTorch 2.4 before
     # downloading gated weights or burning paid compute on a broken kernel.
+    if _ENGINE_NAME not in ("stable-fast-3d", "trellis2"):
+        raise RuntimeError("unsupported_forge_gpu_engine")
     require_compatible_gpu(torch)
+    if _ENGINE_NAME == "trellis2":
+        import trellis2_engine
+        trellis2_engine.load_model_once(torch)
+        _model = trellis2_engine
+        return
+    import rembg
     # Loading custom SF3D CUDA modules before the architecture preflight
     # can fail expensively on an RTX PRO 6000 sm_120 with old cu121 torch.
     from sf3d.system import SF3D
@@ -123,12 +131,14 @@ def load_model_once():
 
 @app.get("/health")
 async def health():
-    return {"ready": _model is not None, "engine": "stable-fast-3d",
+    return {"ready": _model is not None, "engine": _ENGINE_NAME,
             "no_persistent_images": True}
 
 
 def _make_glb(photo: bytes) -> bytes:
     """Inference is serialized to avoid OOM and uncontrolled GPU concurrency."""
+    if _ENGINE_NAME == "trellis2":
+        return _model.make_glb(photo)
     with Image.open(io.BytesIO(photo)) as source:
         if source.width < 64 or source.height < 64 or (
             source.width * source.height > 4096 * 4096
