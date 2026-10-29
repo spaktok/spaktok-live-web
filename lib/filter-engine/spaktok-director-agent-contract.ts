@@ -39,8 +39,8 @@ export type AgentRequest=z.infer<typeof agentRequestSchema>
 const COLOR_TESTS:Readonly<Record<typeof AGENT_STYLES[number],RegExp>>={
  gold:/ذهبي|ذهبية|gold|golden|vergold/i,
  silver:/فضي|فضية|silver|silber/i,
- red:/احمر|أحمر|حمراء|\\bred\\b|\\brot(?:e|en|es|em|er)?\\b/i,
- blue:/ازرق|أزرق|زرقاء|\\bblue\\b|\\bblau(?:e|en|es|em|er)?\\b/i,
+ red:/احمر|أحمر|حمراء|\bred\b|\brot(?:e|en|es|em|er)?\b/i,
+ blue:/ازرق|أزرق|زرقاء|\bblue\b|\bblau(?:e|en|es|em|er)?\b/i,
  green:/اخضر|أخضر|خضراء|green|grün|gruen/i,
  purple:/بنفسجي|بنفسجية|أرجواني|purple|violet|violett|lila/i,
  black:/اسود|أسود|سوداء|black|schwarz/i,
