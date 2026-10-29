@@ -322,6 +322,61 @@ PY
   python "$FORGE/glb_quality.py" /workspace/spaktok-trellis1-preview.glb
   log 'Review appearance and real Android performance before public release.'
 }
+# CPU-only: preserve the original generated GLB, add vertex normals to a
+# separate mobile candidate, and zip BOTH artifacts for owner download.
+# This NEVER invokes model sampling or starts a new paid GPU rental.
+finalize(){
+  local original=/workspace/spaktok-trellis1-preview.glb
+  local mobile=/workspace/spaktok-trellis1-preview-mobile.glb
+  local archive=/workspace/spaktok-trellis1-artifacts.zip
+  [[ -s "$original" ]] || fail 'Original GLB missing; no artifact to finalize.'
+  [[ ! -e "$mobile" && ! -e "$archive" ]] ||
+    fail 'Finalized output already exists; preserve it and do not overwrite.'
+  activate
+  python "$FORGE/glb_mobile_finalize.py" "$original" "$mobile"
+  export SPAKTOK_ARTIFACT_ORIGINAL="$original"
+  export SPAKTOK_ARTIFACT_MOBILE="$mobile"
+  export SPAKTOK_ARTIFACT_ARCHIVE="$archive"
+  python - <<'PY'
+import hashlib
+import json
+import os
+import zipfile
+from pathlib import Path
+from glb_quality import inspect_glb_bytes
+
+original = Path(os.environ["SPAKTOK_ARTIFACT_ORIGINAL"])
+mobile = Path(os.environ["SPAKTOK_ARTIFACT_MOBILE"])
+archive = Path(os.environ["SPAKTOK_ARTIFACT_ARCHIVE"])
+if not original.is_file() or not mobile.is_file():
+    raise SystemExit("The original and mobile GLB must exist first.")
+
+manifest = {
+    "source": "Spaktok GPU TRELLIS v1; first successful real generation",
+    "generated": "Microsoft TRELLIS-image-large with DINOv2; owner-operated A100",
+    "files": {},
+    "caveat": "Structural metrics only. Real Android performance, rigging, visual appearance and rights need review.",
+}
+for path in (original, mobile):
+    data = path.read_bytes()
+    manifest["files"][path.name] = {
+        "bytes": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "structuralQA": inspect_glb_bytes(data),
+    }
+with zipfile.ZipFile(archive, mode="x", compression=zipfile.ZIP_DEFLATED) as bundle:
+    for path in (original, mobile):
+        bundle.write(path, arcname=path.name)
+    bundle.writestr("spaktok-first-glb-manifest.json", json.dumps(
+        manifest, ensure_ascii=False, indent=2))
+print("[Spaktok TRELLIS v1] SAVE THIS ZIP OUTSIDE VAST:", archive, flush=True)
+print("[Spaktok TRELLIS v1] ZIP BYTES:", archive.stat().st_size, flush=True)
+print("[Spaktok TRELLIS v1] Mobile structural pass:",
+      manifest["files"][mobile.name]["structuralQA"]["mobileBudgetPass"], flush=True)
+PY
+  log 'Download the archive in Jupyter and verify its contents BEFORE destroying GPU.'
+}
+
 serve(){
   prepare
   [[ -d "$TRELLIS" ]] || fail 'Run install first.'
@@ -361,6 +416,7 @@ case "$ACTION" in
   repair-spconv) repair_spconv;;
   repair-gaussian) repair_gaussian;;
   smoke) smoke;;
+  finalize) finalize;;
   serve) serve;;
-  *) fail 'Usage: vast-a100-trellis1.sh {preflight|install|resume|repair-python|repair-spconv|repair-gaussian|smoke|serve}';;
+  *) fail 'Usage: vast-a100-trellis1.sh {preflight|install|resume|repair-python|repair-spconv|repair-gaussian|smoke|finalize|serve}';;
 esac
