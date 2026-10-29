@@ -190,8 +190,11 @@ export function assertStudioFanoutManifest(value:unknown):
   new Set(v.project.outputTargets).size!==v.outputs.length)
   throw Error('studio_fanout_manifest_invalid')
  for(let i=0;i<v.outputs.length;i++){
-  const out=v.outputs[i]
-  if(!out||out.target!==v.project.outputTargets[i]||
+  // Array.isArray narrows a readonly tuple/array to any[] in TS.
+  // Reassert the already validated schema before indexed access.
+  const out=v.outputs[i] as StudioOutputProfile
+  if(!out||!DIRECTOR_TARGETS.includes(out.target)||
+   out.target!==v.project.outputTargets[i]||
    out.destination!==DESTINATIONS[out.target]||
    !['private-preview','needs-optimization'].includes(out.state)||
    out.published!==false||!Array.isArray(out.blockers)||
