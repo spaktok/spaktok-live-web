@@ -63,8 +63,13 @@ PY
 repair_flash(){
   prepare_source
   ensure_torch
-  log 'Install flash-attn in the existing trellis2 conda environment WITHOUT PEP517 build isolation.'
-  log 'This can build CUDA extensions for several minutes: supervise billing.'
+  log 'Install flash-attn build prerequisites into the active trellis2 environment.'
+  python -m pip install 'psutil>=5.9,<8' 'packaging>=23,<27' 'ninja>=1.11,<2' 'wheel>=0.42,<1' 'setuptools>=69,<82'
+  python - <<'PY'
+import torch, psutil, packaging, ninja
+print("TRELLIS flash-attn prerequisites available; torch:", torch.__version__)
+PY
+  log 'Build flash-attn WITHOUT PEP517 isolation; can run several minutes on paid GPU.'
   python -m pip install --no-build-isolation 'flash-attn==2.7.3'
 }
 resume(){
