@@ -99,6 +99,7 @@ out=Path("/workspace/spaktok-trellis2-"+profile+".glb")
 out.write_bytes(payload)
 print("CREATED",out,"bytes",len(payload))
 PY
+  python "$FORGE/glb_quality.py" "/workspace/spaktok-trellis2-${SPAKTOK_OUTPUT_PROFILE:-preview}.glb"
 }
 case "$ACTION" in
  preflight) preflight;;
