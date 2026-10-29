@@ -212,8 +212,20 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
    let generated:File
    let engine:Result['sourceEngine']
    if(kind==='glb'){
-    generated=file;engine='existing-glb'
-    patch(assistantId,{text:'أتحقق من الشبكة وUV والخامة وبصمة GLB ثم أعدّ النتائج داخل الدردشة…'})
+    // A real CPU/browser GLB material editor is available for static props.
+    // Other requested operations remain specialist preview tasks.
+    const {detectDirectorMaterialStyle,styleDirectorGlb}=await import(
+     '@/lib/filter-engine/spaktok-director-chat-material')
+    const style=detectDirectorMaterialStyle(prompt)
+    if(style){
+     patch(assistantId,{text:'أطبّق خامة '+style.label+
+      ' فعليًا على الأسطح ثلاثية الأبعاد، وأتحقق من التصدير…'})
+     generated=await styleDirectorGlb(file,style)
+    }else{
+     generated=file
+     patch(assistantId,{text:'أتحقق من الشبكة وUV والخامة وبصمة GLB ثم أعدّ النتائج داخل الدردشة…'})
+    }
+    engine='existing-glb'
    }else if(intent.execution==='local-relief'){
     patch(assistantId,{text:'أنشئ نموذج 2.5D بارزًا على جهازك؛ لا أرسل الصورة إلى أي خادم…'})
     const result=await createDirectorReliefGlb(file)
@@ -245,7 +257,7 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
    const extra=requiresSeparatePublishingReview(prompt)?
     ' طلبت النشر، لكن النشر العام يحتاج موافقة ومراجعة منفصلتين ولم يُنفّذ.':''
    patch(assistantId,{state:'done',result,text:
-    'أنجزت '+(engine==='existing-glb'?'فحص GLB الموجود':engine==='browser-2.5d'?
+    'أنجزت '+(engine==='existing-glb'?(generated===file?'فحص GLB الموجود':'تعديل الخامة على GLB فعلي') :engine==='browser-2.5d'?
      'إنشاء نسخة بارزة 2.5D':'التوليد الحقيقي على GPU')+
     '، وحصلت على '+result.qa.triangles.toLocaleString('en-US')+
     ' مثلث. '+(staged?
