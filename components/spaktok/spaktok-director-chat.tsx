@@ -14,7 +14,7 @@ import {
 import {createDirectorDispatch,type DirectorDispatch} from '@/lib/filter-engine/spaktok-director-dispatch'
 import {saveStudioFanoutBundle,loadVerifiedDirectorHandoff} from '@/lib/filter-engine/reality-local-asset-handoff'
 import {
- evaluateDirectorAsset,type DirectorAssetQA,type DirectorTarget,
+ evaluateDirectorAsset,DIRECTOR_TARGETS,type DirectorAssetQA,type DirectorTarget,
 } from '@/lib/filter-engine/spaktok-ai-director'
 import {
  routeDirectorChat,directorChatReplyForTargets,
@@ -158,7 +158,8 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
   const uploaded=selected
   const file=uploaded??lastResult?.file??lastInput??sourceFile
   const kind=file?(GLB.test(file.name)?'glb':IMAGE.test(file.name)?'image':'none'):'none'
-  const intent=routeDirectorChat(prompt,kind)
+  let intent=routeDirectorChat(prompt,kind)
+  let semanticSummary=''
   const userId=crypto.randomUUID()
   const assistantId=crypto.randomUUID()
   setMessages(prev=>[...prev,
@@ -167,6 +168,38 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
     text:'أفهم طلبك وأجهّز المحرك المناسب…'}])
   setText('');setBusy(true)
   try{
+   // The optional private LLM classifies ONLY the command text. Source
+   // images/models are NEVER sent to it. If it is offline, the deterministic
+   // local routing logic is immediately available, with no paid retry.
+   if(prompt.length>=2){
+    try{
+     const response=await fetch('/api/studio/director/interpret',{
+      method:'POST',cache:'no-store',credentials:'same-origin',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({prompt,source:kind}),
+      signal:AbortSignal.timeout(8000),
+     })
+     if(response.ok){
+      const data=await response.json() as {
+       interpretation?:{targets?:unknown;intentSummary?:string}
+      }
+      const targets=data.interpretation?.targets
+      if(Array.isArray(targets)&&targets.length>=1&&targets.length<=6&&
+       targets.every(t=>typeof t==='string'&&
+        DIRECTOR_TARGETS.includes(t as DirectorTarget))){
+       // An explicit all-studios instruction cannot be silently narrowed.
+       const explicitAll=/جميع\\s+(?:الأقسام|الاقسام)|all\\s+studios/i.test(prompt)
+       if(!explicitAll){
+        intent={...intent,targets:[...new Set(targets as DirectorTarget[])]}
+       }
+       semanticSummary=typeof data.interpretation?.intentSummary==='string'?
+        data.interpretation.intentSummary.slice(0,250):''
+      }
+     }
+    }catch{
+     // No local file or rights state is changed when the AI parser is offline.
+    }
+   }
    if(kind==='none'||!file){
     patch(assistantId,{text:intent.explanation,state:'done'})
     return
@@ -219,7 +252,7 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
      'جهزت ملفًا خاصًا واحدًا للأقسام: '+heads+'.':
      'لا يمكن تسليم الملف تلقائيًا للمعاينات حتى يحقق حدود الهاتف؛ التفاصيل بالأسفل.')+
     ' يمكنك تدوير النتيجة هنا وتنزيلها؛ Rig والتتبّع والحركات والبث أو التصادمات ما زالت مهام فنية غير مكتملة.'+
-    extra})
+    (semanticSummary?'\\nتفسير الطلب: '+semanticSummary:'')+extra})
   }catch(error){
    patch(assistantId,{state:'error',text:'تعذر إكمال هذه المهمة: '+
     friendlyError(error)+'. لم يُنشَر أي أصل. إذا أُرسلت مهمة GPU فلا أكررها تلقائيًا.'})
