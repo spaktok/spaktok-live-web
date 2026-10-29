@@ -273,6 +273,43 @@ costly model load.
 No output GLB is assumed to exist unless `CREATED` and the GLB audit both pass.
 Save the asset and logs off the rented GPU before terminating the instance.
 
+### Fix: texture baking requires autograd after successful neural sampling
+
+A100 smoke on 2026-10-29 reached:
+- Sampling 25/25 + 25/25 complete
+- Mesh extraction: 100% with a non-manifold warning (not a fatal error)
+- Gaussian rendering: all 100 views completed
+- `postprocessing_utils.to_glb() -> bake_texture(mode='opt')` failed with
+  `RuntimeError: element 0 of tensors does not require grad`
+
+Root cause in our own `trellis1_engine.py`: both neural sampling AND
+`_to_glb` had been wrapped in `torch.inference_mode()`. The upstream official
+`postprocessing_utils.bake_texture` creates a trainable texture and invokes
+`loss.backward()` on each of **2,500 optimization iterations**. It cannot
+run within inference/no-grad context. This is a code scope error, not a broken
+A100, gated weights, or missing CUDA dependency.
+
+The corrected engine now runs ONLY `pipeline.run` within `torch.no_grad()`
+(the official method is already decorated with `@torch.no_grad`) and runs
+`_to_glb` under `torch.enable_grad()`. Unlike `inference_mode`,
+the no-grad output can safely be used by a later differentiable stage.
+A CPU-only regression test asserts grad is off at sampling and on at baking.
+
+The texture bake runs 2,500 iterations and **may take materially longer** than
+the preceding 100-view Gaussian render. Do not expect instant output. It still
+has not yet been verified on actual A100 after this fix.
+
+After updating the branch (no install necessary):
+
+    cd /workspace/spaktok-forge
+    git pull --ff-only origin feat/vast-a100-forge-bridge-20261029
+    set -o pipefail
+    bash scripts/vast-a100-trellis1.sh smoke 2>&1 | tee -a /workspace/spaktok-trellis1-smoke.log
+
+Only call success once `CREATED /workspace/spaktok-trellis1-preview.glb`
+appears and the GLB quality test completes. Preserve the file outside Vast
+before deleting the rented GPU. Do not repeatedly restart if it errors.
+
 ## Remaining release blockers
 
 - GitHub Actions reports failure with missing job steps/logs; offline tests
