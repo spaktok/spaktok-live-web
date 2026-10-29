@@ -24,9 +24,11 @@ jobs:
           persist-credentials: false
       - name: Validate Python syntax without third-party dependencies
         run: |
-          python3 -m py_compile services/forge-gpu/gpu_preflight.py services/forge-gpu/gpu_ticket.py services/forge-gpu/gpu_health.py services/forge-gpu/trellis1_engine.py services/forge-gpu/trellis2_engine.py services/forge-gpu/glb_quality.py services/forge-gpu/server.py
+          python3 -m py_compile services/forge-gpu/gpu_preflight.py services/forge-gpu/gpu_ticket.py services/forge-gpu/gpu_health.py services/forge-gpu/trellis1_engine.py services/forge-gpu/trellis2_engine.py services/forge-gpu/glb_quality.py services/forge-gpu/glb_mobile_finalize.py services/forge-gpu/server.py
       - name: Check supervised Vast bootstrap shell syntax
         run: bash -n scripts/vast-a100-trellis1.sh scripts/vast-a100-trellis2.sh
+      - name: Install CPU-only GLB finalization test dependencies
+        run: python3 -m pip install --user 'trimesh==4.6.5' 'numpy>=1.24,<3' 'Pillow>=10,<12'
       - name: Run Blackwell CUDA and direct-ticket contract tests
         working-directory: services/forge-gpu
-        run: python3 -m unittest test_gpu_preflight test_gpu_ticket test_gpu_health test_trellis1_engine test_trellis2_engine test_glb_quality -v
+        run: python3 -m unittest test_gpu_preflight test_gpu_ticket test_gpu_health test_trellis1_engine test_trellis2_engine test_glb_quality test_glb_mobile_finalize -v
