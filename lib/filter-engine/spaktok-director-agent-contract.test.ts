@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {agentRequestSchema,agentStepSchema,normalizeAgentDecision,validateAgentStep,requiredAgentAction,
+import {agentRequestSchema,agentStepSchema,normalizeAgentDecision,validateAgentStep,requiredAgentAction,creatorClarification,
  type AgentRequest,type AgentStep} from './spaktok-director-agent-contract'
 const req=(patch:Partial<AgentRequest>={}):AgentRequest=>({
  prompt:'أرسل المجسم إلى جميع الأقسام',
@@ -11,6 +11,13 @@ const step=(patch:Partial<AgentStep>={}):AgentStep=>({
  ...patch,
 })
 describe('Real Spaktok AI tool execution guards',()=>{
+ it('asks for one unambiguous material color before spending AI quota',()=>{
+  expect(creatorClarification('غيّر لون المجسم')).toContain('ما اللون')
+  expect(creatorClarification('اجعل المجسم أحمر وأزرق')).toContain('أكثر من لون')
+  expect(creatorClarification('Färbe das GLB gelb')).toContain('ما اللون')
+  expect(creatorClarification('أريد تغيير حجم المجسم')).toBeNull()
+  expect(creatorClarification('Färbe dieses GLB blau für die Welt')).toBeNull()
+ })
  it('enforces edit then inspect then dispatch then finish for a real GLB',()=>{
   const prompt='اجعل المجسم ذهبيا وصدّره كهدية'
   const base=req({prompt})
