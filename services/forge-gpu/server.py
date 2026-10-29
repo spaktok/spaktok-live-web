@@ -24,6 +24,7 @@ from fastapi.responses import Response
 from PIL import Image, ImageOps, UnidentifiedImageError
 from sf3d.system import SF3D
 from sf3d.utils import remove_background, resize_foreground
+from gpu_preflight import require_compatible_gpu
 
 MAX_PHOTO = 8 * 1024 * 1024
 MAX_GLB = 35 * 1024 * 1024
@@ -61,8 +62,9 @@ def load_model_once():
     token = os.environ.get("FORGE_GPU_TOKEN", "")
     if len(token) < 32:
         raise RuntimeError("FORGE_GPU_TOKEN must be set to >=32 characters")
-    if not torch.cuda.is_available():
-        raise RuntimeError("Spaktok GPU mode needs NVIDIA CUDA; refuse CPU paid work")
+    # This catches Blackwell sm_120 with CUDA 12.1/PyTorch 2.4 before
+    # downloading gated weights or burning paid compute on a broken kernel.
+    require_compatible_gpu(torch)
     _model = SF3D.from_pretrained(
         "stabilityai/stable-fast-3d",
         config_name="config.yaml", weight_name="model.safetensors",
