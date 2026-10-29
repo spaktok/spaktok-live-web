@@ -73,6 +73,7 @@ export async function styleDirectorGlb(
  const verified=inspectWordGeneratedGlb(output,name)
  if(!verified.audit.valid||!verified.audit.selfContained||
     verified.audit.triangles!==checked.audit.triangles||
+    verified.audit.textures<checked.audit.textures||
     !verified.audit.hasUV||!verified.audit.hasNormals||
     !verified.audit.hasPBR||output.byteLength>15*1024*1024)
   throw Error('director_material_output_qa_failed')
