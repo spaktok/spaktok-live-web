@@ -29,6 +29,8 @@ from gpu_ticket import validate_gpu_ticket, InvalidGPUTicket
 from gpu_health import sign_ready_health
 
 MAX_PHOTO = 8 * 1024 * 1024
+_ENGINE = os.environ.get("FORGE_GPU_ENGINE", "stable-fast-3d")
+_trellis2_infer = None
 MAX_GLB = 35 * 1024 * 1024
 app = FastAPI(title="Spaktok Forge GPU", docs_url=None, redoc_url=None)
 # No wildcard origins. Set to the EXACT Spaktok creator website origin,
@@ -101,12 +103,20 @@ async def admission_guard(request: Request, call_next):
 @app.on_event("startup")
 def load_model_once():
     global _model, _rembg_session, _remove_background_fn, _resize_foreground_fn
+    global _trellis2_infer
     token = os.environ.get("FORGE_GPU_TOKEN", "")
     if len(token) < 32:
         raise RuntimeError("FORGE_GPU_TOKEN must be set to >=32 characters")
     # This catches Blackwell sm_120 with CUDA 12.1/PyTorch 2.4 before
     # downloading gated weights or burning paid compute on a broken kernel.
     require_compatible_gpu(torch)
+    if _ENGINE == "trellis2":
+        from trellis2_engine import initialize, generate_glb
+        _model = initialize()
+        _trellis2_infer = generate_glb
+        return
+    if _ENGINE != "stable-fast-3d":
+        raise RuntimeError("unsupported_forge_gpu_engine")
     # Loading custom SF3D CUDA modules before the architecture preflight
     # can fail expensively on an RTX PRO 6000 sm_120 with old cu121 torch.
     from sf3d.system import SF3D
@@ -129,13 +139,13 @@ async def health(request: Request):
     nonce = request.headers.get("x-forge-health-nonce", "")
     try:
         signature = sign_ready_health(
-            nonce, os.environ.get("FORGE_GPU_TOKEN", "")
+            nonce, os.environ.get("FORGE_GPU_TOKEN", ""), _ENGINE
         )
     except ValueError:
         return Response(status_code=403, content="gpu_health_not_authorized")
     ready = _model is not None
     return JSONResponse(
-        {"ready": ready, "engine": "stable-fast-3d",
+        {"ready": ready, "engine": _ENGINE,
          "no_persistent_images": True},
         status_code=200 if ready else 503,
         headers={
@@ -154,6 +164,11 @@ def _make_glb(photo: bytes) -> bytes:
             raise ValueError("unsupported dimensions")
         source = ImageOps.exif_transpose(source)
         rgba = source.convert("RGBA")
+    if _ENGINE == "trellis2":
+        payload = _trellis2_infer(rgba)
+        if not isinstance(payload, bytes) or not 28 <= len(payload) <= MAX_GLB:
+            raise ValueError("invalid_or_oversized_trellis2_glb")
+        return payload
     # Preserve creator-supplied transparent cutouts instead of wasting
     # extra segmentation on an image which already has an alpha mask.
     prepared = (rgba if rgba.getextrema()[3][0] < 255 else
