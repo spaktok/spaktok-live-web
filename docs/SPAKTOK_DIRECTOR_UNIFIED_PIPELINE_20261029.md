@@ -1,4 +1,4 @@
-# Spaktok AI Director — Unified Studio / Avatar / Live / Filters / Gifts / World
+# Spaktok AI Director — Unified Studio / Avatar / Live / Filters / Gifts / World / Video 3D
 
 **Date:** 29 October 2026  
 **Scope:** Draft feature branch, no production deployment or automatic public publishing.
@@ -8,12 +8,12 @@ This original media is NOT committed into GitHub.
 
 ## What was implemented in this iteration
 
-### 1. One source => five existing preview consumers
+### 1. One source => six existing preview consumers
 
 - AI Director's Arabic/English command parser recognizes individual departments
   and now expressions such as `جميع الأقسام` / `all studios`.
 - `spaktok-director-dispatch.ts` provides deterministic, auditable per-target
-  commands for Avatar, Live, Reality Filters, Gift and World.
+  commands for Avatar, Live, Reality Filters, Gift, World, and Video 3D Studio.
 - After an audited GLB is created or imported, the Director **automatically
   stores ONE SHA256-bound asset + full per-target manifest** in a single
   browser IndexedDB transaction for 24 hours. The same file is reused; there
@@ -24,6 +24,7 @@ This original media is NOT committed into GitHub.
   NOT an actual Agora broadcast.
 - Per-target state shows `private-preview-staged` or `blocked-geometry`,
   with unfulfilled rig/animation/face-tracking/LOD/collision/Android QA blockers.
+- Video 3D Studio imports the same SHA256-verified GLB as a private timeline layer; the creator supplies the video, keyframes and output. No video is rendered or published automatically.
 - No public release, gift monetization, world deployment, camera tracking,
   avatar body rig, or live streaming is triggered automatically.
 
@@ -85,7 +86,8 @@ Atomic browser-private GLB+SHA256+manifest (24h)
          ├── Live: same avatar preview, actual Agora integration needed
          ├── Filter: mask preview, anchors and occlusion marked needed
          ├── Gifts: 3D preview, animation and payments marked needed
-         └── World: placed scene preview, collision and LOD marked needed
+         ├── World: placed scene preview, collision and LOD marked needed
+         └── Video: GLB layer prepared for local timeline, needs source video, keyframes and export QA
          ↓ [OPTIONAL, EXPLICIT CREATOR CONSENT ONLY]
 R2 worker signed direct upload (<15 MiB) + D1 owner job metadata
          ↓
@@ -141,7 +143,7 @@ previously disclosed Vast/provider secrets.
 1. In `/spaktok-word#ai-director`, import the owner's first 2.84 MB GLB.
 2. Enter `أرسل المجسم إلى جميع الأقسام`, choose rights correctly and confirm.
 3. Click `فحص المجسم وتجهيزه للأقسام` (zero GPU).
-4. Check the five dispatch states and SHA256. Each selected Studio can open
+4. Check the six dispatch states and SHA256. Each selected Studio can open
    the **same** private file from the same browser with `?from=ai-director`.
 5. Check the world viewer as a prop; leave Avatar/Gifts/Live/Filters blockers
    visible. No real rigging or public publish occurs.
