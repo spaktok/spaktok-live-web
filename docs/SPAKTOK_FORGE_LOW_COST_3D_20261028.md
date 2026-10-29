@@ -1,5 +1,19 @@
 # Spaktok Forge — economical image-to-3D
 
+> **2026-10-29 production safety update:** The former
+> `POST /api/spaktok-forge/gpu` through Vercel has been disabled (410).
+> Vercel Functions cannot carry >4.5MB media payloads, including larger
+> source photos or many high-fidelity GLBs. The new budgeted direct
+> browser-to-RunPod ticket bridge is in
+> [SPAKTOK_FORGE_DIRECT_GPU_BRIDGE_20261029.md](SPAKTOK_FORGE_DIRECT_GPU_BRIDGE_20261029.md).
+> To avoid wasting GPU time, do not follow the legacy POST example below;
+> GPU mode is still OFF until real hardware, licensing and end-to-end QA.
+> RTX PRO 6000 Blackwell (sm_120) needs a PyTorch cu128 image:
+> `services/forge-gpu/Dockerfile.blackwell` (experimental, not built).
+> The old CUDA 12.1 + PyTorch2.4 image is **incompatible** with Blackwell.
+> For the RunPod one-hour trial see
+> [RUNPOD_FORGE_ONE_HOUR_20261029.md](RUNPOD_FORGE_ONE_HOUR_20261029.md).
+>
 ## Reality and scope
 
 **Live without GPU:** Both /spaktok-word and /reality-studio have Forge.
@@ -63,7 +77,7 @@ configuration AND creator approval.
 5. Apply the D1 migration `migrations/native/0006_forge_gpu_daily_claims.sql`
    to the native auth D1 database. In the Spaktok live Cloudflare account
    the empty table was installed 2026-10-28. No GPU jobs were submitted.
-6. Configure **server-only** secrets on the Vercel project:
+6. **Legacy example only: do not activate this proxy configuration.** The new direct ticket bridge requires additional flags and an origin-locked GPU host; see the 2026-10-29 document. Older setup:
    ```text
    SPAKTOK_FORGE_GPU_ENABLED=true
    SPAKTOK_FORGE_GPU_DAILY_LIMIT=2
@@ -79,7 +93,7 @@ configuration AND creator approval.
    one-job/day uniqueness in one atomic D1 SQL insert. A failed GPU attempt
    retains its reservation; there are no implicit retries that could double
    charges. Until fully verified, leave SPAKTOK_FORGE_GPU_ENABLED=false.
-7. Authenticate in Spaktok, approve image rights and GPU processing, upload
+7. **Use the new direct ticket API instead of the legacy proxy.** Authenticate in Spaktok, approve image rights and GPU processing, upload
    PNG/JPEG/WebP <=8MB, then generate. One *reserved* GPU job per user per
    UTC day; failed upstream requests still consume this day's reservation
    to prevent accidental repeat charges. On a 503/timeout, check GPU server
