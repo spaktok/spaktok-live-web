@@ -55,6 +55,16 @@ describe('Real Spaktok AI tool execution guards',()=>{
   expect(validateAgentStep(step({action:'dispatch_asset',targets:['world']}),done).reason)
    .toBe('required_next_action_finish')
  })
+ it('executes a German World recolor with matching color and target',()=>{
+  const prompt='Färbe dieses GLB blau für die Welt'
+  const req1=req({prompt})
+  expect(requiredAgentAction(req1)).toBe('recolor_asset')
+  const normalized=normalizeAgentDecision(step({
+   action:'recolor_asset',color:'blue',targets:['gift'],
+  }),prompt)
+  expect(normalized.targets).toEqual(['world'])
+  expect(validateAgentStep(normalized,req1).ok).toBe(true)
+ })
  it('aborts agent tool retries after a failed material edit',()=>{
   const prompt='اجعل المجسم ذهبيا'
   const p=req({prompt,steps:[{action:'recolor_asset',ok:false,detail:'GLB exporter failed'}]})
