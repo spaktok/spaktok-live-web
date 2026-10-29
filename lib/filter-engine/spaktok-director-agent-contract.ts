@@ -74,6 +74,9 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
    request.workingSource!=='glb')
   return {ok:false,reason:'glb_required'}
  if(step.action==='dispatch_asset'&&
+   request.steps.some(event=>event.action==='recolor_asset'&&!event.ok))
+  return {ok:false,reason:'requested_recolor_failed_no_silent_fallback'}
+ if(step.action==='dispatch_asset'&&
   /(?:جميع|كل|كافة)\s+(?:الأقسام|الاقسام)|all\s+studios/i.test(request.prompt)&&
   step.targets.length!==DIRECTOR_TARGETS.length)
   return {ok:false,reason:'all_studios_requested'}
