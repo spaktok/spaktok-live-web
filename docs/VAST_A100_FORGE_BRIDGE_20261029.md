@@ -87,6 +87,7 @@ For TRELLIS.2 the host and Vercel must both use `FORGE_GPU_ENGINE=trellis2` / `S
    SPAKTOK_FORGE_GPU_DIRECT_ENABLED=false
    SPAKTOK_FORGE_GPU_PROVIDER=vast-quick-tunnel
    SPAKTOK_FORGE_GPU_ENGINE=trellis2
+   SPAKTOK_FORGE_GPU_MODEL_ACCESS=pending # change to approved only after author approval and license review
    SPAKTOK_FORGE_GPU_BROWSER_ORIGIN=https://<exact Spaktok web origin>
    SPAKTOK_FORGE_GPU_HOST=<separate forge-api-xxxxx.trycloudflare.com>
    SPAKTOK_FORGE_GPU_URL=https://<same host>/v1/generate
