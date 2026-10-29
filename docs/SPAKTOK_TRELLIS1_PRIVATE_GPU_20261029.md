@@ -1,8 +1,60 @@
 # Spaktok Private GPU: Microsoft TRELLIS v1 (DINOv2)
 
-Status 2026-10-29: committed on a DRAFT feature branch. No GPU instance
-has been rented or started by this code, and end-to-end inference is NOT
-yet demonstrated.
+Status 2026-10-29: FIRST LIVE A100 inference and GLB export SUCCEEDED on an owner-rented Vast instance; draft feature branch only. Original GLB is not yet mobile-QA-compliant (missing NORMAL). Web production and Android are NOT ready. No provider instance was rented or started by GitHub code.
+
+## CONFIRMED milestone — first genuine Spaktok private GPU GLB (19:39 Berlin)
+
+The operator supplied the terminal proof of a successful actual GPU sample:
+
+    CREATED /workspace/spaktok-trellis1-preview.glb
+    bytes 2499500
+    meshes 1; trianglePrimitives 1; triangles 28379
+    hasUV true; hasNormals false
+    pbrMaterials 1; embeddedImages 1
+    mobileBudgetPass false
+
+The complete Microsoft TRELLIS v1 + DINOv2 pipeline on the owner's
+A100 80GB generated a real GLB: model sampling, mesh extraction, 100 Gaussian
+rendered views, and gradient-based texture baking finished. This is the first
+genuine image-to-3D output we have seen in the Spaktok A100 trials, not a mock.
+
+The structural mobile score fails **only because NORMAL attributes are missing**:
+2.5MB <15MiB, 28,379 triangles <150K, UV/PBR/embedded texture exist.
+This does NOT certify image similarity, correct appearance, texture quality,
+front/back detail, Android performance, animations, rigging or production use.
+The mesher emitted a non-manifold warning; inspect the geometry in a 3D viewer.
+
+### Preserve the actual output before ending rental
+
+1. Download the ORIGINAL `/workspace/spaktok-trellis1-preview.glb`
+   with Vast's Jupyter file browser before destroying the instance.
+2. Update the feature branch and finalize the **existing GLB** without
+   running the AI model again:
+
+       cd /workspace/spaktok-forge
+       git pull --ff-only origin feat/vast-a100-forge-bridge-20261029
+       bash -n scripts/vast-a100-trellis1.sh
+       bash scripts/vast-a100-trellis1.sh finalize
+
+3. The finalization is **CPU-only**: compute mesh vertex normals, preserve the
+   original, and create `/workspace/spaktok-trellis1-preview-mobile.glb`.
+   It validates the original and the candidate with `glb_quality.py`, requiring
+   UV/PBR/embedded texture unchanged in count, 28,379 triangles, explicit
+   normals and `mobileBudgetPass: true`. The tool refuses to overwrite files.
+4. It also creates `/workspace/spaktok-trellis1-artifacts.zip` containing
+   original and mobile GLBs plus a SHA-256 and structural metadata manifest.
+   Download this archive from the Jupyter file browser and inspect its contents
+   **before** stopping/destroying GPU; a ZIP on ephemeral disk is not a backup.
+5. If finalization fails, preserve and download the original GLB anyway.
+   Do NOT rerun model inference; inspect the failed CPU-only post-processing.
+6. After verifying a local copy exists, stop or Destroy the GPU rental manually.
+   A stopped but not destroyed Vast instance may still incur storage costs.
+7. Private human review: visually inspect the GLB, then test native Android
+   frame rate/heat/memory and IP rights before approving Studio fan-out.
+
+The new CPU-only regression tests validate this transformation on a synthetic
+textured mesh. **The real A100-generated GLB mobile transformation is not
+verified until the owner runs `finalize` and reports its metrics.**
 
 ## The model and safety boundaries
 
