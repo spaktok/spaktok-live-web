@@ -27,6 +27,7 @@ import {runDirectorAgent} from '@/lib/filter-engine/spaktok-director-agent-clien
 type Result=Readonly<{
  file:File;manifest:StudioFanoutManifest;dispatch:DirectorDispatch
  qa:DirectorAssetQA;sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d'
+ handoffStored?:boolean
 }>
 type ChatMessage=Readonly<{
  id:string;role:'assistant'|'user';text:string
