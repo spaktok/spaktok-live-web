@@ -3,6 +3,7 @@ import contextlib
 import json
 import struct
 import sys
+from pathlib import Path
 import types
 import unittest
 from unittest.mock import patch
@@ -55,6 +56,7 @@ class Trellis1Contracts(unittest.TestCase):
         self.pipeline = FakePipeline()
         engine._pipeline = self.pipeline
         self.bake_opts = None
+        self.finalize_calls = 0
         engine._to_glb = self.to_glb
         # Test the *actual* grad scopes used during GPU inference/export.
         # The network is evaluated without grad, but official to_glb()
@@ -83,8 +85,18 @@ class Trellis1Contracts(unittest.TestCase):
         self.bake_opts = kwargs
         return FakeGLB()
 
+    def fake_finalize(self, source, output):
+        self.finalize_calls += 1
+        Path(output).write_bytes(Path(source).read_bytes())
+        return {"metrics": {"mobileBudgetPass": True}}
+
     def run_profile(self, profile="preview"):
-        with patch.dict(sys.modules, {"torch": self.mock_torch}):
+        with patch.dict(sys.modules, {
+            "torch": self.mock_torch,
+            "glb_mobile_finalize": types.SimpleNamespace(
+                finalize_mobile_glb=self.fake_finalize,
+            ),
+        }):
             return engine.generate_glb(object(), profile)
 
     def test_preview_uses_both_outputs_and_bakes_texture(self):
@@ -94,6 +106,7 @@ class Trellis1Contracts(unittest.TestCase):
         self.assertEqual(self.pipeline.args["seed"], 1)
         self.assertEqual(self.bake_opts["texture_size"], 1024)
         self.assertEqual(self.bake_opts["simplify"], .95)
+        self.assertEqual(self.finalize_calls, 1)
 
     def test_sampling_disables_grad_but_texture_optimization_enables_it(self):
         steps = []
@@ -122,6 +135,7 @@ class Trellis1Contracts(unittest.TestCase):
         self.run_profile("master")
         self.assertEqual(self.bake_opts["texture_size"], 2048)
         self.assertEqual(self.bake_opts["simplify"], .90)
+        self.assertEqual(self.finalize_calls, 0)
 
     def test_invalid_profile_fails_without_model_inference(self):
         with self.assertRaisesRegex(ValueError, "trellis1_invalid_profile"):
