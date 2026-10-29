@@ -20,6 +20,23 @@
 
 The owner sent a new trace from the same rented Vast instance: `flash-attn` now fails with `ModuleNotFoundError: No module named 'psutil'` (metadata-generation-failed), after the earlier `torch` build-isolation issue. The `repair-flash` stage now installs `psutil`, `packaging`, `ninja`, `wheel` and `setuptools` into the active `trellis2` Conda environment, checks imports, and only then attempts the no-build-isolation flash-attn build. This change is **committed but not tested on the user's GPU**. With the one-hour spending deadline near, no new expensive attempt is recommended. Destroy Vast instance 58258491 when finished and confirm billing has stopped.
 
+## 16:01 Berlin — nvdiffrast missing CUDA cuSPARSE header
+
+An actual focused compile on Vast instance 58258491 reported:
+```
+torch: 2.6.0+cu124 cuda: 12.4
+nvcc: 12.9.86, gcc: 13.3.0, GPU: A100 sm_80
+ATen/cuda/CUDAContextLight.h:7:10: fatal error: cusparse.h: No such file or directory
+```
+This is a **missing development header or missing include search path**, not evidence of an A100 failure. We added `ensure_cusparse_dev_headers` to the `diagnose-nvdiffrast` action. It probes Conda/PyTorch NVIDIA wheel and CUDA Toolkit paths (including `targets/x86_64-linux/include`). If absent, it tries the NVIDIA `cuda-12.4.1` Conda `libcusparse-dev` package to align headers with Torch cu124, and exports `CPATH` and `CPLUS_INCLUDE_PATH` before the focused build.
+
+Read-only and rerun command, **requires operator consent on paid hardware**:
+```bash
+cd /workspace/spaktok-forge && git pull --ff-only
+timeout -s INT -k 10s 600s bash scripts/vast-a100-trellis2.sh diagnose-nvdiffrast
+```
+Expect a logged `Using cuSPARSE headers from:` path. This fix is **not yet GPU-tested**, and possible CUDA 12.9 vs cu124 compatibility issues may still need separate resolution. Do not blindly rebuild all TRELLIS dependencies or turn on production billing.
+
 ## TRELLIS.2 first A100 install failure and safe recovery (15:54 Berlin, 2026-10-29)
 
 The owner's screenshot shows a completed `/workspace/spaktok-forge` checkout and successful A100 80GB / CUDA 12.8 preflight, but the first official TRELLIS.2 installation stopped at `flash-attn==2.7.3` with `ModuleNotFoundError: No module named 'torch'` from pip's **isolated build subprocess**. This does not show that the active Conda environment lacks torch.
