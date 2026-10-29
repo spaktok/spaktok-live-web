@@ -44,7 +44,7 @@ async function signatureIsValid(request,body){
     new TextEncoder().encode(payload));
  }catch{return false}
 }
-async function handle(request){
+async function handle(request,env){
  const url=new URL(request.url);
  if(url.pathname==='/health'&&request.method==='GET')
   return json({ok:true,provider:'cloudflare-workers-ai',
@@ -67,7 +67,7 @@ async function handle(request){
  // The Worker cannot execute GLB edits, publish, spend GPU, or call databases.
  // It decides the next permitted tool; Node and the browser validate again.
  try{
-  const result=await AI.run(MODEL,{
+  const result=await env.AI.run(MODEL,{
    messages:[
     {role:'system',content:input.system+'\nReturn one JSON decision. color=none unless recolor_asset is used.'},
     {role:'user',content:input.instruction},
@@ -92,4 +92,9 @@ async function handle(request){
   return json({error:'workers_ai_unavailable',cause:String(error).slice(0,120)},503);
  }
 }
-addEventListener('fetch',event=>event.respondWith(handle(event.request)));
+export default {
+ async fetch(request, env) {
+  // AI binding is available only to module-format Workers.
+  return handle(request, env);
+ },
+};
