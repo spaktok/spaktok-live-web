@@ -30,6 +30,7 @@ from gpu_health import sign_ready_health
 MAX_PHOTO = 8 * 1024 * 1024
 _ENGINE = os.environ.get("FORGE_GPU_ENGINE", "stable-fast-3d")
 _trellis2_infer = None
+_trellis1_infer = None
 MAX_GLB = 35 * 1024 * 1024
 app = FastAPI(title="Spaktok Forge GPU", docs_url=None, redoc_url=None)
 # No wildcard origins. Set to the EXACT Spaktok creator website origin,
@@ -102,13 +103,20 @@ async def admission_guard(request: Request, call_next):
 @app.on_event("startup")
 def load_model_once():
     global _model, _rembg_session, _remove_background_fn, _resize_foreground_fn
-    global _trellis2_infer
+    global _trellis2_infer, _trellis1_infer
     token = os.environ.get("FORGE_GPU_TOKEN", "")
     if len(token) < 32:
         raise RuntimeError("FORGE_GPU_TOKEN must be set to >=32 characters")
     # This catches Blackwell sm_120 with CUDA 12.1/PyTorch 2.4 before
     # downloading gated weights or burning paid compute on a broken kernel.
     require_compatible_gpu(torch)
+    if _ENGINE == "trellis1":
+        # Microsoft's original open-weight TRELLIS uses DINOv2 with registers,
+        # independently of the Meta DINOv3 gated checkpoint in TRELLIS.2.
+        from trellis1_engine import initialize, generate_glb
+        _model = initialize()
+        _trellis1_infer = generate_glb
+        return
     if _ENGINE == "trellis2":
         from trellis2_engine import initialize, generate_glb
         _model = initialize()
@@ -164,6 +172,11 @@ def _make_glb(photo: bytes) -> bytes:
             raise ValueError("unsupported dimensions")
         source = ImageOps.exif_transpose(source)
         rgba = source.convert("RGBA")
+    if _ENGINE == "trellis1":
+        payload = _trellis1_infer(rgba)
+        if not isinstance(payload, bytes) or not 28 <= len(payload) <= MAX_GLB:
+            raise ValueError("invalid_or_oversized_trellis1_glb")
+        return payload
     if _ENGINE == "trellis2":
         payload = _trellis2_infer(rgba)
         if not isinstance(payload, bytes) or not 28 <= len(payload) <= MAX_GLB:
