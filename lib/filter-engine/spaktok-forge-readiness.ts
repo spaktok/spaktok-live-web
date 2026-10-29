@@ -21,7 +21,7 @@ export function forgeGpuReadiness(input:Readonly<{
 }
 export const FORGE_GPU_READINESS_AR:Readonly<Record<ForgeGpuReadiness,string>>={
  'disabled':'محرك GPU غير مفعّل. يمكنك إنشاء مجسم 2.5D محلي أو استيراد GLB.',
- 'awaiting-model-access':'بانتظار موافقة مزوّد النموذج على صلاحية الوصول. لا تُشغّل GPU مدفوعًا خلال الانتظار.',
+ 'awaiting-model-access':'لم يكتمل التحقق من صلاحية الوصول وأوزان وترخيص النموذج المحدد. لا تُشغّل GPU مدفوعًا خلال الانتظار.',
  'model-access-unverified':'لم يؤكد مشغّل Spaktok حقوق الوصول والترخيص؛ التوليد المدفوع معطّل.',
  'provider-offline':'الخادم GPU متوقف أو غير متصل حاليًا. ملفات GLB المحلية ما زالت قابلة للاستخدام.',
  'ready':'خادم توليد المجسمات جاهز بعد التحقق من الاتصال والتوقيع.',
