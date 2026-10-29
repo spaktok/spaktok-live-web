@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {agentRequestSchema,agentStepSchema,normalizeAgentDecision,validateAgentStep,
+import {agentRequestSchema,agentStepSchema,normalizeAgentDecision,validateAgentStep,requiredAgentAction,
  type AgentRequest,type AgentStep} from './spaktok-director-agent-contract'
 const req=(patch:Partial<AgentRequest>={}):AgentRequest=>({
  prompt:'أرسل المجسم إلى جميع الأقسام',
@@ -11,6 +11,67 @@ const step=(patch:Partial<AgentStep>={}):AgentStep=>({
  ...patch,
 })
 describe('Real Spaktok AI tool execution guards',()=>{
+ it('enforces edit then inspect then dispatch then finish for a real GLB',()=>{
+  const prompt='اجعل المجسم ذهبيا وصدّره كهدية'
+  const base=req({prompt})
+  const edit=step({action:'recolor_asset',targets:['gift'],color:'gold'})
+  expect(requiredAgentAction(base)).toBe('recolor_asset')
+  expect(validateAgentStep(step({action:'dispatch_asset',targets:['gift']}),base).reason)
+   .toBe('required_next_action_recolor_asset')
+  expect(validateAgentStep(edit,base).ok).toBe(true)
+  const afterEdit=req({prompt,steps:[{action:'recolor_asset',ok:true,detail:'new GLB hash'}]})
+  expect(requiredAgentAction(afterEdit)).toBe('inspect_asset')
+  expect(validateAgentStep(step({action:'dispatch_asset',targets:['gift']}),afterEdit).reason)
+   .toBe('required_next_action_inspect_asset')
+  const afterAudit=req({prompt,steps:[...afterEdit.steps,
+   {action:'inspect_asset',ok:true,detail:'GLB UV+PBR verified'}]})
+  expect(requiredAgentAction(afterAudit)).toBe('dispatch_asset')
+  const afterDispatch=req({prompt,steps:[...afterAudit.steps,
+   {action:'dispatch_asset',ok:true,detail:'SHA256 verified in private store'}]})
+  expect(requiredAgentAction(afterDispatch)).toBe('finish')
+  expect(validateAgentStep(step({action:'finish',targets:['gift']}),afterDispatch).ok)
+   .toBe(true)
+ })
+ it('enforces full 360 generation for a real image and no fake relief',()=>{
+  const prompt='حوّل الصورة إلى أفاتار ثلاثي الأبعاد'
+  const start=req({prompt,originalSource:'image',workingSource:'image'})
+  expect(requiredAgentAction(start)).toBe('generate_3d_gpu')
+  expect(validateAgentStep(step({action:'finish',targets:['avatar']}),start).reason)
+   .toBe('cannot_claim_result_without_tool')
+  const generated=req({prompt,originalSource:'image',workingSource:'glb',
+   steps:[{action:'generate_3d_gpu',ok:true,detail:'generated GLB'}]})
+  expect(requiredAgentAction(generated)).toBe('inspect_asset')
+  const inspected=req({...generated,steps:[...generated.steps,
+   {action:'inspect_asset',ok:true,detail:'valid 28000 triangles'}]})
+  expect(requiredAgentAction(inspected)).toBe('dispatch_asset')
+ })
+ it('permits an inspection-only user request without distributing media',()=>{
+  const p=req({prompt:'افحص هذا الملف لمعرفة عدد المثلثات'})
+  expect(requiredAgentAction(p)).toBe('inspect_asset')
+  const done=req({prompt:p.prompt,steps:[
+   {action:'inspect_asset',ok:true,detail:'23k triangles'},
+  ]})
+  expect(requiredAgentAction(done)).toBe('finish')
+  expect(validateAgentStep(step({action:'dispatch_asset',targets:['world']}),done).reason)
+   .toBe('required_next_action_finish')
+ })
+ it('aborts agent tool retries after a failed material edit',()=>{
+  const prompt='اجعل المجسم ذهبيا'
+  const p=req({prompt,steps:[{action:'recolor_asset',ok:false,detail:'GLB exporter failed'}]})
+  expect(requiredAgentAction(p)).toBe('finish')
+  expect(validateAgentStep(step({action:'recolor_asset',color:'gold'}),p).reason)
+   .toBe('required_next_action_finish')
+ })
+ it('stops after a verified private fanout, rejecting all additional edits',()=>{
+  const p=req({steps:[{action:'inspect_asset',ok:true,detail:'ok'},
+   {action:'dispatch_asset',ok:true,detail:'SHA verified'}]})
+  expect(requiredAgentAction(p)).toBe('finish')
+ })
+ it('permits a text-only missing-source response but not a fake file operation',()=>{
+  const p=req({prompt:'اصنع لي شخصية 3D',originalSource:'none',workingSource:'none'})
+  expect(requiredAgentAction(p)).toBe('finish')
+  expect(validateAgentStep(step({action:'finish',targets:['avatar']}),p).ok).toBe(true)
+ })
  it('accepts a legitimate GLB inspect followed by all-six-studios dispatch',()=>{
   const p=req({steps:[{action:'inspect_asset',ok:true,detail:'QA passed'}]})
   const s=step({action:'dispatch_asset',targets:['avatar','live','filter','gift','world','video']})
