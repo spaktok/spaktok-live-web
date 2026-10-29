@@ -4,7 +4,8 @@ import Link from 'next/link'
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js'
-import {loadLocalStudioGlb,loadStudioFanoutManifest} from '@/lib/filter-engine/reality-local-asset-handoff'
+import {loadLocalStudioGlb,loadStudioFanoutManifest,
+ loadVerifiedDirectorHandoff} from '@/lib/filter-engine/reality-local-asset-handoff'
 import type {StudioFanoutManifest} from '@/lib/filter-engine/spaktok-studio-fanout'
 import {assertSelfContainedVideo3DGlb} from '@/lib/filter-engine/reality-video3d-project'
 import {auditStudioGlbBytes} from '@/lib/filter-engine/reality-production-glb-audit'
@@ -178,9 +179,17 @@ export default function SpaktokAssetStage({
     loadLocalStudioGlb(),loadStudioFanoutManifest(),
    ])
    if(!last){setStatus('لا يوجد GLB محفوظ. افتح AI Director ثم اضغط معاينة القسم.');return}
-   setActivePlan(manifest&&manifest.source.fileName===last.name&&
-    manifest.source.bytes===last.size?manifest:null)
-   setFile(last)
+   if(manifest){
+    // Consume only the requested destination and exact SHA256 GLB;
+    // a stale browser asset must never inherit another creator's plan.
+    const verified=await loadVerifiedDirectorHandoff(kind)
+    if(!verified)throw Error('studio_handoff_incomplete')
+    setActivePlan(verified.manifest)
+    setFile(verified.file)
+   }else{
+    setActivePlan(null)
+    setFile(last)
+   }
   }catch(error){setStatus('فشل جلب المجسم المحلي: '+String(error))}
  }
  const autoImportRef=useRef(false)
