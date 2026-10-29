@@ -16,6 +16,7 @@ export type AgentAssetResult=Readonly<{
  file:File;qa:DirectorAssetQA;manifest:StudioFanoutManifest
  dispatch:DirectorDispatch
  sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d'
+ handoffStored:boolean
 }>
 export type AgentRunResult=Readonly<{
  reply:string
@@ -156,7 +157,7 @@ export async function runDirectorAgent(params:Params):Promise<AgentRunResult>{
     const updated=await styleDirectorGlb(working,explicit)
     working=updated;lastInspection=false
     event(true,'Real GLB PBR material updated: '+explicit.id+', bytes='+working.size)
-   }else if(step.action==='dispatch_asset'){
+   }else if(step.action==='dispatch_asset'||step.action==='present_asset'){
     if(!working||!isGlb(working))throw Error('GLB_required')
     if(!lastInspection)throw Error('inspect_glb_before_dispatch')
     if(!step.targets.length)throw Error('missing_destinations')
@@ -173,14 +174,23 @@ export async function runDirectorAgent(params:Params):Promise<AgentRunResult>{
      targets:step.targets as DirectorTarget[],
      gpuJobsUsed:usedGpu?1:0,sourceEngine:engine,
     })
-    await saveStudioFanoutBundle(working,manifest)
-    const verified=await loadVerifiedDirectorHandoff(step.targets[0])
-    if(!verified||verified.manifest.source.sha256!==sha)
-     throw Error('handoff_integrity_failed')
+    const requestedHandoff=step.action==='dispatch_asset'
+    if(requestedHandoff){
+     await saveStudioFanoutBundle(working,manifest)
+     const verified=await loadVerifiedDirectorHandoff(step.targets[0])
+     if(!verified||verified.manifest.source.sha256!==sha)
+      throw Error('handoff_integrity_failed')
+    }
+    // A plain "recolor" or "generate 3D" request returns the real GLB
+    // inside chat without silently saving it to specialist storages.
     delivered={file:working,qa,manifest,
-     dispatch:createDirectorDispatch(manifest),sourceEngine:engine}
-    event(true,'PRIVATE preview handed to '+step.targets.join(',')+
-     '; SHA256 verified; no rigging/live/AR/animation/publishing executed')
+     dispatch:createDirectorDispatch(manifest),sourceEngine:engine,
+     handoffStored:requestedHandoff}
+    event(true,requestedHandoff?
+     'PRIVATE preview handed to '+step.targets.join(',')+
+      '; SHA256 verified; no rigging/live/AR/animation/publishing executed':
+     'Real GLB returned inside chat; SHA256 '+sha+
+      '; no department handoff or publication performed')
    }
   }catch(error){
    event(false,safeError(error))
