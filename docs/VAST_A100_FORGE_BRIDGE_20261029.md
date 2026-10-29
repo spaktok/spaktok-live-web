@@ -26,15 +26,17 @@ bash /workspace/spaktok-forge/scripts/vast-a100-trellis2.sh preflight
 SPAKTOK_ACCEPT_UPSTREAM_SETUP=yes bash /workspace/spaktok-forge/scripts/vast-a100-trellis2.sh install
 # Once dependencies/weights are in place, generate one official example GLB
 bash /workspace/spaktok-forge/scripts/vast-a100-trellis2.sh smoke
+# Optional higher-detail 1m triangles / 4K texture master, for offline editing:
+SPAKTOK_OUTPUT_PROFILE=master bash /workspace/spaktok-forge/scripts/vast-a100-trellis2.sh smoke
 # When authorizing the API, provide FORGE_GPU_ALLOWED_ORIGIN from your terminal environment.
 # The dedicated server generates a private operator token on first run; do not paste it in chat.
 FORGE_GPU_ALLOWED_ORIGIN=https://v0-spaktok-elite-app.vercel.app \\
  bash /workspace/spaktok-forge/scripts/vast-a100-trellis2.sh serve
 ```
 
-The official TRELLIS.2 CUDA toolchain typically needs CUDA 12.4 and Conda and can take significant install/disk time. Running these commands is **not** assured to finish during a short paid rental. The GPU preflight must succeed before selecting the install action. Actual model output is not yet tested on this user's GPU.
+The official TRELLIS.2 CUDA toolchain typically needs CUDA 12.4 and Conda and can take significant install/disk time. Running these commands is **not** assured to finish during a short paid rental. The hardware/Conda preflight must succeed before selecting install. Existing Python not having PyTorch is acceptable; setup installs an isolated torch version. The official Microsoft source is pinned to commit 75fbf0183001ed9876c8dbb35de6b68552ee08bd. Actual model output is not yet tested on this user's GPU.
 
-For TRELLIS.2 the host and Vercel must both use `FORGE_GPU_ENGINE=trellis2` / `SPAKTOK_FORGE_GPU_ENGINE=trellis2` respectively. The exact bearer token is separate from the compromised Vast provider management API key. Never reuse the Vast API key as the Forge token.
+For TRELLIS.2 the host and Vercel must both use `FORGE_GPU_ENGINE=trellis2` / `SPAKTOK_FORGE_GPU_ENGINE=trellis2` respectively. The web API uses the 250k polygon/2K texture private GLB preview cap. The separate offline master profile exports up to 1m polygons / 4K texture and needs an explicit transfer and optimization for mobile. Neither profile guarantees higher quality than Rodin. The exact bearer token is separate from the compromised Vast provider management API key. Never reuse the Vast API key as the Forge token.
 
 ## Needed on Vast.ai (must be performed from an authenticated operator terminal)
 1. Confirm one working CUDA A100 and that paid GPU time is supervised. **Destroy** the instance after exporting any useful results: the selected one-hour search duration is not an auto-termination timer.
