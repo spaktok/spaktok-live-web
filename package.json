@@ -13,6 +13,7 @@
     "cf:deploy": "vinext deploy",
     "test": "vitest run --config vitest.config.ts",
     "test:word:gate": "vitest run --config vitest.config.ts lib/filter-engine/spaktok-word-face-rig.test.ts lib/filter-engine/spaktok-word-import.test.ts lib/filter-engine/spaktok-word-cloudflare.test.ts lib/filter-engine/reality-avatar-full-retarget.test.ts lib/filter-engine/spaktok-word-rig-qa.test.ts lib/filter-engine/reality-avatar-live-qa.test.ts lib/filter-engine/spaktok-forge-relief.test.ts lib/server/spaktok-forge-budget.test.ts lib/filter-engine/spaktok-forge-benchmark.test.ts lib/filter-engine/spaktok-forge-normals-repair.test.ts lib/filter-engine/spaktok-ai-director.test.ts lib/filter-engine/spaktok-studio-fanout.test.ts lib/server/runpod-one-hour-safety.test.ts",
+    "test:forge:providers": "vitest run --config vitest.config.ts lib/server/spaktok-forge-provider.test.ts",
     "test:d1": "vitest run --config vitest.config.ts lib/cloudflare/d1-repository.test.ts",
     "test:cloudflare": "vitest run --config vitest.config.ts lib/cloudflare",
     "asset:crown": "node scripts/build-couture-glb.mjs"
