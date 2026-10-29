@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest'
-import {agentRequestSchema,agentStepSchema,validateAgentStep,
+import {agentRequestSchema,agentStepSchema,normalizeAgentDecision,validateAgentStep,
  type AgentRequest,type AgentStep} from './spaktok-director-agent-contract'
 const req=(patch:Partial<AgentRequest>={}):AgentRequest=>({
  prompt:'أرسل المجسم إلى جميع الأقسام',
@@ -15,6 +15,24 @@ describe('Real Spaktok AI tool execution guards',()=>{
   const p=req({steps:[{action:'inspect_asset',ok:true,detail:'QA passed'}]})
   const s=step({action:'dispatch_asset',targets:['avatar','live','filter','gift','world','video']})
   expect(validateAgentStep(s,p).ok).toBe(true)
+ })
+ it('repairs a REAL observed free Llama duplicate-target hallucination',()=>{
+  // Llama returned six copies of gift for an all-departments request.
+  const hallucinated=step({action:'inspect_asset',
+   targets:['gift','gift','gift','gift','gift','gift'],
+   color:null,message:'تم إرسال المجسم إلى جميع الأقسام'})
+  const normalized=normalizeAgentDecision(hallucinated,
+   'أرسل المجسم إلى جميع الأقسام')
+  expect(normalized.targets).toEqual([
+   'avatar','live','filter','gift','world','video',
+  ])
+  expect(validateAgentStep(normalized,req()).ok).toBe(true)
+ })
+ it('preserves exactly the two specialized departments user explicitly asked for',()=>{
+  const normalized=normalizeAgentDecision(step({
+   action:'dispatch_asset',targets:['gift','gift'],
+  }), 'جهّز المجسم للعالم والفلاتر')
+  expect(normalized.targets).toEqual(['filter','world'])
  })
  it('prevents AI from dropping targets when user requests all studios',()=>{
   const p=req({steps:[{action:'inspect_asset',ok:true,detail:'verified'}]})
