@@ -9,7 +9,7 @@ import type {AgentAssetResult} from './spaktok-director-agent-client'
 export function verifiedDirectorReply(
  result:AgentAssetResult|null,actions:readonly AgentEvent[],
 ):string{
- const failure=actions.findLast(x=>!x.ok)
+ const failure=[...actions].reverse().find(x=>!x.ok)
  if(failure)return 'لم تكتمل المهمة. توقفت أداة '+failure.action+
   ' ولم أنفذ الإجراء التالي تلقائيًا. السبب: '+failure.detail+
   '. لا يوجد نشر عام ولا إعادة تشغيل مدفوعة.'
