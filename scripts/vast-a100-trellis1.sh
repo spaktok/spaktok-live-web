@@ -29,6 +29,16 @@ prepare(){
 activate(){
   source "$(conda info --base)/etc/profile.d/conda.sh"
   conda activate trellis
+  # Always favor the CUDA 12.1 compiler installed in the isolated env
+  # over the Vast host's CUDA 12.9 toolkit (PyTorch is pinned to cu121).
+  [[ -x "$CONDA_PREFIX/bin/nvcc" ]] ||
+    fail 'CUDA 12.1 compiler absent in trellis env: install its pinned toolkit first.'
+  export CUDA_HOME="$CONDA_PREFIX"
+  export PATH="$CUDA_HOME/bin:$PATH"
+  local compiler_release
+  compiler_release="$(nvcc --version | grep 'release ' || true)"
+  [[ "$compiler_release" == *"release 12.1,"* ]] ||
+    fail 'CUDA compiler not 12.1: do not compile with host nvcc 12.9.'
 }
 install(){
   prepare
@@ -42,20 +52,28 @@ install(){
   git checkout --detach "$TRELLIS_COMMIT"
   git submodule update --init --recursive
   source "$(conda info --base)/etc/profile.d/conda.sh"
-  if conda env list | awk 'NR>2 {print $1}' | grep -qx trellis; then
-    log 'Existing trellis environment: no blind reinstall; diagnose and run smoke first.'
-    return
+  if [[ ! -d "$HOME/.config/spaktok" ]]; then
+    mkdir -p "$HOME/.config/spaktok"
+    chmod 700 "$HOME/.config/spaktok"
   fi
-  # The previous Vast A100 image had nvcc 12.4. Avoid the official
-  # --new-env default (cu118) which would mismatch CUDA major during builds.
-  # Use cu121 torch2.4.0 so nvcc12.4 is a MINOR mismatch, and the upstream
-  # setup.sh knows compatible xformers/kaolin wheels for torch2.4.0+cu121.
+  # The image has host CUDA 12.9. Install CUDA 12.1.1 into the Conda
+  # environment, matching torch 2.4.0+cu121; never compile against
+  # the newer host toolkit by accident.
   nvcc_line="$(nvcc --version | grep 'release ' || true)"
   [[ "$nvcc_line" == *"release 12."* ]] ||
-    fail 'This scripted build expects CUDA toolkit nvcc 12.x; use a reviewed separate setup for 11.x.'
-  log 'Creating isolated PyTorch 2.4.0+cu121 Conda environment; monitor paid GPU time.'
-  conda create -y -n trellis python=3.10 pip
+    fail 'Expected host NVIDIA CUDA toolkit 12.x; inspect host image.'
+  if [[ ! -d "$(conda info --base)/envs/trellis" ]] &&
+     ! conda env list | awk 'NR>2 {print $1}' | grep -qx trellis; then
+    log 'Creating isolated TRELLIS Python 3.10 environment.'
+    conda create -y -n trellis python=3.10 pip
+  fi
   conda activate trellis
+  if [[ ! -x "$CONDA_PREFIX/bin/nvcc" ]]; then
+    log 'Installing CUDA toolkit 12.1.1 in the TRELLIS environment (NVIDIA channel).'
+    conda install -y -n trellis -c nvidia/label/cuda-12.1.1 cuda-toolkit=12.1.1
+  fi
+  activate
+  log 'Verified matching CUDA compiler; installing upstream pinned PyTorch 2.4.0+cu121.'
   python -m pip install torch==2.4.0 torchvision==0.19.0 \
     --index-url https://download.pytorch.org/whl/cu121
   python - <<'PY'
@@ -64,11 +82,14 @@ assert torch.cuda.is_available(), "cuda_missing"
 assert torch.version.cuda == "12.1", "wrong_pytorch_cuda"
 print("PRECHECK", torch.__version__, torch.version.cuda)
 PY
-  # Install only the supported official components, never upgrade torch
-  # without validating extension ABI and matching GPU architecture.
+  # Install the official extensions with matching nvcc 12.1.
+  # Re-running after a failed install is allowed; never treat env existence
+  # alone as proof of a completed installation.
+  export TORCH_CUDA_ARCH_LIST=8.0
+  export MAX_JOBS=2
   source ./setup.sh --basic --xformers --flash-attn \
     --diffoctreerast --spconv --mipgaussian --kaolin --nvdiffrast
-  conda activate trellis
+  activate
   python -m pip install 'fastapi>=0.115,<1' 'uvicorn[standard]>=0.30,<1' \
     'python-multipart>=0.0.9,<1'
   python "$FORGE/gpu_preflight.py"
@@ -118,7 +139,7 @@ serve(){
     chmod 600 "$token_file"
     token="$(cat "$token_file")"
   fi
-  [[ "$token" == ????????????????????????????????* ]] ||
+  (( ${#token} >= 32 )) ||
     fail 'FORGE_GPU_TOKEN must have 32+ characters.'
   export FORGE_GPU_TOKEN="$token"
   cd "$TRELLIS"
