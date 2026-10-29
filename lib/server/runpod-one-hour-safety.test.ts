@@ -11,6 +11,8 @@ describe('RunPod paid one-hour trial safety contract',()=>{
    env:{...process.env,
     RUNPOD_GPU_ID:'NVIDIA RTX PRO 6000 WK',
     RUNPOD_TEMPLATE_ID:'reviewed_test_template',
+    RUNPOD_CLOUD_TYPE:'SECURE',
+    RUNPOD_CONTAINER_DISK_GB:'60',
    },
    timeout:4000,
   })
@@ -33,7 +35,7 @@ describe('RunPod paid one-hour trial safety contract',()=>{
    },
    timeout:4000,
   })
-  expect(result.status).toBe(0)
+  expect(result.status,'bash stderr: '+result.stderr+'; stdout: '+result.stdout).toBe(0)
   expect(result.stdout).toContain('DRY RUN')
   expect(result.stdout).toContain('--min-cuda-version')
   expect(result.stdout).toContain('8000/http')
