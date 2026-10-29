@@ -37,16 +37,16 @@ export const agentRequestSchema=z.object({
 }).strict()
 export type AgentRequest=z.infer<typeof agentRequestSchema>
 const COLOR_TESTS:Readonly<Record<typeof AGENT_STYLES[number],RegExp>>={
- gold:/ذهبي|ذهبية|gold|golden/i,
- silver:/فضي|فضية|silver/i,
- red:/احمر|أحمر|حمراء|red/i,
- blue:/ازرق|أزرق|زرقاء|blue/i,
- green:/اخضر|أخضر|خضراء|green/i,
- purple:/بنفسجي|بنفسجية|أرجواني|purple|violet/i,
- black:/اسود|أسود|سوداء|black/i,
- white:/ابيض|أبيض|بيضاء|white/i,
+ gold:/ذهبي|ذهبية|gold|golden|vergold/i,
+ silver:/فضي|فضية|silver|silber/i,
+ red:/احمر|أحمر|حمراء|\\bred\\b|\\brot(?:e|en|es|em|er)?\\b/i,
+ blue:/ازرق|أزرق|زرقاء|\\bblue\\b|\\bblau(?:e|en|es|em|er)?\\b/i,
+ green:/اخضر|أخضر|خضراء|green|grün|gruen/i,
+ purple:/بنفسجي|بنفسجية|أرجواني|purple|violet|violett|lila/i,
+ black:/اسود|أسود|سوداء|black|schwarz/i,
+ white:/ابيض|أبيض|بيضاء|white|weiß|weiss/i,
 }
-const MATERIAL_EDIT=/غيّر|غير|بدّل|بدل|لوّن|لون|اجعل|خليه|خلّي|حوّل|حول|paint|recolor|make|color|colour|material|خامة/i
+const MATERIAL_EDIT=/غيّر|غير|بدّل|بدل|لوّن|لون|اجعل|خليه|خلّي|حوّل|حول|paint|recolor|make|color|colour|material|خامة|färb|faerb|ändere|aendere|farbe|mach(?:e)?|kolorier|tön/i
 export const requiresRelief=(prompt:string)=>/\b2[.,]?5d\b|بارز|relief|heightfield|نحت سطحي/i.test(prompt)
 /** Deterministic creator intent is an AUTHORITATIVE routing constraint.
  * An LLM may hallucinate six copies of Gifts for "all studios".
