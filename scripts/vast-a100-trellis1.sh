@@ -107,8 +107,35 @@ import nvdiffrast.torch
 from trellis.pipelines import TrellisImageTo3DPipeline
 print("[Spaktok TRELLIS v1] Python imports passed; environment ready for smoke test.")
 PY
+  repair_python
   log 'Dependencies verified. Next: smoke. Model output is NOT proven yet.'
 }
+# Upstream installs unpinned, modern Transformers which may disable Torch 2.4
+# entirely ("PyTorch >= 2.6 is required"), even though CUDA imports work.
+# TRELLIS v1 was built for the 2024 Transformers generation; avoid changing
+# the already compiled torch, CUDA, nvdiffrast, kaolin or xformers stack.
+repair_python(){
+  activate
+  log 'Pinning Transformers 4.46.3 for existing torch 2.4.0+cu121 (no CUDA rebuild).'
+  python -m pip install 'transformers==4.46.3'
+  check_python_stack
+  log 'Python model dependency versions verified; next run smoke.'
+}
+check_python_stack(){
+  activate
+  python - <<'PY'
+import torch, transformers
+from transformers.utils import is_torch_available
+print('FORGE_STACK', 'torch='+torch.__version__, 'transformers='+transformers.__version__,
+      'transformers_torch_enabled='+str(is_torch_available()),
+      'cuda='+str(torch.version.cuda))
+if not torch.__version__.startswith('2.4.0+cu121') or torch.version.cuda != '12.1':
+    raise SystemExit('Unexpected torch/CUDA version; do not rebuild extensions blindly.')
+if transformers.__version__ != '4.46.3' or not is_torch_available():
+    raise SystemExit('Transformers 4.46.3 required for Torch 2.4; run repair-python first.')
+PY
+}
+
 resume(){
   [[ -d "$TRELLIS" ]] || fail 'TRELLIS source missing: run install first.'
   finish_nvdiffrast
@@ -179,12 +206,14 @@ PY
   # Upstream nvdiffrast clone may already exist from previous GPU sessions.
   # Install it separately without deleting /tmp/extensions.
   finish_nvdiffrast
+  # finish_nvdiffrast already pins and verifies Transformers 4.46.3.
   log 'Installed. Next run smoke. Model weights and CUDA end-to-end are NOT verified yet.'
 }
 smoke(){
   prepare
   [[ -d "$TRELLIS" ]] || fail 'Run install first.'
   activate
+  check_python_stack
   export PYTHONPATH="$FORGE:$TRELLIS"
   export SPCONV_ALGO=native
   export ATTN_BACKEND=xformers
@@ -209,6 +238,7 @@ PY
 serve(){
   prepare
   [[ -d "$TRELLIS" ]] || fail 'Run install first.'
+  check_python_stack
   origin="$(printenv FORGE_GPU_ALLOWED_ORIGIN || true)"
   [[ "$origin" == https://* ]] || fail 'Set the exact HTTPS FORGE_GPU_ALLOWED_ORIGIN.'
   activate
@@ -238,7 +268,8 @@ case "$ACTION" in
   preflight) prepare;;
   install) install;;
   resume) resume;;
+  repair-python) repair_python;;
   smoke) smoke;;
   serve) serve;;
-  *) fail 'Usage: vast-a100-trellis1.sh {preflight|install|resume|smoke|serve}';;
+  *) fail 'Usage: vast-a100-trellis1.sh {preflight|install|resume|repair-python|smoke|serve}';;
 esac
