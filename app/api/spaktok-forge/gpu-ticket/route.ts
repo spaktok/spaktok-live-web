@@ -41,7 +41,7 @@ function config(origin:string){
  const token=process.env.SPAKTOK_FORGE_GPU_TOKEN??''
  const provider=process.env.SPAKTOK_FORGE_GPU_PROVIDER??'runpod'
  const engine=process.env.SPAKTOK_FORGE_GPU_ENGINE??'stable-fast-3d'
- if(engine!=='stable-fast-3d'&&engine!=='trellis2')return null
+ if(!['stable-fast-3d','trellis1','trellis2'].includes(engine))return null
  if(!expectedOrigin||expectedOrigin!==origin||
   token.length<32||!urlText||!host)return null
  try{
