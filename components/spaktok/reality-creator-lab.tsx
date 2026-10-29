@@ -195,7 +195,7 @@ export default function RealityCreatorLab(){
    const fingerprint=new Uint8Array(await crypto.subtle.digest(
     'SHA-256',await asset.arrayBuffer()))
    const sha=Array.from(fingerprint).map(x=>x.toString(16).padStart(2,'0')).join('')
-   const verified=manifest?.source.sha256===sha&&
+   const verified=manifest!==null&&manifest.source.sha256===sha&&
     manifest.source.fileName===asset.name
    acceptForgeAsset(asset)
    setCategory('mask');setAnchor('nose_bridge')
