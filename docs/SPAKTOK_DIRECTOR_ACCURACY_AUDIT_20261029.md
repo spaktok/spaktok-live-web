@@ -114,6 +114,29 @@ hallucination and evidence-backed local completion.
 not full end-to-end browser execution. The newest code and tests are
 still NOT verified by a successful production build.
 
+## Actual Vercel build diagnostics and targeted fix
+
+The Vercel preview for commit `3d964c9bc66d` DID run the
+`bun run test:word:gate` test suite. The log reported **124 passing,
+1 failing** across 21 test files (125 tests total). The single
+failure was an error-precedence regression in
+`spaktok-director-agent-contract.test.ts`:
+the `recolor_asset` action attempted after an already verified
+private dispatch was correctly rejected, but the guard reported
+`unapproved_material_change` instead of the expected
+`dispatch_already_complete`.
+
+The validator now **short-circuits all post-completion actions before**
+checking unrelated material/geometry parameters, making the rejection
+consistent and avoiding any further editing after private delivery.
+Fix commit: `e8672fa3ddf51e6a0c878d66188d0e231ae955f2`.
+
+The test failure diagnosis is verified from Vercel logs; **the
+fix has not yet been proved by a successful latest-HEAD Vercel build**.
+The project remains a draft PR and production AI is OFF. Any
+remaining compile/build issues will only be knowable after a
+successful test-gate rerun.
+
 ## Tests and acceptance
 
 The agent contract suite currently contains **26 source test cases**
