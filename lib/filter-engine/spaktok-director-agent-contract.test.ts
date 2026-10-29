@@ -95,6 +95,25 @@ describe('Real Spaktok AI tool execution guards',()=>{
   const route=normalizeAgentDecision(step0,'أرسل المجسم إلى جميع الأقسام ما عدا اللايف')
   expect(route.targets).toEqual(['avatar','filter','gift','world','video'])
  })
+ it('allows all departments EXCEPT Live when creator explicitly excludes it',()=>{
+  const prompt='أرسل المجسم إلى جميع الأقسام ما عدا اللايف'
+  const p=req({prompt,steps:[{action:'inspect_asset',ok:true,detail:'QA verified'}]})
+  const normalized=normalizeAgentDecision(step({
+   action:'dispatch_asset',targets:['gift','gift','gift','gift','gift','gift'],
+  }),prompt)
+  expect(normalized.targets).toEqual(['avatar','filter','gift','world','video'])
+  expect(validateAgentStep(normalized,p).ok).toBe(true)
+  expect(validateAgentStep(step({action:'dispatch_asset',
+   targets:['avatar','live','filter','gift','world','video']}),p).reason)
+   .toBe('all_studios_requested')
+ })
+ it('rejects unauthorized destinations even if model proposed them confidently',()=>{
+  const p=req({prompt:'جهّز المجسم للعالم والفلاتر',
+   steps:[{action:'inspect_asset',ok:true,detail:'passed'}]})
+  expect(validateAgentStep(step({action:'dispatch_asset',
+   targets:['avatar','filter','world']}),p).reason)
+   .toBe('creator_destinations_mismatch')
+ })
  it('preserves exactly the two specialized departments user explicitly asked for',()=>{
   const normalized=normalizeAgentDecision(step({
    action:'dispatch_asset',targets:['gift','gift'],
