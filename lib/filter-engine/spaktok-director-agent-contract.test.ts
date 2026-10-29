@@ -89,6 +89,22 @@ describe('Real Spaktok AI tool execution guards',()=>{
   ])
   expect(validateAgentStep(normalized,req()).ok).toBe(true)
  })
+ it('respects a German all-except-Live request',()=>{
+  const prompt='Sende an alle Bereiche außer Live'
+  const p=req({prompt,steps:[{action:'inspect_asset',ok:true,detail:'verified'}]})
+  const normalized=normalizeAgentDecision(step({
+   action:'dispatch_asset',
+   targets:['gift','gift','gift','gift','gift','gift'],
+  }),prompt)
+  expect(normalized.targets).toEqual(['avatar','filter','gift','world','video'])
+  expect(validateAgentStep(normalized,p).ok).toBe(true)
+ })
+ it('clears unrequested color data from hallucinated non-recolor commands',()=>{
+  const normalized=normalizeAgentDecision(step({
+   action:'inspect_asset',targets:['world'],color:'green',
+  }),'افحص GLB للعالم')
+  expect(normalized.color).toBeNull()
+ })
  it('never distributes to a studio explicitly excluded by the creator',()=>{
   const step0=step({action:'dispatch_asset',
    targets:['avatar','live','filter','gift','world','video']})
