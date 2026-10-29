@@ -48,10 +48,10 @@ def make_glb(photo: bytes) -> bytes:
         image = ImageOps.exif_transpose(src).convert("RGBA")
 
     # Official inference shape (microsoft/TRELLIS.2 README, Oct 2026).
-    # One 512^3 pass first; higher resolutions require separately measured
-    # VRAM, provider runtime and output transfer constraints.
+    # Use official default resolution for this first experimental bridge.
+    # Higher resolutions require measured VRAM, runtime and size gates.
     with torch.inference_mode():
-        mesh = _pipeline.run(image, pipeline_type="512")[0]
+        mesh = _pipeline.run(image)[0]
         mesh.simplify(16777216)
         scene = o_voxel.postprocess.to_glb(
             vertices=mesh.vertices,
