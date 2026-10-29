@@ -124,6 +124,71 @@ Do NOT use the word "done" for nonexistent specialist output.
    deletion, data residency, AR/Agora/rigging and Android performance before
    production or any public fan-out.
 
+## Actual AI agent architecture (NEW — not live until flag + auth)
+
+The original UI used simple regex routing and could respond convincingly even
+when no model was connected. **It was not an autonomous AI agent.**
+
+The new code implements a bounded planner / executor / observation loop:
+
+```text
+Chat text + optional consented 320px photo preview + recent conversation
+ -> POST /api/studio/director/agent/step
+ -> authenticated, rate-limited Vercel AI Gateway model
+ -> ONE typed tool action (structured output)
+ -> STRICT independent policy validation
+ -> browser-local tool executes REAL work
+ -> observation: true mesh/texture/GLB/sha256/3D GPU result or real failure
+ -> model sees observation and chooses next action (max six steps)
+ -> result GLB + private specialist handoff + viewer IN THE CHAT
+```
+
+AI tools:
+- `inspect_asset`: real GLB structural QA.
+- `generate_relief`: actual image-based local 2.5D geometry.
+- `generate_3d_gpu`: TRELLIS on private paid GPU, after separate approvals.
+- `recolor_asset`: actual change to PBR GLB material using three.js.
+- `dispatch_asset`: signed SHA256 audit and same-asset six-studio handoff.
+- `finish`: state what actually happened; no fake output.
+
+Security: no shell commands, file deletion, publishing or unbounded tool calls.
+No silent GPU reruns, no inferred permission to upload an image, no source
+bytes sent to an LLM unless creator has explicitly opted in to **a small
+JPEG image preview**, and no changing unrequested colors. Registered
+user required with 15-minute quota. Six-step max. Model action schema and
+policy are tested. Recent chat history sent as bounded TEXT only.
+
+**Operational gate:** `SPAKTOK_DIRECTOR_AGENT_ENABLED=true` must be
+enabled on the deployed environment, with a working Vercel AI Gateway
+and the native D1 session/auth config. These are NOT configured in
+the protected Preview at the time of writing. The front end checks
+`GET /api/studio/director/agent/step` and explicitly says whether
+the model-driven agent is enabled, or whether the user is only using
+a deterministic local rule engine. Do not claim that this feature is
+currently a running LLM until live calls and real GLB are verified.
+
+Final compile/regression test and browser end-to-end test still pending
+because GitHub workflow runs have empty step summaries and latest Vercel
+check is `build-rate-limit`. This new agent code is committed to a
+**draft PR**, not merged into the production web or Kotlin app.
+
+### Operator canary to verify real AI rather than a scripted chatbot
+
+1. With a private authenticated preview, configure AI Gateway and set
+   `SPAKTOK_DIRECTOR_AGENT_ENABLED=true` for THAT preview only.
+2. GET capability must say `enabled:true`; inspect model request counts.
+3. Attach a test GLB and ask: `غيّر خامته إلى الذهبي وأرسله للعالم والهدية`.
+4. Observe model tool outputs: `recolor_asset` -> `inspect_asset`
+   -> `dispatch_asset` -> `finish` and verify file SHA256 differs.
+5. Try `360` from an image with GPU offline: the agent must state that
+   compute is unavailable and must not create any 2.5D placeholder.
+6. Ask for all six targets; exactly six private results should appear.
+7. Test vision opt-in OFF then ON with a nonsensitive test image; verify
+   that only the reduced JPEG, never the full photo or model, reaches LLM.
+8. Test rate limits, no session, hostile origin, invalid AI action, fake
+   tool success, repeated GPU spend, and abort. No public publish.
+9. Only after this pass consider production activation and native Android.
+
 ## Next engineering objectives (not completed)
 
 - Implement real per-domain adaptors for rigging, eye/mouth morph, filter
