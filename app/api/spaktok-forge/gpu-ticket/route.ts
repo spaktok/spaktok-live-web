@@ -94,7 +94,7 @@ export async function GET(request:NextRequest){
   enabled:status==='ready',status,delivery:'direct-private-ticket',
   provider:cfg?.provider??null,
   engine:cfg?.engine??'disabled',
-  full360:true,dailyCapPerOwner:1,
+  full360:status==='ready',dailyCapPerOwner:1,
   globalDailyCap:cfg?.globalCap??null,maxImageMB:8,
   maxResultMB:35,
   warning:'Direct browser delivery avoids Vercel 4.5MB payload limit; GPU needs origin-locked CORS and nonce admission; no public release.',
