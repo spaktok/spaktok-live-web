@@ -152,6 +152,18 @@ previously disclosed Vast/provider secrets.
 - Until tests and model licensing/rights assessment pass, **keep PR draft,
   cloud flag off and no automatic publication**.
 
+## Repeatable read-only deployed Worker canary
+
+Run `npm run test:studio:worker:canary` or
+`node scripts/test-private-studio-worker.mjs`. This checks live
+`/health`, rejects unsigned and forged GLB GET signatures, and rejects
+unapproved CORS preflights. Set the exact non-secret
+`SPAKTOK_STUDIO_PREVIEW_ORIGIN` to verify allowlisted preview CORS too.
+**No authenticated upload, R2 storage mutation or GPU access is performed.**
+The test has been added to source but has not yet been executed in the
+current remote terminal environment. Cloudflare Browser Rendering did
+successfully probe live health and an unsigned denial as documented above.
+
 ## One-cycle private acceptance
 
 1. In `/spaktok-word#ai-director`, import the owner's first 2.84 MB GLB.
