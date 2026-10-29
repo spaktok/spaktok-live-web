@@ -1,11 +1,13 @@
 import {
  inspectWordGeneratedGlb,type WordGeneratedInspection,
 } from './spaktok-word-import'
+import {isForgeGpuEndpoint,type ForgeGpuProvider} from './spaktok-forge-gpu-endpoint'
 
 const MAX_UPLOAD=8*1024*1024
 const MAX_OUTPUT=35*1024*1024
 type DirectTicket=Readonly<{
  url:string;ticket:string;jobId:string;expiresAt:string
+ provider:ForgeGpuProvider
 }>
 export type ForgeDirectResult=Readonly<{
  file:File;inspection:WordGeneratedInspection
@@ -47,13 +49,9 @@ export async function generateForgeGpuDirect(
   typeof obj.expiresAt!=='string')
   throw Error('forge_direct_bad_ticket_response')
  const destination=new URL(obj.url)
- // The first trial uses only RunPod's HTTPS-terminated proxy. Non-RunPod
- // GPU providers need separately reviewed host allowlist and TLS policy.
- if(destination.protocol!=='https:'||
-  !destination.hostname.endsWith('.proxy.runpod.net')||
-  destination.pathname!=='/v1/generate'||
-  destination.port||destination.username||destination.password||
-  destination.search||destination.hash||
+ // The server pins the exact host; the browser independently rejects
+ // all other GPU providers, paths, custom ports and non-TLS endpoints.
+ if(!isForgeGpuEndpoint(obj.url,destination.hostname,String(obj.provider))||
   !/^st1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(obj.ticket)||
   new Date(obj.expiresAt).getTime()<=Date.now())
   throw Error('forge_direct_invalid_destination_or_expired_ticket')
