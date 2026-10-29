@@ -170,6 +170,46 @@ Do not claim a real GLB exists until the file appears AND the GLB quality
 audit passes. A Warp CUDA toolkit version shown in logs is separate from
 the PyTorch build and still requires validation in an actual model run.
 
+### Root cause of confusing Hugging Face 401 during first GPU smoke
+
+The screenshot's 401 URL was `https://huggingface.co/ckpts/slat_dec_mesh_swin8_B_64l8m256c_fp16/resolve/main/.json`.
+This is a fake fallback repo, NOT a rejection of the official public
+`microsoft/TRELLIS-image-large` weights and NOT the blocked DINOv3.
+Upstream `trellis/pipelines/base.py` used a bare `except:` around the first
+model loader attempt and then retried the bare relative path `ckpts/foo`
+as a Hugging Face repository. That hides the ORIGINAL exception.
+
+We confirmed the correct `ckpts/slat_dec_mesh...json` plus actual LFS weights
+are listed in Microsoft's model repository.
+
+The Forge `trellis1_engine.py` now:
+1. Fetches only the official model's `pipeline.json`.
+2. Validates the manifest model paths and fetches only its required
+   `ckpts/*.json` and `ckpts/*.safetensors` from the official Microsoft repo
+   into the Hugging Face disk cache (reused across restarts while disk lives).
+3. Confirms every requested file exists locally before proceeding.
+4. Constructs the same official TRELLIS pipeline directly using
+   `models.from_pretrained(local_path)`, preserving the ORIGINAL failure
+   if a checkpoint can't be loaded, rather than falling back to a fake repo.
+
+**Do not paste a Hugging Face token to fix this.**
+No gate approval is required for these public Microsoft files. This change
+avoids the misleading fallback 401, but a separate original exception may
+still be discovered on the next smoke; do not assume output success.
+
+To try the repaired smoke without reinstalling the GPU environment:
+
+    cd /workspace/spaktok-forge
+    git pull --ff-only origin feat/vast-a100-forge-bridge-20261029
+    set -o pipefail
+    bash scripts/vast-a100-trellis1.sh smoke 2>&1 | tee -a /workspace/spaktok-trellis1-smoke.log
+
+Expected only if successful: `CREATED /workspace/spaktok-trellis1-preview.glb`
+followed by GLB audit JSON. Save the result outside the rented disk before
+destroying the instance. If it errors, use only the FIRST traceback error
+with its underlying exception for diagnosis. The printed
+"loading verified local component" line identifies the failing layer.
+
 ## Remaining release blockers
 
 - GitHub Actions reports failure with missing job steps/logs; offline tests
