@@ -384,7 +384,11 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
          </div>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-         {message.result.dispatch.steps.map(step=><div key={step.target}
+         {message.result.handoffStored===false&&
+        <p className="rounded-lg border border-sky-400/20 bg-sky-500/5 p-3 text-xs text-sky-200">
+         الملف جاهز داخل الدردشة فقط؛ لم أُرسله إلى أي استوديو لأنك لم تطلب ذلك.
+        </p>}
+       {message.result.handoffStored!==false&&message.result.dispatch.steps.map(step=><div key={step.target}
           className="rounded-xl border border-white/10 bg-[#0b1528] p-3">
           <div className="mb-1 flex items-center justify-between gap-2">
            <strong className="text-xs text-sky-200">{TARGET_LABELS[step.target]}</strong>
