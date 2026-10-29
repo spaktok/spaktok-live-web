@@ -187,7 +187,7 @@ export default function SpaktokAIDirector({
    gpuJobsUsed,sourceEngine,
   })
   setAsset(file);setQA(checked);setManifest(draft)
-  if(gpuJobsUsed)onGeneratedGlb?.(file)
+  if(sourceEngine!=='existing-glb')onGeneratedGlb?.(file)
   setStatus((sourceEngine==='browser-2.5d'?
    'نجح إنشاء GLB بارز 2.5D محليًا مجانًا دون رفع الصورة. '+
    'هذا ليس نموذج وجه/جسم 360° ولا تصلح حركاته تلقائيًا. ':
