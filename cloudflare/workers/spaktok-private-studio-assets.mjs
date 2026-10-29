@@ -28,7 +28,7 @@ async function authorize(request,method,owner,id,sha,size){
  const signature=request.headers.get('x-spaktok-studio-signature')||'';
  if(!/^\d{10}$/.test(expires)||!/^[A-Za-z0-9_-]{86}$/.test(signature))return false;
  const now=Math.floor(Date.now()/1000),end=Number(expires);
- if(end<now||end>now+120)return false;
+ if(end<now||end>now+360)return false;
  const payload=[DOMAIN,method,owner,id,sha,String(size),expires].join('\n');
  try{
   const key=await keyPromise;
