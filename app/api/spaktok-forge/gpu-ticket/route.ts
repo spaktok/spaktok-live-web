@@ -3,9 +3,7 @@ import {createHmac} from 'node:crypto'
 import {resolveForgeGpuBackend,type ForgeGpuBackend} from '@/lib/server/spaktok-forge-provider'
 import {getNativeUser,rateLimit} from '@/lib/native/auth'
 import {queryD1} from '@/lib/native/d1'
-import {
- parseForgeDailyJobLimit,FORGE_QUOTA_CLAIM_SQL,
-} from '@/lib/server/spaktok-forge-budget'
+import {FORGE_QUOTA_CLAIM_SQL} from '@/lib/server/spaktok-forge-budget'
 
 /** Browser-to-operator GPU short-lived one-use grant.
  *
