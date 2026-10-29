@@ -40,6 +40,7 @@ export type StudioFanoutManifest=Readonly<{
   rightsAttested:boolean
   outputTargets:readonly DirectorTarget[]
   gpuJobsUsed:0|1
+  sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d'
  }>
  calibration:Readonly<{
   verified:false
@@ -74,6 +75,7 @@ export function createStudioFanoutManifest(input:Readonly<{
  description:string;rights:'original'|'licensed'
  targets:readonly DirectorTarget[]
  gpuJobsUsed?:0|1;createdAt?:string
+ sourceEngine?:'existing-glb'|'ai-360-gpu'|'browser-2.5d'
 }>):StudioFanoutManifest{
  if(!safeFile(input.fileName)||!validHash(input.sha256)||
   !Number.isSafeInteger(input.bytes)||input.bytes<28||
@@ -104,6 +106,8 @@ export function createStudioFanoutManifest(input:Readonly<{
  const outputs:StudioOutputProfile[]=targets.map(target=>{
   const blockers=[...technicalReasons]
   const avatar=target==='avatar'||target==='live'
+  if(input.sourceEngine==='browser-2.5d')
+   blockers.push('local_relief_is_not_a_full_360_reconstruction')
   if(avatar)blockers.push(
    input.audit.rigTargets?'face_rig_visual_qa_required':'face_morph_targets_missing')
   if(target==='live')blockers.push('camera_tracking_and_agora_not_verified')
@@ -140,6 +144,7 @@ export function createStudioFanoutManifest(input:Readonly<{
    description:input.description.trim(),
    rights:input.rights,rightsAttested:true,
    outputTargets:targets,gpuJobsUsed:input.gpuJobsUsed??0,
+   sourceEngine:input.sourceEngine??'existing-glb',
   },
   calibration:{
    verified:false,
@@ -174,6 +179,8 @@ export function assertStudioFanoutManifest(value:unknown):
   !['original','licensed'].includes(v.project.rights)||
   typeof v.project.description!=='string'||
   v.project.description.length>1000||
+  !['existing-glb','ai-360-gpu','browser-2.5d'].includes(
+   v.project.sourceEngine)||
   !Array.isArray(v.project.outputTargets)||
   !Array.isArray(v.outputs)||v.outputs.length<1||
   v.outputs.length>DIRECTOR_TARGETS.length||
