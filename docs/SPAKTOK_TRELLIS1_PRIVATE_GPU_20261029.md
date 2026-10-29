@@ -1,6 +1,26 @@
 # Spaktok Private GPU: Microsoft TRELLIS v1 (DINOv2)
 
-Status 2026-10-29: FIRST LIVE A100 inference and GLB export SUCCEEDED on an owner-rented Vast instance; draft feature branch only. Original GLB is not yet mobile-QA-compliant (missing NORMAL). Web production and Android are NOT ready. No provider instance was rented or started by GitHub code.
+Status 2026-10-29: LIVE A100 inference and GLB export SUCCEEDED, AND owner's CPU-only mobile normal finalization SUCCEEDED with mobileBudgetPass=true. Both files and a ZIP exist on the rented instance, but external download is NOT YET CONFIRMED. This is a draft branch; neither web production nor native Android release is ready. No Vast instance was rented, started or shut down by GitHub code.
+
+## CONFIRMED milestone — normals-fixed mobile asset (19:45 Berlin)
+
+The operator's terminal screenshot proves `finalize` succeeded on the **real**
+A100-generated GLB, without rerunning inference:
+
+- Original: `/workspace/spaktok-trellis1-preview.glb` — 2,499,500 bytes
+- Mobile: `/workspace/spaktok-trellis1-preview-mobile.glb` — **2,842,496 bytes**
+- 1 mesh, 28,379 triangles, UV=true, **NORMAL=true**
+- 1 PBR material, 1 embedded image; **mobileBudgetPass=true**
+- ZIP archive: `/workspace/spaktok-trellis1-artifacts.zip` — **4,713,961 bytes**
+- SHA-256 and structural metrics are included in the ZIP manifest.
+
+**CRITICAL**: The screenshot shows the archive saved only on the RENTED
+Vast GPU disk; it does NOT establish it was downloaded to the owner phone
+or any permanent storage. The owner must use JupyterLab's file browser to
+download the ZIP and inspect it **before** destroying the instance.
+No actual appearance, animation, Android FPS or rigging tests have passed.
+Keep all GPU feature flags disabled and PR in Draft.
+
 
 ## CONFIRMED milestone — first genuine Spaktok private GPU GLB (19:39 Berlin)
 
@@ -53,8 +73,7 @@ The mesher emitted a non-manifold warning; inspect the geometry in a 3D viewer.
    frame rate/heat/memory and IP rights before approving Studio fan-out.
 
 The new CPU-only regression tests validate this transformation on a synthetic
-textured mesh. **The real A100-generated GLB mobile transformation is not
-verified until the owner runs `finalize` and reports its metrics.**
+textured mesh. **The real A100 mobile structural transformation has now been verified by the owner's terminal output. External backup and visual/native Android acceptance are still pending.**
 
 ## The model and safety boundaries
 
