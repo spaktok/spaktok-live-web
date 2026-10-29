@@ -49,6 +49,19 @@ describe('Real Spaktok AI tool execution guards',()=>{
    action:'inspect_asset',ok:true,detail:'passed',
   }))})).success).toBe(false)
  })
+ it('refuses to claim a generated model is delivered without handoff',()=>{
+  const p=req({prompt:'اصنع شخصية 3D وأرسلها للأفاتار',
+   originalSource:'image',workingSource:'glb',
+   steps:[{action:'generate_3d_gpu',ok:true,detail:'real GLB'}]})
+  expect(validateAgentStep(step({action:'finish'}),p).reason)
+   .toBe('generated_file_must_be_delivered')
+ })
+ it('refuses unrequested extra tool calls after a successful handoff',()=>{
+  const p=req({steps:[{action:'inspect_asset',ok:true,detail:'ok'},
+   {action:'dispatch_asset',ok:true,detail:'signed'}]})
+  expect(validateAgentStep(step({action:'recolor_asset',color:'gold'}),p).reason)
+   .toBe('dispatch_already_complete')
+ })
  it('refuses repeated inspection of an unchanged GLB',()=>{
   expect(validateAgentStep(step(),req({steps:[{
    action:'inspect_asset',ok:true,detail:'passed',
