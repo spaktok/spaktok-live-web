@@ -41,6 +41,49 @@ activate(){
   [[ "$compiler_release" == *"release 12.1,"* ]] ||
     fail 'CUDA compiler not 12.1: do not compile with host nvcc 12.9.'
 }
+# Reuse only an authenticated official source checkout; the previous TRELLIS.2
+# test already cloned nvdiffrast into /tmp/extensions and upstream setup.sh
+# aborts if git clone is repeated. Do not delete that directory.
+finish_nvdiffrast(){
+  prepare
+  activate
+  local src=/tmp/extensions/nvdiffrast
+  if [[ ! -e "$src" ]]; then
+    log 'Official nvdiffrast source not found. Cloning it only once.'
+    mkdir -p /tmp/extensions
+    git clone https://github.com/NVlabs/nvdiffrast.git "$src"
+  fi
+  [[ -f "$src/setup.py" && -d "$src/.git" ]] ||
+    fail 'Existing nvdiffrast directory is incomplete; do NOT overwrite it automatically.'
+  local remote
+  remote="$(git -C "$src" remote get-url origin 2>/dev/null || true)"
+  case "$remote" in
+    https://github.com/NVlabs/nvdiffrast|https://github.com/NVlabs/nvdiffrast.git) ;;
+    *) fail 'nvdiffrast directory remote is not the official NVlabs repository.';;
+  esac
+  export TORCH_CUDA_ARCH_LIST=8.0
+  export MAX_JOBS=2
+  export ATTN_BACKEND=xformers
+  log 'Building nvdiffrast in isolated TRELLIS environment without re-cloning.'
+  python -m pip install -v --no-build-isolation --no-deps "$src"
+  log 'Installing only the Forge API server dependencies.'
+  python -m pip install 'fastapi>=0.115,<1' 'uvicorn[standard]>=0.30,<1' \
+    'python-multipart>=0.0.9,<1'
+  export PYTHONPATH="$FORGE:$TRELLIS"
+  python "$FORGE/gpu_preflight.py"
+  # Imports only: model weights are not downloaded and no inference is run.
+  python - <<'PY'
+import nvdiffrast.torch
+from trellis.pipelines import TrellisImageTo3DPipeline
+print("[Spaktok TRELLIS v1] Python imports passed; environment ready for smoke test.")
+PY
+  log 'Dependencies verified. Next: smoke. Model output is NOT proven yet.'
+}
+resume(){
+  [[ -d "$TRELLIS" ]] || fail 'TRELLIS source missing: run install first.'
+  finish_nvdiffrast
+}
+
 install(){
   prepare
   mkdir -p "$WORKDIR"
@@ -101,11 +144,10 @@ PY
   export MAX_JOBS=2
   export ATTN_BACKEND=xformers
   source ./setup.sh --basic --xformers \
-    --diffoctreerast --spconv --mipgaussian --kaolin --nvdiffrast
-  activate
-  python -m pip install 'fastapi>=0.115,<1' 'uvicorn[standard]>=0.30,<1' \
-    'python-multipart>=0.0.9,<1'
-  python "$FORGE/gpu_preflight.py"
+    --diffoctreerast --spconv --mipgaussian --kaolin
+  # Upstream nvdiffrast clone may already exist from previous GPU sessions.
+  # Install it separately without deleting /tmp/extensions.
+  finish_nvdiffrast
   log 'Installed. Next run smoke. Model weights and CUDA end-to-end are NOT verified yet.'
 }
 smoke(){
@@ -164,7 +206,8 @@ serve(){
 case "$ACTION" in
   preflight) prepare;;
   install) install;;
+  resume) resume;;
   smoke) smoke;;
   serve) serve;;
-  *) fail 'Usage: vast-a100-trellis1.sh {preflight|install|smoke|serve}';;
+  *) fail 'Usage: vast-a100-trellis1.sh {preflight|install|resume|smoke|serve}';;
 esac
