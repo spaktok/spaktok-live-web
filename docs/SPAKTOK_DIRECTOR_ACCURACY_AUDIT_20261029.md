@@ -86,6 +86,34 @@ Two very different capabilities must not be conflated: (a) choosing
 the correct tool in a controlled test and (b) producing a genuinely
 correct 3D result on a user's photo. The latter is not measured here.
 
+## Precision fix: return the model, do not silently distribute it
+
+A creator's request to `اجعل المجسم ذهبيًا` now means:
+`recolor_asset` → `inspect_asset` → `present_asset` → `finish`.
+The result is a real audited GLB with an inline viewer and download,
+but `handoffStored=false` and **zero automatic specialist handoffs**.
+Only an explicit distribution instruction enables `dispatch_asset`,
+which securely stores and SHA256-verifies the private specialist draft.
+
+Both the Cloudflare Worker tool schema and the server/browser contracts
+now support `present_asset`; the deployed Worker was updated with this
+tool and its live `/self-test` again confirmed unsigned+forged denial
+with zero inference and zero D1 budget debits.
+
+A separate live Llama trial chose `present_asset` and
+`dispatch_asset` correctly (2/2 controlled next-step cases,
+~12.16 and ~11.38 neurons). However, in the local-only request it
+hallucinated `live` as a target despite the user's explicit
+`لا ترسله إلى أي قسم`. A local-only result now uses a neutral,
+internal World GLB preview profile in the ephemeral manifest and
+**never stages World or any other studio**. The chat suppresses
+private-studio cards for an unstaged result; tests cover the observed
+hallucination and evidence-backed local completion.
+
+**Important scope:** these live inference tests verify *tool selection*,
+not full end-to-end browser execution. The newest code and tests are
+still NOT verified by a successful production build.
+
 ## Tests and acceptance
 
 The agent contract suite currently contains **26 source test cases**
