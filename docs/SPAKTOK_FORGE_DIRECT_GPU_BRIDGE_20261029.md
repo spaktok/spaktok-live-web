@@ -69,8 +69,13 @@ SPAKTOK_FORGE_GPU_DAILY_LIMIT=1
 The flags default OFF. This new flow refuses non-RunPod domains,
 unencrypted hosts, an origin mismatch, an unhealthy GPU, missing rate
 limit / D1 or invalid headers. A GPU may still incur idle rental charges
-even with zero application requests; RunPod `--terminate-after 1h`
-remains essential for a disposable trial.
+even with zero application requests; **Important 2026-10-29 correction:** RunPod's old
+`--terminate-after` / `--stop-after` flags were never enforced and
+were removed in runpodctl v2.12.0. The operator MUST explicitly
+**Terminate** the Pod and confirm deletion (or use a separately
+verified external deletion scheduler). A one-hour budget is NOT
+guaranteed by CLI flags or the GPU D1 quota.
+https://github.com/runpod/runpodctl/releases/tag/v2.12.0
 
 **Do not flip any GPU flags to true** until the experimental
 Blackwell image has been built, licensed and smoked on hardware.
