@@ -189,6 +189,92 @@ check is `build-rate-limit`. This new agent code is committed to a
    tool success, repeated GPU spend, and abort. No public publish.
 9. Only after this pass consider production activation and native Android.
 
+## Cloudflare Workers AI: free-quota REAL model (29 October 2026)
+
+**Verified directly using the connected Cloudflare account:** the provider
+returned a real `@cf/meta/llama-3.3-70b-instruct-fp8-fast` structured JSON
+action with `action=inspect_asset` and `targets=[world]`. AI token usage
+was reported in neurons by Cloudflare. This was real inference, not a
+deterministic string switch.
+
+**Provider choice:** Cloudflare Workers AI offers 10,000 free neurons daily
+(account-wide, RESET daily 00:00 UTC), subject to model availability and
+account plan. Some models require billing, but selected Llama 3.3 70B was
+tested and accessible. The zero-cost allowance is **not unlimited** and
+is shared with any other AI usage on the same Cloudflare account. Do not
+confuse free LLM decisions with the separate paid TRELLIS GPU.
+
+**Deployed Cloudflare Worker:** `spaktok-director-ai` as a module-format
+Worker with verified `AI` and `DIRECTOR_BUDGET_D1` bindings. Its
+`workers.dev` route is enabled and per-version previews are disabled.
+It has:
+- `GET /health` for read-only status.
+- `POST /v1/agent/step` accepts only server-origin Ed25519 signatures
+  bound to the EXACT body SHA256, with a 45-second time-to-live and
+  domain-separated signature `spaktok-director-ai-step-v1`.
+- It does not accept anonymous prompts, list creator media, execute tools,
+  open URLs, publish content, or touch R2. It returns ONE typed LLM decision
+  for execution by the authenticated Spaktok app, not a made-up result.
+- The Cloudflare-native model has structured JSON output and does not need
+  a Hugging Face gated permission, Vast GPU, or an externally copied model
+  API key.
+- An additive `director_ai_daily_usage` table has been created and
+  its schema verified inside `spaktok-primary` D1. Each request
+  atomically reserves 250 neurons; a conservative **7,000-neuron
+  project-local ceiling per UTC day** blocks additional decisions when
+  reached, with actual usage settled after each result. On uncertain
+  execution failure the reserved amount is charged conservatively.
+- This is a **self-imposed project budget**, NOT an authoritative
+  account-wide guarantee of no paid overages. Other Workers AI jobs on
+  the same paid account can use the shared free allocation. Operators
+  should also configure Cloudflare account-wide billing limits/alerts.
+
+**Server adapter:** `lib/server/spaktok-director-cloudflare.ts`
+uses only an existing server-side private Ed25519 signing key. It sends
+bounded TEXT, step observations and policy context to the Worker.
+`app/api/studio/director/agent/step/route.ts` defaults to this provider
+when `SPAKTOK_DIRECTOR_AGENT_ENABLED=true` and
+`SPAKTOK_DIRECTOR_AGENT_PROVIDER=cloudflare`. No model API token is
+exported to the browser. Existing Vercel AI Gateway is an optional
+provider, not an automatic paid fallback.
+
+**No free-provider vision capability is advertised.** The free Llama
+model path processes instructions and previous tool observations as text.
+The UI hides the optional image vision checkbox when this provider is
+selected. Image-to-3D still runs on the separate TRELLIS GPU with consent.
+
+**Operational truth:**
+- AI provider inference tested via Cloudflare account.
+- Worker upload and both bindings verified via Cloudflare API.
+- D1 budget migration created and columns verified.
+- Network probe of the Worker returned browser-rendering rate-limit
+  error 429, so its live signed POST/HTTPS `/health` responses were
+  **not independently verified** in this deployment session.
+- Private Vercel UI remains OFF: the latest GitHub PR cannot rebuild
+  because of Vercel `build-rate-limit`; preview does not contain
+  production D1 auth/signing secrets. Neither the new free provider
+  nor the signed end-to-end AI->tool->GLB loop is claimed to be live for
+  end users. The draft PR is NOT merged.
+
+### How to activate safely AFTER canary
+
+1. Run `npm run test:studio:ai:free:canary`. Confirm the deployed
+   Worker returns healthy and rejects an unsigned POST without invoking AI.
+2. In an isolated authenticated staging environment with correct
+   D1 auth and per-environment Ed25519 signer, verify the real signed
+   server-to-Worker request. Do not copy production auth secrets into
+   untrusted preview code.
+3. Set server env `SPAKTOK_DIRECTOR_AGENT_PROVIDER=cloudflare`
+   and `SPAKTOK_DIRECTOR_AGENT_ENABLED=true` **in the tested
+   private environment only**. Cloudflare AI binding requires no
+   additional API token; no Google/Gemini key is required.
+4. Sign in and send `افحص هذا المجسم وأرسله للعالم` with a known GLB.
+   Inspect actual model decision, GLB audit, private dispatch, per-step
+   observations, and downloadable file.
+5. Monitor the Cloudflare Neurons dashboard and D1 daily budget.
+   Test exhaustion, cross-origin forgery, anonymous calls and false
+   success. Never silently escalate to paid inference or launch GPU.
+
 ## Next engineering objectives (not completed)
 
 - Implement real per-domain adaptors for rigging, eye/mouth morph, filter
