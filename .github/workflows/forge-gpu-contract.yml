@@ -29,4 +29,4 @@ jobs:
         run: bash -n scripts/vast-a100-trellis2.sh
       - name: Run Blackwell CUDA and direct-ticket contract tests
         working-directory: services/forge-gpu
-        run: python3 -m unittest test_gpu_preflight test_gpu_ticket test_gpu_health -v
+        run: python3 -m unittest test_gpu_preflight test_gpu_ticket test_gpu_health test_trellis2_engine -v
