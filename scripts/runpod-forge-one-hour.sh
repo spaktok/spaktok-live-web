@@ -37,12 +37,16 @@ command=(runpodctl pod create
   --compute-type GPU
   --cloud-type "$CLOUD_TYPE"
   --container-disk-in-gb "$DISK_GB"
-  --volume-in-gb 0
+  --ports "8000/http,8888/http,22/tcp"
+  --min-cuda-version 12.8
   --terminate-after 1h
 )
 echo "TRIAL: one GPU, on-demand, 60 minutes, ephemeral disk, no persistent volume."
+echo "RunPod HTTPS proxy access: port 8000/http (GPU API), 8888/http (notebook)."
+echo "Host CUDA requirement: >=12.8 for Blackwell; template must ALSO ship matching PyTorch cu128 with sm_120."
 echo "IMPORTANT: provider may bill startup, disk, network or model downloads."
 echo "Auto-terminate MUST be confirmed in provider UI. Save outputs before deletion."
+echo "WARNING: exposed port 8000 is internet-addressable; never run an unauthenticated GPU service."
 printf 'Command: '
 printf '%q ' "${command[@]}"
 printf '\n'
