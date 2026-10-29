@@ -66,7 +66,8 @@ Code added for a separate private GLB Worker:
 - A real uploaded file with a wooden foliage-covered garden trellis serves as
   a **World decorative prop candidate**, not a rigged humanoid avatar.
 - No head/bone rig, lip-sync, AR filter or coins/Agora usage has yet been built
-  from this World prop.
+  from this World prop. The sixth Video 3D target only imports the same model
+  as a private editable timeline layer, without a pre-existing video source.
 
 ## Architecture
 
@@ -132,9 +133,10 @@ previously disclosed Vast/provider secrets.
 - No persistent Cloudflare Queues/Workflows GPU scheduling or provider
   auto-provisioning/auto-destroy has been integrated. GPU feature flags
   remain off; one-time manual Vast trial was successful.
-- GitHub Actions on the feature branch have reported failures; Vercel
-  previews of **earlier** commits reached READY, but the complete new
-  source is not yet demonstrated as passing all typecheck/security tests.
+- GitHub Actions on the latest feature branch commit are still **failing**;
+  Vercel previews of **earlier** commits reached READY, but the complete new
+  six-department/R2 source is not yet demonstrated as passing the full
+  strict TypeScript/security gate or ready for production.
 - Until tests and model licensing/rights assessment pass, **keep PR draft,
   cloud flag off and no automatic publication**.
 
