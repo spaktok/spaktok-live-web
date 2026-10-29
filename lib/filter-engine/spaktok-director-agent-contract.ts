@@ -24,6 +24,10 @@ export const agentRequestSchema=z.object({
  prompt:z.string().trim().min(2).max(1000),
  originalSource:z.enum(['image','glb','none']),
  workingSource:z.enum(['image','glb','none']),
+ history:z.array(z.object({
+  role:z.enum(['user','assistant']),
+  text:z.string().max(350),
+ }).strict()).max(8),
  steps:z.array(z.object({
   action:z.enum(AGENT_ACTIONS),
   ok:z.boolean(),
@@ -79,6 +83,9 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
   if(request.steps.slice(lastChange+1).some(event=>event.action==='inspect_asset'&&event.ok))
    return {ok:false,reason:'already_inspected_unchanged_asset'}
  }
+ if(request.steps.some(x=>x.action==='dispatch_asset'&&x.ok)&&
+    step.action!=='finish')
+  return {ok:false,reason:'dispatch_already_complete'}
  if(step.action==='finish'&&request.steps.length===0&&
    request.workingSource!=='none')
   return {ok:false,reason:'cannot_claim_result_without_tool'}
