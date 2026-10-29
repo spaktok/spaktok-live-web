@@ -22,10 +22,11 @@ import rembg
 import torch
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, JSONResponse
 from PIL import Image, ImageOps, UnidentifiedImageError
 from gpu_preflight import require_compatible_gpu
 from gpu_ticket import validate_gpu_ticket, InvalidGPUTicket
+from gpu_health import sign_ready_health
 
 MAX_PHOTO = 8 * 1024 * 1024
 MAX_GLB = 35 * 1024 * 1024
@@ -122,9 +123,26 @@ def load_model_once():
 
 
 @app.get("/health")
-async def health():
-    return {"ready": _model is not None, "engine": "stable-fast-3d",
-            "no_persistent_images": True}
+async def health(request: Request):
+    # The operator API sends a fresh nonce and checks the HMAC; otherwise
+    # someone controlling a temporary tunnel could fake an engine health reply.
+    nonce = request.headers.get("x-forge-health-nonce", "")
+    try:
+        signature = sign_ready_health(
+            nonce, os.environ.get("FORGE_GPU_TOKEN", "")
+        )
+    except ValueError:
+        return Response(status_code=403, content="gpu_health_not_authorized")
+    ready = _model is not None
+    return JSONResponse(
+        {"ready": ready, "engine": "stable-fast-3d",
+         "no_persistent_images": True},
+        status_code=200 if ready else 503,
+        headers={
+            "x-forge-health-signature": signature,
+            "cache-control": "private, no-store",
+        },
+    )
 
 
 def _make_glb(photo: bytes) -> bytes:
