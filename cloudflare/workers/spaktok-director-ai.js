@@ -31,11 +31,11 @@ const hex=(bytes)=>Array.from(new Uint8Array(bytes)).map(
 async function signatureIsValid(request,body){
  const expires=request.headers.get('x-spaktok-director-expires')||'';
  const signature=request.headers.get('x-spaktok-director-signature')||'';
- if(!/^\\d{10}$/.test(expires)||!/^[a-zA-Z0-9_-]{86}$/.test(signature))return false;
+ if(!/^\d{10}$/.test(expires)||!/^[a-zA-Z0-9_-]{86}$/.test(signature))return false;
  const now=Math.floor(Date.now()/1000),exp=Number(expires);
  if(exp<now||exp>now+60)return false;
  const hash=hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(body)));
- const payload=[AI_DOMAIN,hash,expires].join('\\n');
+ const payload=[AI_DOMAIN,hash,expires].join('\n');
  try{
   const key=await pubKey;
   const raw=signature.replace(/-/g,'+').replace(/_/g,'/')+'==';
@@ -69,7 +69,7 @@ async function handle(request){
  try{
   const result=await AI.run(MODEL,{
    messages:[
-    {role:'system',content:input.system+'\\nReturn one JSON decision. color=none unless recolor_asset is used.'},
+    {role:'system',content:input.system+'\nReturn one JSON decision. color=none unless recolor_asset is used.'},
     {role:'user',content:input.instruction},
    ],
    response_format:{type:'json_schema',json_schema:schema},
