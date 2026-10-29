@@ -13,7 +13,7 @@ const LIMIT=8000;
 const NEURON_CAP=7000;
 const REQUEST_RESERVE=250;
 const actions=['inspect_asset','generate_relief','generate_3d_gpu',
-  'recolor_asset','dispatch_asset','finish'];
+  'recolor_asset','dispatch_asset','present_asset','finish'];
 const targets=['avatar','live','filter','gift','world','video'];
 const colors=['gold','silver','red','blue','green','purple','black','white'];
 const schema={
