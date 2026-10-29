@@ -41,12 +41,42 @@ activate(){
   [[ "$compiler_release" == *"release 12.1,"* ]] ||
     fail 'CUDA compiler not 12.1: do not compile with host nvcc 12.9.'
 }
+# CUDA Toolkit 12.1 supports GCC up to major version 12. The Vast host
+# defaults to a newer GCC, so select version 12 for ALL C++/CUDA extensions.
+# Do not downgrade system GCC or bypass nvcc compatibility checks.
+select_cuda_host_compiler(){
+  local cc12 cxx12 gcc_major gxx_major
+  cc12="$(command -v gcc-12 || true)"
+  cxx12="$(command -v g++-12 || true)"
+  if [[ -z "$cc12" || -z "$cxx12" ]]; then
+    if [[ "$(id -u)" != "0" ]] || ! command -v apt-get >/dev/null; then
+      fail 'GCC 12 not available; install gcc-12 and g++-12 with your system package manager as root.'
+    fi
+    log 'Installing only gcc-12 and g++-12 (no PyTorch/CUDA reinstall).'
+    DEBIAN_FRONTEND=noninteractive apt-get update -qq
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends gcc-12 g++-12
+    cc12="$(command -v gcc-12 || true)"
+    cxx12="$(command -v g++-12 || true)"
+  fi
+  [[ -n "$cc12" && -n "$cxx12" ]] || fail 'gcc-12/g++-12 installation failed.'
+  gcc_major="$("$cc12" -dumpversion | cut -d. -f1)"
+  gxx_major="$("$cxx12" -dumpversion | cut -d. -f1)"
+  [[ "$gcc_major" == 12 && "$gxx_major" == 12 ]] ||
+    fail 'Unexpected host compiler version; need GCC 12 for CUDA 12.1.'
+  export CC="$cc12"
+  export CXX="$cxx12"
+  export CUDAHOSTCXX="$cxx12"
+  export NVCC_CCBIN="$cxx12"
+  log "CUDA host compiler selected: $CC / $CXX; nvcc: $(command -v nvcc)"
+}
+
 # Reuse only an authenticated official source checkout; the previous TRELLIS.2
 # test already cloned nvdiffrast into /tmp/extensions and upstream setup.sh
 # aborts if git clone is repeated. Do not delete that directory.
 finish_nvdiffrast(){
   prepare
   activate
+  select_cuda_host_compiler
   local src=/tmp/extensions/nvdiffrast
   if [[ ! -e "$src" ]]; then
     log 'Official nvdiffrast source not found. Cloning it only once.'
@@ -143,6 +173,7 @@ PY
   export TORCH_CUDA_ARCH_LIST=8.0
   export MAX_JOBS=2
   export ATTN_BACKEND=xformers
+  select_cuda_host_compiler
   source ./setup.sh --basic --xformers \
     --diffoctreerast --spconv --mipgaussian --kaolin
   # Upstream nvdiffrast clone may already exist from previous GPU sessions.
