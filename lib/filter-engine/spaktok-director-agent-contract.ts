@@ -70,6 +70,36 @@ export function normalizeAgentDecision(step:AgentStep,prompt:string):AgentStep{
  const selected=explicit.length?[...explicit]:unique
  return {...step,targets:selected.filter(target=>!excluded.has(target))}
 }
+/** Proof-driven execution state. Model messages and user-supplied success
+ * strings are NOT proof; these are intended only to gate the browser executor.
+ * Actual GLB inspections, SHA256 and exported files are verified in the
+ * browser before a successful observation is generated.
+ */
+export function requiredAgentAction(request:AgentRequest):AgentStep['action']{
+ const history=request.steps
+ const succeeded=(action:AgentStep['action'])=>history.some(
+  x=>x.action===action&&x.ok)
+ const hasFailure=history.some(x=>!x.ok)
+ // Never ask the model to retry a failed tool, particularly a paid GPU.
+ if(hasFailure||succeeded('dispatch_asset'))return 'finish'
+ if(request.workingSource==='none')return 'finish'
+ if(request.workingSource==='image')
+  return requiresRelief(request.prompt)?'generate_relief':'generate_3d_gpu'
+ const materialRequested=MATERIAL_EDIT.test(request.prompt)&&
+  Object.values(COLOR_TESTS).some(test=>test.test(request.prompt))
+ if(materialRequested&&!succeeded('recolor_asset'))return 'recolor_asset'
+ const lastChange=history.reduce((index,event,i)=>
+  event.ok&&['generate_relief','generate_3d_gpu','recolor_asset'].includes(event.action)?i:index,-1)
+ const inspected=history.slice(lastChange+1).some(
+  event=>event.action==='inspect_asset'&&event.ok)
+ if(!inspected)return 'inspect_asset'
+ // An inspect-only request must not silently fan out a creator's file.
+ const wantsDelivery=detectDirectorTargets(request.prompt).length>0||
+  /(?:أرسل|ارسل|وزع|جهز|جهّز|توزيع|send|dispatch|deliver|export|صدّر|صدر)/i.test(request.prompt)
+ const changed=history.some(event=>event.ok&&
+  ['generate_relief','generate_3d_gpu','recolor_asset'].includes(event.action))
+ return wantsDelivery||changed?'dispatch_asset':'finish'
+}
 export const agentAllowedTargets=(targets:readonly DirectorTarget[]) =>
  targets.length>0&&targets.length<=6&&
  new Set(targets).size===targets.length&&
@@ -125,5 +155,8 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
  if(step.action==='finish'&&request.steps.length===0&&
    request.workingSource!=='none')
   return {ok:false,reason:'cannot_claim_result_without_tool'}
+ const required=requiredAgentAction(request)
+ if(step.action!==required)
+  return {ok:false,reason:'required_next_action_'+required}
  return {ok:true,reason:'ok'}
 }
