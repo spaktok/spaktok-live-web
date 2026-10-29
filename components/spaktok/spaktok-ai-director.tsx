@@ -375,7 +375,7 @@ export default function SpaktokAIDirector({
        className="rounded-lg border border-rose-300/25 px-3 py-2 text-rose-200 disabled:opacity-40">
        حذف مسودة الاستوديو المحفوظة
       </button>
-      <button type="button" onClick={()=>void restoreDraft()
+      <button type="button" onClick={()=>void restoreDraft()}
        disabled={busy}
        className="rounded-lg border border-emerald-400/30 px-3 py-2 text-emerald-100 disabled:opacity-40">
        استعادة مشروع الإنتاج الأخير
