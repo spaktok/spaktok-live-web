@@ -31,6 +31,16 @@ describe('Studio fan-out manifest GPU-free production contract',()=>{
   expect(result.outputs.every(x=>x.published===false)).toBe(true)
   expect(result.review.publicReleaseApproved).toBe(false)
  })
+ it('labels a free local relief as 2.5D and never grants 360 readiness',()=>{
+  const result=make({fileName:'spaktok-director-local-2-5d.glb',
+   sha256:'a'.repeat(64),sourceEngine:'browser-2.5d'})
+  expect(result.project.sourceEngine).toBe('browser-2.5d')
+  expect(result.project.gpuJobsUsed).toBe(0)
+  expect(result.calibration.optionalReferenceHeadHeightMeters).toBe(null)
+  for(const output of result.outputs)
+   expect(output.blockers).toContain(
+    'local_relief_is_not_a_full_360_reconstruction')
+ })
  it('preserves calibrated Rodin bust as an unverified preview estimate',()=>{
   const result=make()
   expect(result.calibration.optionalReferenceHeadHeightMeters).toBe(.34)
