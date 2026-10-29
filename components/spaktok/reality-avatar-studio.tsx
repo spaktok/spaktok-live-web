@@ -5,7 +5,7 @@ import Link from 'next/link'
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {createLuxeAvatar,LUXE_AVATAR_PRESETS,type LuxeAvatarStyle} from '@/lib/filter-engine/reality-avatar-luxe'
-import {loadLocalStudioGlb,clearLocalStudioGlb} from '@/lib/filter-engine/reality-local-asset-handoff'
+import {loadLocalStudioGlb,loadStudioFanoutManifest} from '@/lib/filter-engine/reality-local-asset-handoff'
 import {assertSelfContainedVideo3DGlb,VIDEO_3D_MAX_GLB_BYTES} from '@/lib/filter-engine/reality-video3d-project'
 import {loadFaceLandmarker,configureFace3DExtras,recoverFaceLandmarkerOnCpu} from '@/lib/filter-engine/vision'
 import {avatarLandmarkExpression,avatarLuminance,chooseAvatarTrackerIssue,
@@ -384,12 +384,12 @@ export default function RealityAvatarStudio(){
    setMessage('تعذّر تشغيل الكاميرا أو تحميل نموذج تتبع الوجه. جرّب Chrome واسمح للكاميرا.')
   }
  }
- const loadGlbFile=async(file:File)=>{
+ const loadGlbFile=async(file:File):Promise<boolean>=>{
   if(!/\.glb$/i.test(file.name)||file.size>VIDEO_3D_MAX_GLB_BYTES||file.size<28){
-   setMessage('ملف GLB غير صالح أو أكبر من 15 MB.');return
+   setMessage('ملف GLB غير صالح أو أكبر من 15 MB.');return false
   }
   const current=stateRef.current
-  if(!current)return
+  if(!current){setMessage('عارض الأفاتار لم يصبح جاهزًا بعد؛ حاول مجددًا.');return false}
   try{
    const data=await file.arrayBuffer()
    assertSelfContainedVideo3DGlb(data)
@@ -440,8 +440,10 @@ export default function RealityAvatarStudio(){
      'ملف GLB يتضمن جميع القنوات بالاسم؛ يلزم اختبار جودة تشوهاتها بصريًا.':
      'بقية القنوات غير موجودة في المجسم، ولن يخترعها نظام التتبع.') :
     'تم تحميل المجسم وتحريك الرأس. لا تتوفر قنوات وجه كافية للتحريك.')
+   return true
   }catch(error){
    setMessage('تعذّر قراءة هذا GLB بصورة آمنة: '+(error instanceof Error?error.message:'ملف غير متوافق'))
+   return false
   }
  }
  const loadGlb=(event:ChangeEvent<HTMLInputElement>)=>{
@@ -458,8 +460,21 @@ export default function RealityAvatarStudio(){
     setMessage('لا يوجد GLB محلي حديث. اختر الصورة في Reality Studio وصدّر نموذج GLB أولًا.')
     return
    }
-   await loadGlbFile(file)
-   await clearLocalStudioGlb()
+   const plan=await loadStudioFanoutManifest()
+   const loaded=await loadGlbFile(file)
+   if(!loaded)throw Error('studio_avatar_import_failed')
+   // Keep private GLB available for other departments for 24 hours.
+   if(plan&&plan.source.fileName===file.name&&plan.source.bytes===file.size){
+    const bytes=await file.arrayBuffer()
+    const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))
+    const sha=Array.from(digest).map(x=>x.toString(16).padStart(2,'0')).join('')
+    if(sha===plan.source.sha256){
+     const blockers=plan.outputs.find(x=>x.target==='avatar'||
+      x.target==='live')?.blockers??[]
+     setMessage('تم استيراد GLB من AI Director وبصمته مطابقة. '+
+      'متطلبات الأفاتار/اللايف: '+blockers.join(' · '))
+    }
+   }
   }catch(error){setMessage('تعذر جلب المجسم المحلي: '+String(error))}
   finally{setHandoffBusy(false)}
  }
