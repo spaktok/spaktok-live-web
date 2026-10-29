@@ -16,6 +16,26 @@
 6. The Forge API verifies origin, HMAC grant, nonce replay and exact image digest, and sends the GLB back privately.
 7. The studio checks the GLB; no public asset, gift, live avatar or native integration is auto-approved.
 
+## A100 TRELLIS.2 bootstrap (operator terminal; not automated remote access)
+
+```bash
+git clone --depth 1 -b feat/vast-a100-forge-bridge-20261029 \\
+ https://github.com/spaktok/spaktok-live-web.git /workspace/spaktok-forge
+bash /workspace/spaktok-forge/scripts/vast-a100-trellis2.sh preflight
+# inspect the upstream Microsoft installation script and licenses first
+SPAKTOK_ACCEPT_UPSTREAM_SETUP=yes bash /workspace/spaktok-forge/scripts/vast-a100-trellis2.sh install
+# Once dependencies/weights are in place, generate one official example GLB
+bash /workspace/spaktok-forge/scripts/vast-a100-trellis2.sh smoke
+# When authorizing the API, provide FORGE_GPU_ALLOWED_ORIGIN from your terminal environment.
+# The dedicated server generates a private operator token on first run; do not paste it in chat.
+FORGE_GPU_ALLOWED_ORIGIN=https://v0-spaktok-elite-app.vercel.app \\
+ bash /workspace/spaktok-forge/scripts/vast-a100-trellis2.sh serve
+```
+
+The official TRELLIS.2 CUDA toolchain typically needs CUDA 12.4 and Conda and can take significant install/disk time. Running these commands is **not** assured to finish during a short paid rental. The GPU preflight must succeed before selecting the install action. Actual model output is not yet tested on this user's GPU.
+
+For TRELLIS.2 the host and Vercel must both use `FORGE_GPU_ENGINE=trellis2` / `SPAKTOK_FORGE_GPU_ENGINE=trellis2` respectively. The exact bearer token is separate from the compromised Vast provider management API key. Never reuse the Vast API key as the Forge token.
+
 ## Needed on Vast.ai (must be performed from an authenticated operator terminal)
 1. Confirm one working CUDA A100 and that paid GPU time is supervised. **Destroy** the instance after exporting any useful results: the selected one-hour search duration is not an auto-termination timer.
 2. Checkout the feature branch (not main) with `git switch feat/vast-a100-forge-bridge-20261029`; then use `nvidia-smi` and `python services/forge-gpu/gpu_preflight.py` to test CUDA. The published `services/forge-gpu/Dockerfile` for Ampere is **unverified** on this rented host, and may require building dependencies.
@@ -27,6 +47,7 @@
    SPAKTOK_FORGE_GPU_ENABLED=false
    SPAKTOK_FORGE_GPU_DIRECT_ENABLED=false
    SPAKTOK_FORGE_GPU_PROVIDER=vast-quick-tunnel
+   SPAKTOK_FORGE_GPU_ENGINE=trellis2
    SPAKTOK_FORGE_GPU_BROWSER_ORIGIN=https://<exact Spaktok web origin>
    SPAKTOK_FORGE_GPU_HOST=<separate forge-api-xxxxx.trycloudflare.com>
    SPAKTOK_FORGE_GPU_URL=https://<same host>/v1/generate
