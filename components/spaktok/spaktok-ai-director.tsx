@@ -9,8 +9,8 @@ import {
  createStudioFanoutManifest,type StudioFanoutManifest,
 } from '@/lib/filter-engine/spaktok-studio-fanout'
 import {
- saveStudioFanoutBundle,loadStudioFanoutManifest,
- loadLocalStudioGlb,saveActiveOwnerRodinHead,
+ saveStudioFanoutBundle,loadStudioFanoutManifest,clearStudioFanoutManifest,
+ loadLocalStudioGlb,clearLocalStudioGlb,saveActiveOwnerRodinHead,
  loadActiveOwnerRodinHead,clearActiveOwnerRodinHead,
 } from '@/lib/filter-engine/reality-local-asset-handoff'
 
@@ -146,6 +146,19 @@ export default function SpaktokAIDirector({
    setStatus('حُذفت نسخة Rodin المحفوظة من هذا المتصفح؛ الملفات على جهازك لم تتغير.')
   }catch(error){setStatus('تعذّر حذف النسخة المحلية: '+String(error))}
   finally{setOwnerBusy(false)}
+ }
+ const deleteSavedDraft=async()=>{
+  if(busy||ownerBusy)return
+  setBusy(true)
+  try{
+   await Promise.all([
+    clearStudioFanoutManifest(),clearLocalStudioGlb(),
+   ])
+   setStatus('حُذفت مسودة GLB وخطة الأقسام المحفوظتان من هذا المتصفح. '+
+    'لم تتغير الملفات الأصلية على جهازك.')
+  }catch(error){
+   setStatus('تعذّر حذف المسودة المحلية: '+String(error))
+  }finally{setBusy(false)}
  }
  const toggle=(target:DirectorTarget)=>{
   setManualTargets(prev=>{
@@ -323,7 +336,12 @@ export default function SpaktokAIDirector({
       {sourceKind==='glb'?' إعادة استخدام دون GPU':' يتطلب GPU لتوليد 360°'}
      </p>}
      <div className="flex flex-wrap gap-2 text-xs">
-      <button type="button" onClick={()=>void restoreDraft()}
+      <button type="button" onClick={()=>void deleteSavedDraft()}
+       disabled={busy}
+       className="rounded-lg border border-rose-300/25 px-3 py-2 text-rose-200 disabled:opacity-40">
+       حذف مسودة الاستوديو المحفوظة
+      </button>
+      <button type="button" onClick={()=>void restoreDraft()
        disabled={busy}
        className="rounded-lg border border-emerald-400/30 px-3 py-2 text-emerald-100 disabled:opacity-40">
        استعادة مشروع الإنتاج الأخير
@@ -450,7 +468,7 @@ export default function SpaktokAIDirector({
       className="rounded-lg border border-emerald-400/25 px-3 py-2 text-xs disabled:opacity-40">
       حفظ مسودة GLB وخطة الأقسام
      </button>
-     {plan.targets.map(target=><button key={target} type="button"
+     {manifest?.project.outputTargets.map(target=><button key={target} type="button"
       disabled={!qa.previewReady||busy||!manifest}
       onClick={()=>void send(target)()}
       className="rounded-lg bg-indigo-600 px-3 py-2 text-xs disabled:opacity-40">
