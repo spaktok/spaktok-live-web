@@ -176,6 +176,49 @@ PY
   log 'SpConv verified. Next: smoke; no model inference performed in repair.'
 }
 
+# The GLB texture-baking step uses gaussian_render.py, which imports
+# diff_gaussian_rasterization. This is built from the official
+# autonomousvision/mip-splatting source, not a name-only PyPI substitute.
+check_gaussian(){
+  activate
+  python - <<'PY'
+import diff_gaussian_rasterization as module
+assert callable(module.GaussianRasterizer)
+assert callable(module.GaussianRasterizationSettings)
+print("[Spaktok TRELLIS v1] GAUSSIAN_READY: imports passed", flush=True)
+PY
+}
+repair_gaussian(){
+  prepare
+  activate
+  select_cuda_host_compiler
+  export TORCH_CUDA_ARCH_LIST=8.0
+  export MAX_JOBS=2
+  local src=/tmp/extensions/mip-splatting
+  local src_url=https://github.com/autonomousvision/mip-splatting.git
+  local pinned=dda02ab5ecf45d6edb8c540d9bb65c7e451345a9
+  if [[ ! -e "$src" ]]; then
+    mkdir -p /tmp/extensions
+    log 'Cloning official mip-splatting rasterizer source.'
+    git clone "$src_url" "$src"
+    git -C "$src" checkout --detach "$pinned"
+  fi
+  [[ -d "$src/.git" &&
+     -f "$src/submodules/diff-gaussian-rasterization/setup.py" ]] ||
+    fail 'mip-splatting checkout missing source; do not overwrite it automatically.'
+  local remote
+  remote="$(git -C "$src" remote get-url origin 2>/dev/null || true)"
+  case "$remote" in
+    https://github.com/autonomousvision/mip-splatting|https://github.com/autonomousvision/mip-splatting.git) ;;
+    *) fail 'mip-splatting directory is not the official repository.';;
+  esac
+  log 'Building only diff-gaussian-rasterization for A100 sm_80, torch cu121.'
+  python -m pip install -v --no-build-isolation --no-deps \
+    "$src/submodules/diff-gaussian-rasterization"
+  check_gaussian
+  log 'Gaussian rasterization dependency ready. Next: smoke (do not rerun install).'
+}
+
 resume(){
   [[ -d "$TRELLIS" ]] || fail 'TRELLIS source missing: run install first.'
   finish_nvdiffrast
@@ -244,6 +287,7 @@ PY
   source ./setup.sh --basic --xformers \
     --diffoctreerast --mipgaussian --kaolin
   repair_spconv
+  repair_gaussian
   # Upstream nvdiffrast clone may already exist from previous GPU sessions.
   # Install it separately without deleting /tmp/extensions.
   finish_nvdiffrast
@@ -256,6 +300,7 @@ smoke(){
   activate
   check_python_stack
   check_spconv
+  check_gaussian
   export PYTHONPATH="$FORGE:$TRELLIS"
   export SPCONV_ALGO=native
   export ATTN_BACKEND=xformers
@@ -282,6 +327,7 @@ serve(){
   [[ -d "$TRELLIS" ]] || fail 'Run install first.'
   check_python_stack
   check_spconv
+  check_gaussian
   origin="$(printenv FORGE_GPU_ALLOWED_ORIGIN || true)"
   [[ "$origin" == https://* ]] || fail 'Set the exact HTTPS FORGE_GPU_ALLOWED_ORIGIN.'
   activate
@@ -313,7 +359,8 @@ case "$ACTION" in
   resume) resume;;
   repair-python) repair_python;;
   repair-spconv) repair_spconv;;
+  repair-gaussian) repair_gaussian;;
   smoke) smoke;;
   serve) serve;;
-  *) fail 'Usage: vast-a100-trellis1.sh {preflight|install|resume|repair-python|repair-spconv|smoke|serve}';;
+  *) fail 'Usage: vast-a100-trellis1.sh {preflight|install|resume|repair-python|repair-spconv|repair-gaussian|smoke|serve}';;
 esac
