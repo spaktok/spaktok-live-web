@@ -16,6 +16,22 @@
 6. The Forge API verifies origin, HMAC grant, nonce replay and exact image digest, and sends the GLB back privately.
 7. The studio checks the GLB; no public asset, gift, live avatar or native integration is auto-approved.
 
+## TRELLIS.2 first A100 install failure and safe recovery (15:54 Berlin, 2026-10-29)
+
+The owner's screenshot shows a completed `/workspace/spaktok-forge` checkout and successful A100 80GB / CUDA 12.8 preflight, but the first official TRELLIS.2 installation stopped at `flash-attn==2.7.3` with `ModuleNotFoundError: No module named 'torch'` from pip's **isolated build subprocess**. This does not show that the active Conda environment lacks torch.
+
+Fix committed: `scripts/vast-a100-trellis2.sh` no longer passes `--flash-attn` to upstream `setup.sh` (which calls pip with isolated build). The script now activates `trellis2` and runs `python -m pip install --no-build-isolation 'flash-attn==2.7.3'`, retaining the existing Conda environment. Separate `repair-flash` and `resume` actions avoid `--new-env` and full initial setup:
+
+```bash
+cd /workspace/spaktok-forge
+git pull --ff-only
+# Review updated script before execution; only with supervised paid GPU rental:
+SPAKTOK_ACCEPT_UPSTREAM_SETUP=yes bash scripts/vast-a100-trellis2.sh repair-flash
+SPAKTOK_ACCEPT_UPSTREAM_SETUP=yes bash scripts/vast-a100-trellis2.sh resume
+```
+
+`repair-flash` does not install all other extensions; `resume` does. Both can take a long time and may need further troubleshooting. **Do not run these commands when the one-hour Vast rental's budget deadline has arrived.** Save logs or small outputs, use provider-side **Destroy**, and verify the instance is gone. There is no provider-side one-hour auto-termination. No real GLB or working production tunnel is verified yet.
+
 ## A100 TRELLIS.2 bootstrap (operator terminal; not automated remote access)
 
 ```bash
