@@ -4,7 +4,8 @@ import Link from 'next/link'
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js'
-import {loadLocalStudioGlb} from '@/lib/filter-engine/reality-local-asset-handoff'
+import {loadLocalStudioGlb,loadStudioFanoutManifest} from '@/lib/filter-engine/reality-local-asset-handoff'
+import type {StudioFanoutManifest} from '@/lib/filter-engine/spaktok-studio-fanout'
 import {assertSelfContainedVideo3DGlb} from '@/lib/filter-engine/reality-video3d-project'
 import {auditStudioGlbBytes} from '@/lib/filter-engine/reality-production-glb-audit'
 
@@ -38,6 +39,12 @@ export default function SpaktokAssetStage({
  const [scale,setScale]=useState(1)
  const [stats,setStats]=useState('')
  const [running,setRunning]=useState(false)
+ const [activePlan,setActivePlan]=useState<StudioFanoutManifest|null>(null)
+ const [fingerprint,setFingerprint]=useState('')
+ const [motion,setMotion]=useState<'none'|'spin'|'float'>('none')
+ const motionRef=useRef<'none'|'spin'|'float'>('none')
+ const [position,setPosition]=useState<readonly [number,number,number]>([0,0,0])
+ const positionRef=useRef<readonly [number,number,number]>([0,0,0])
  const isWorld=kind==='world'
  const title=isWorld?'Spaktok World — 3D Preview':'Spaktok Gift Studio — 3D Preview'
  useEffect(()=>{
@@ -75,6 +82,13 @@ export default function SpaktokAssetStage({
   const tick=(now:number)=>{
    if(stopped)return
    if(!document.hidden&&now-last>=1000/24){
+    const holder=modelRef.current
+    if(holder){
+     const seconds=now/1000,selected=motionRef.current
+     holder.rotation.y=selected==='spin'?seconds*.7:0
+     holder.position.y=positionRef.current[1]+
+      (selected==='float'?.08*Math.sin(seconds*2.4):0)
+    }
     orbit.update();renderer.render(scene,camera);last=now
    }
    raf=requestAnimationFrame(tick)
@@ -104,6 +118,9 @@ export default function SpaktokAssetStage({
     assertSelfContainedVideo3DGlb(bytes)
     if(!audit.valid||!audit.selfContained)
      throw Error('المجسم يحتوي بيانات غير صالحة أو روابط خارجية')
+    const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))
+    const hash=Array.from(digest).map(b=>b.toString(16).padStart(2,'0')).join('')
+    if(!cancelled)setFingerprint(hash)
     const gltf=await new GLTFLoader().parseAsync(bytes,'')
     if(cancelled){free(gltf.scene);return}
     const scene=sceneRef.current
@@ -123,7 +140,7 @@ export default function SpaktokAssetStage({
     gltf.scene.position.set(-center.x,-bounds.min.y,-center.z)
     base.add(gltf.scene)
     base.scale.setScalar(normalized)
-    holder.position.y=isWorld?1.05:.02
+    holder.position.set(...positionRef.current)
     holder.add(base)
     if(modelRef.current){scene.remove(modelRef.current);free(modelRef.current)}
     scene.add(holder);modelRef.current=holder
@@ -149,11 +166,20 @@ export default function SpaktokAssetStage({
  useEffect(()=>{
   if(modelRef.current)modelRef.current.scale.setScalar(scale)
  },[scale])
+ useEffect(()=>{motionRef.current=motion},[motion])
+ useEffect(()=>{
+  positionRef.current=position
+  if(modelRef.current)modelRef.current.position.set(...position)
+ },[position])
  const importPrevious=async()=>{
   setStatus('جلب النسخة الخاصة من هذا المتصفح…')
   try{
-   const last=await loadLocalStudioGlb()
+   const [last,manifest]=await Promise.all([
+    loadLocalStudioGlb(),loadStudioFanoutManifest(),
+   ])
    if(!last){setStatus('لا يوجد GLB محفوظ. افتح AI Director ثم اضغط معاينة القسم.');return}
+   setActivePlan(manifest&&manifest.source.fileName===last.name&&
+    manifest.source.bytes===last.size?manifest:null)
    setFile(last)
   }catch(error){setStatus('فشل جلب المجسم المحلي: '+String(error))}
  }
@@ -170,7 +196,31 @@ export default function SpaktokAssetStage({
  const choose=(event:ChangeEvent<HTMLInputElement>)=>{
   const f=event.target.files?.[0]??null
   event.target.value=''
-  if(f)setFile(f)
+  if(f){setActivePlan(null);setFingerprint('');setFile(f)}
+ }
+ const editPosition=(axis:0|1|2,value:number)=>{
+  if(!Number.isFinite(value)||Math.abs(value)>5)return
+  setPosition(previous=>{
+   const next=[...previous] as [number,number,number]
+   next[axis]=value
+   return next
+  })
+ }
+ const saveDraftSettings=()=>{
+  if(!file||!fingerprint)return
+  const draft={
+   format:'SpaktokPrivatePlacement',version:1,
+   createdAt:new Date().toISOString(),target:kind,
+   sourceSha256:fingerprint,sourceFile:file.name,
+   scale,position:[...position],motionPreview:motion,
+   publication:'private-draft',collisionsVerified:false,
+   androidPerformanceVerified:false,animationBakedIntoGlb:false,
+  }
+  const url=URL.createObjectURL(new Blob([
+   JSON.stringify(draft,null,2)],{type:'application/json'}))
+  const a=document.createElement('a')
+  a.href=url;a.download='spaktok-'+kind+'-placement.json';a.click()
+  window.setTimeout(()=>URL.revokeObjectURL(url),1000)
  }
  return <main dir="rtl" className="min-h-screen bg-[#080e1b] px-4 py-6 text-white">
   <section className="mx-auto max-w-5xl space-y-4">
@@ -215,6 +265,38 @@ export default function SpaktokAssetStage({
        className="mt-2 block w-full accent-violet-400"/>
      </label>
      {stats&&<p className="text-xs leading-6 text-slate-200">{stats}</p>}
+     {activePlan&&fingerprint===activePlan.source.sha256&&
+      <div className="space-y-2 rounded-lg border border-violet-300/30 bg-violet-950/20 p-3 text-xs">
+       <p className="font-bold text-violet-200">خطة AI Director المطابقة لبصمة GLB</p>
+       <p>معاينة خاصة فقط؛ لا تمنح صلاحية نشر أو معاملات مالية.</p>
+       <p className="text-amber-100">
+        {activePlan.outputs.find(o=>o.target===kind)?.blockers.join(' · ')||
+         'لم يحدد AI Director هذا القسم ضمن خطته'}
+       </p>
+      </div>}
+     <label className="block text-xs">
+      حركة عرض محلية (لا تُحفظ كـAnimation في GLB)
+      <select value={motion} onChange={e=>setMotion(e.target.value as typeof motion)}
+       className="mt-2 block w-full rounded-lg border border-white/20 bg-slate-950 p-2">
+       <option value="none">ثابت</option>
+       <option value="spin">دوران هادئ</option>
+       <option value="float">طفو بصري تجريبي</option>
+      </select>
+     </label>
+     <div className="grid grid-cols-3 gap-2 text-xs">
+      {(['X','Y','Z'] as const).map((name,axis)=><label key={name}>
+       الموضع {name}
+       <input type="number" min="-5" max="5" step=".05"
+        value={position[axis]}
+        onChange={e=>editPosition(axis as 0|1|2,Number(e.target.value))}
+        className="mt-1 w-full rounded-lg border border-white/20 bg-slate-950 p-2"/>
+      </label>)}
+     </div>
+     <button type="button" onClick={saveDraftSettings}
+      disabled={!file||!fingerprint||running}
+      className="w-full rounded-lg border border-white/25 p-2 text-xs disabled:opacity-40">
+      تنزيل إعدادات الحركة والموضع JSON
+     </button>
      <p role="status" className="text-xs leading-6 text-amber-100">{status}</p>
      <p className="text-[11px] leading-5 text-slate-400">
       الملف محلي وغير منشور. لا يُضاف لمكتبة الهدايا المدفوعة أو إلى
