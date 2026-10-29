@@ -53,6 +53,39 @@ request and choosing Gift instead of German `Welt`.
    that the private Ed25519 signer matches the pinned deployed public
    identity. An environment flag alone is no longer proof of readiness.
 
+## Additional live model calibration (small sample, not statistical accuracy)
+
+Six real Cloudflare Llama 3.3 70B tool-planning prompts returned the
+expected **next action** in **6/6** controlled cases:
+- Arabic GLB gold+Gift/World → `recolor_asset` (~12.67 neurons)
+- Arabic image 2.5D filter → `generate_relief` (~11.92 neurons)
+- Arabic Avatar+Live 360 photo → `generate_3d_gpu` (~12.39 neurons)
+- Arabic inspect-only → `inspect_asset` (~12.29 neurons)
+- German blue World GLB → `recolor_asset` (~12.44 neurons)
+- After successful recolor observation → `inspect_asset` (~12.13 neurons).
+
+**But destination accuracy was NOT 6/6.** In particular, raw Llama
+omitted `live` in the Avatar+Live case, hallucinated specialists for
+an inspect-only case, and chose `gift` for the German World case.
+The creator-intent authority and expanded German lexicon are
+essential safeguards.
+
+A separate three-prompt trial with `@cf/qwen/qwen3.8-27b` returned
+a successful provider HTTP response but did not yield a parseable
+structured decision with the constrained 200-token budget used in that
+trial, while reporting ~63.7–63.9 neurons per request. A minimal Qwen
+diagnostic with a larger/simple response did return JSON. Thus no
+conclusive overall model ranking is claimed; Qwen must be evaluated
+with its reasoning-token and vision setup before production use.
+The main Spaktok text-decision provider remains Llama. There is
+**no silent paid fallback**.
+
+The model's output is always treated as a PROPOSAL until validated
+against user intent, deterministic safety policy, and real tool QA.
+Two very different capabilities must not be conflated: (a) choosing
+the correct tool in a controlled test and (b) producing a genuinely
+correct 3D result on a user's photo. The latter is not measured here.
+
 ## Tests and acceptance
 
 The agent contract suite currently contains **26 source test cases**
