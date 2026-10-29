@@ -3,7 +3,7 @@ import {DIRECTOR_TARGETS,detectDirectorTargets,type DirectorTarget} from './spak
 
 export const AGENT_ACTIONS=[
  'inspect_asset','generate_relief','generate_3d_gpu','recolor_asset',
- 'dispatch_asset','finish',
+ 'dispatch_asset','present_asset','finish',
 ] as const
 export const AGENT_STYLES=[
  'gold','silver','red','blue','green','purple','black','white',
@@ -100,7 +100,7 @@ export function requiredAgentAction(request:AgentRequest):AgentStep['action']{
   x=>x.action===action&&x.ok)
  const hasFailure=history.some(x=>!x.ok)
  // Never ask the model to retry a failed tool, particularly a paid GPU.
- if(hasFailure||succeeded('dispatch_asset'))return 'finish'
+ if(hasFailure||succeeded('dispatch_asset')||succeeded('present_asset'))return 'finish'
  if(request.workingSource==='none')return 'finish'
  if(request.workingSource==='image')
   return requiresRelief(request.prompt)?'generate_relief':'generate_3d_gpu'
@@ -113,11 +113,14 @@ export function requiredAgentAction(request:AgentRequest):AgentStep['action']{
   event=>event.action==='inspect_asset'&&event.ok)
  if(!inspected)return 'inspect_asset'
  // An inspect-only request must not silently fan out a creator's file.
- const wantsDelivery=detectDirectorTargets(request.prompt).length>0||
-  /(?:أرسل|ارسل|وزع|جهز|جهّز|توزيع|send|dispatch|deliver|export|صدّر|صدر)/i.test(request.prompt)
+ const explicitDelivery=/(?:أرسل|ارسل|وزع|جهز|جهّز|توزيع|send|dispatch|deliver|an\s+(?:alle|die)|verteile|sende|schicke)/i.test(request.prompt)
+ const inspectionOnly=/^(?:افحص|افحصي|تحقق|فحص|check|inspect|prüf|ueberprüf|überprüf)/i.test(request.prompt.trim())&&
+  !explicitDelivery
+ const wantsDelivery=explicitDelivery||
+  (!inspectionOnly&&detectDirectorTargets(request.prompt).length>0)
  const changed=history.some(event=>event.ok&&
   ['generate_relief','generate_3d_gpu','recolor_asset'].includes(event.action))
- return wantsDelivery||changed?'dispatch_asset':'finish'
+ return wantsDelivery?'dispatch_asset':changed?'present_asset':'finish'
 }
 export const agentAllowedTargets=(targets:readonly DirectorTarget[]) =>
  targets.length>0&&targets.length<=6&&
@@ -143,7 +146,7 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
       !COLOR_TESTS[step.color].test(request.prompt))
    return {ok:false,reason:'unapproved_material_change'}
  }
- if(['inspect_asset','dispatch_asset'].includes(step.action)&&
+ if(['inspect_asset','dispatch_asset','present_asset'].includes(step.action)&&
    request.workingSource!=='glb')
   return {ok:false,reason:'glb_required'}
  if(step.action==='dispatch_asset'&&
@@ -163,12 +166,16 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
   if(request.steps.slice(lastChange+1).some(event=>event.action==='inspect_asset'&&event.ok))
    return {ok:false,reason:'already_inspected_unchanged_asset'}
  }
- if(request.steps.some(x=>x.action==='dispatch_asset'&&x.ok)&&
+ if(step.action==='present_asset'&&
+   request.steps.some(x=>x.action==='present_asset'&&x.ok))
+  return {ok:false,reason:'local_preview_already_shown'}
+ if(request.steps.some(x=>['dispatch_asset','present_asset'].includes(x.action)&&x.ok)&&
     step.action!=='finish')
   return {ok:false,reason:'dispatch_already_complete'}
  if(step.action==='finish'&&request.steps.some(event=>
    ['generate_relief','generate_3d_gpu','recolor_asset'].includes(event.action)&&event.ok)&&
-   !request.steps.some(event=>event.action==='dispatch_asset'&&event.ok))
+   !request.steps.some(event=>
+    ['dispatch_asset','present_asset'].includes(event.action)&&event.ok))
   return {ok:false,reason:'generated_file_must_be_delivered'}
  if(step.action==='finish'&&
    /(?:أرسل|ارسل|وزع|جهز|جهّز|توزيع|send|dispatch|deliver)/i.test(request.prompt)&&
