@@ -80,6 +80,7 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
  const [busy,setBusy]=useState(false)
  const [imagePreview,setImagePreview]=useState('')
  const fileRef=useRef<HTMLInputElement|null>(null)
+ const cameraRef=useRef<HTMLInputElement|null>(null)
  const listEndRef=useRef<HTMLDivElement|null>(null)
  const currentFile=selected??lastInput??sourceFile??lastResult?.file??null
  const sourceKind=currentFile?
@@ -360,6 +361,13 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
      <div className="flex items-end gap-2 rounded-2xl border border-white/15 bg-[#131d30] p-2 focus-within:border-indigo-400/70">
       <input ref={fileRef} type="file" accept=".png,.jpg,.jpeg,.webp,.glb,image/png,image/jpeg,image/webp,model/gltf-binary"
        onChange={attach} className="sr-only" aria-label="إرفاق صورة أو مجسم"/>
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment"
+       onChange={attach} className="sr-only" aria-label="التقاط صورة بالكاميرا"/>
+      <button type="button" onClick={()=>cameraRef.current?.click()} disabled={busy}
+       title="التقاط صورة بالكاميرا" aria-label="التقاط صورة بالكاميرا"
+       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-violet-300 transition hover:bg-white/10 disabled:opacity-50">
+       <Camera size={21}/>
+      </button>
       <button type="button" onClick={()=>fileRef.current?.click()} disabled={busy}
        title="إرفاق صورة أو ملف GLB" aria-label="إرفاق صورة أو مجسم"
        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sky-300 transition hover:bg-white/10 disabled:opacity-50">
