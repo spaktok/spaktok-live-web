@@ -1,5 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server'
-import {createHmac} from 'node:crypto'
+import {createHmac,randomBytes,timingSafeEqual} from 'node:crypto'
+import {isForgeGpuEndpoint} from '@/lib/filter-engine/spaktok-forge-gpu-endpoint'
 import {getNativeUser,rateLimit} from '@/lib/native/auth'
 import {queryD1} from '@/lib/native/d1'
 import {
@@ -37,33 +38,40 @@ function config(origin:string){
  const host=process.env.SPAKTOK_FORGE_GPU_HOST??''
  const urlText=process.env.SPAKTOK_FORGE_GPU_URL??''
  const token=process.env.SPAKTOK_FORGE_GPU_TOKEN??''
+ const provider=process.env.SPAKTOK_FORGE_GPU_PROVIDER??'runpod'
  if(!expectedOrigin||expectedOrigin!==origin||
   token.length<32||!urlText||!host)return null
  try{
   const url=new URL(urlText)
   const originURL=new URL(expectedOrigin)
   if(originURL.protocol!=='https:'||originURL.origin!==expectedOrigin||
-   url.protocol!=='https:'||url.hostname!==host||
-   url.port||url.username||url.password||url.hash||url.search||
-   url.pathname!=='/v1/generate'||host==='localhost'||
-   !host.endsWith('.proxy.runpod.net')||
-   /^(?:127\.|10\.|192\.168\.|169\.254\.|0\.|::1$)/.test(host))
-   return null
-  return {url:url.toString(),token,globalCap}
+   !isForgeGpuEndpoint(urlText,host,provider))return null
+  return {url:url.toString(),token,globalCap,provider}
  }catch{return null}
 }
 const allowed=(request:NextRequest)=>
  request.headers.get('origin')===request.nextUrl.origin&&
  request.headers.get('sec-fetch-site')!=='cross-site'
 
-async function gpuHealthy(cfg:{url:string}):Promise<boolean>{
+async function gpuHealthy(cfg:{url:string;token:string}):Promise<boolean>{
+ // Prove the endpoint knows the operator key WITHOUT ever sending the
+ // secret over a public tunnel. A random TLS tunnel URL alone proves nothing.
+ const nonce=randomBytes(16).toString('hex')
  try{
   const healthUrl=new URL('/health',cfg.url)
   const r=await fetch(healthUrl.toString(),{
    method:'GET',cache:'no-store',redirect:'error',
+   headers:{'x-forge-health-nonce':nonce},
    signal:AbortSignal.timeout(4000),
   })
   if(!r.ok)return false
+  const actual=r.headers.get('x-forge-health-signature')??''
+  const expected=createHmac('sha256',cfg.token)
+   .update('forge-health-v1:'+nonce+':stable-fast-3d:ready')
+   .digest('hex')
+  if(!/^[0-9a-f]{64}$/.test(actual)||
+   !timingSafeEqual(Buffer.from(actual,'hex'),Buffer.from(expected,'hex')))
+   return false
   const raw=await r.text()
   if(raw.length>1024)return false
   const parsed:unknown=JSON.parse(raw)
@@ -78,6 +86,7 @@ export async function GET(request:NextRequest){
  const online=cfg?await gpuHealthy(cfg):false
  return json({
   enabled:online,delivery:'direct-private-ticket',
+  provider:cfg?.provider??null,
   engine:'Stable Fast 3D (licensed self-host)',
   full360:true,dailyCapPerOwner:1,
   globalDailyCap:cfg?.globalCap??null,maxImageMB:8,
@@ -135,7 +144,7 @@ export async function POST(request:NextRequest){
  const base=Buffer.from(JSON.stringify(claims)).toString('base64url')
  const signature=createHmac('sha256',cfg.token).update(base).digest('base64url')
  return json({
-  url:cfg.url,ticket:'st1.'+base+'.'+signature,
+  url:cfg.url,provider:cfg.provider,ticket:'st1.'+base+'.'+signature,
   jobId:nonce,expiresAt:new Date((iat+120)*1000).toISOString(),
   note:'This one-use grant consumed an operator daily job reservation. No automatic retry; never share the temporary ticket.',
  })
