@@ -21,7 +21,7 @@ import {
 
 const TARGET_LABELS:Readonly<Record<DirectorTarget,string>>={
  avatar:'أفاتار',live:'لايف',filter:'فلتر AR',
- gift:'هدية Gift',world:'عالم Spaktok',
+ gift:'هدية Gift',world:'عالم Spaktok',video:'استوديو الفيديو 3D',
 }
 const ISSUE_AR:Readonly<Record<string,string>>={
  invalid_or_external_glb:'شبكة GLB غير صالحة أو تحتوي على روابط خارجية',
@@ -36,6 +36,7 @@ const ISSUE_AR:Readonly<Record<string,string>>={
  face_anchor_and_occlusion_unverified:'موضع الفلتر والإخفاء خلف الوجه غير معاير',
  gift_animation_missing:'حركة الهدية لم تُنشأ بعد',
  world_collision_and_scale_unverified:'تصادم العالم وقياساته غير معايرة',
+ video_timeline_source_and_keyframes_not_verified:'يلزم فيديو مصدر وحركات خط زمني واختبار التصدير',
  real_android_fps_and_thermal_unverified:'FPS والحرارة على Android لم يُختبرا',
  rights_and_public_release_unapproved:'النشر العام يحتاج مراجعة الحقوق والجودة',
 }
@@ -43,7 +44,8 @@ const STAGE_NAMES:Readonly<Record<string,string>>={
  source:'فحص المصدر والحقوق',generation:'توليد أو إعادة استخدام المجسم',
  geometry:'فحص شبكة GLB',rig:'تجهيز تحريك الوجه',
  filter:'تثبيت الفلتر والكاميرا', 'gift-animation':'تحريك الهدية',
- 'world-placement':'تجهيز عنصر العالم','mobile-qa':'اختبار Android',
+ 'world-placement':'تجهيز عنصر العالم','video-composition':'تركيب المجسم على الفيديو',
+ 'mobile-qa':'اختبار Android',
  publish:'مراجعة النشر',
 }
 const isImage=(file:File)=>/\.(png|jpe?g|webp)$/i.test(file.name)
