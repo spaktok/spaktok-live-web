@@ -1,5 +1,5 @@
 import {z} from 'zod'
-import {DIRECTOR_TARGETS,type DirectorTarget} from './spaktok-ai-director'
+import {DIRECTOR_TARGETS,detectDirectorTargets,type DirectorTarget} from './spaktok-ai-director'
 
 export const AGENT_ACTIONS=[
  'inspect_asset','generate_relief','generate_3d_gpu','recolor_asset',
@@ -48,6 +48,17 @@ const COLOR_TESTS:Readonly<Record<typeof AGENT_STYLES[number],RegExp>>={
 }
 const MATERIAL_EDIT=/غيّر|غير|بدّل|بدل|لوّن|لون|اجعل|خليه|خلّي|حوّل|حول|paint|recolor|make|color|colour|material|خامة/i
 export const requiresRelief=(prompt:string)=>/\b2[.,]?5d\b|بارز|relief|heightfield|نحت سطحي/i.test(prompt)
+/** Deterministic creator intent is an AUTHORITATIVE routing constraint.
+ * An LLM may hallucinate six copies of Gifts for "all studios".
+ * Never allow a hallucinated/duplicated specialist selection to publish
+ * or silently omit a department the creator named explicitly.
+ * The LLM still makes its own NEXT TOOL selection after observations.
+ */
+export function normalizeAgentDecision(step:AgentStep,prompt:string):AgentStep{
+ const explicit=detectDirectorTargets(prompt)
+ const unique=[...new Set(step.targets)]
+ return {...step,targets:explicit.length?[...explicit]:unique}
+}
 export const agentAllowedTargets=(targets:readonly DirectorTarget[]) =>
  targets.length>0&&targets.length<=6&&
  new Set(targets).size===targets.length&&
