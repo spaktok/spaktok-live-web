@@ -137,13 +137,23 @@ def generate_glb(image, profile="preview"):
             verbose=False,
         )
 
-    # Never save a user's face/image/model to a persistent GPU directory.
+    # Keep all creator media ephemeral on the GPU. For creator previews,
+    # turn the raw GLB into the mobile structural candidate automatically,
+    # adding missing vertex NORMAL while preserving UV, PBR and geometry.
+    # This is CPU-only; it does not repeat neural inference or texture baking.
     with tempfile.TemporaryDirectory(prefix="spaktok-trellis1-") as tmp:
         target = Path(tmp) / "result.glb"
         glb.export(str(target))
         if target.stat().st_size > options["max_bytes"]:
             raise ValueError("trellis1_glb_too_large")
-        payload = target.read_bytes()
+        if profile == "preview":
+            from glb_mobile_finalize import finalize_mobile_glb
+            mobile = Path(tmp) / "result-mobile.glb"
+            finalize_mobile_glb(target, mobile)
+            payload = mobile.read_bytes()
+        else:
+            # Master is offline, outside the browser's 35 MiB result budget.
+            payload = target.read_bytes()
 
     # Enforce actual GLB 2.0 JSON/mesh structure; a magic-header test alone
     # cannot prove the file contains any usable 3D geometry.
