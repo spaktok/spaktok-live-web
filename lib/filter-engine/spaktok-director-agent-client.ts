@@ -10,6 +10,7 @@ import {inspectWordGeneratedGlb} from './spaktok-word-import'
 import {createStudioFanoutManifest,type StudioFanoutManifest} from './spaktok-studio-fanout'
 import {createDirectorDispatch,type DirectorDispatch} from './spaktok-director-dispatch'
 import {saveStudioFanoutBundle,loadVerifiedDirectorHandoff} from './reality-local-asset-handoff'
+import {verifiedDirectorReply} from './spaktok-director-verified-reply'
 
 export type AgentAssetResult=Readonly<{
  file:File;qa:DirectorAssetQA;manifest:StudioFanoutManifest
@@ -93,7 +94,6 @@ export async function runDirectorAgent(params:Params):Promise<AgentRunResult>{
  let delivered:AgentAssetResult|null=null
  let usedGpu=false
  let lastInspection=false
- let message=''
  const events:AgentEvent[]=[]
  const vision=original?await optionalVisionPreview(original,params.visionConsent):null
  const originalSource=original?(isGlb(original)?'glb':isImage(original)?'image':'none'):'none'
@@ -109,13 +109,13 @@ export async function runDirectorAgent(params:Params):Promise<AgentRunResult>{
   }
   params.onProgress('AI Director: أفكر في الخطوة '+(index+1)+'، بعد فحص نتائج الأدوات الحقيقية…')
   const step=await callAgent(request)
-  message=step.message
   if(step.action==='finish'){
    if(!delivered&&working&&isGlb(working)&&events.some(x=>x.action==='dispatch_asset'&&x.ok))
     throw Error('agent_inconsistent_completion')
-   if(!delivered&&working&&events.some(x=>x.action==='inspect_asset'&&x.ok))
-    return {reply:message+' · تم الفحص، لكن لم تُنشأ مسودة أقسام جديدة.',result:null,actions:events}
-   return {reply:message,result:delivered,actions:events}
+   // Never show the model's unverified "success" message as a result.
+   // Only actual audited GLB + dispatch observations are completion proof.
+   return {reply:verifiedDirectorReply(delivered,events),
+    result:delivered,actions:events}
   }
   const event=(ok:boolean,detail:string)=>{
    events.push({action:step.action,ok,detail:detail.slice(0,300)})
@@ -190,8 +190,8 @@ export async function runDirectorAgent(params:Params):Promise<AgentRunResult>{
   }
  }
  return {
-  reply:delivered?'تم التوليد والفحص والتوزيع الخاص؛ أوقفت وكيل AI عند حد ست خطوات للحماية.':
-   'أوقف AI Director التنفيذ بعد ست خطوات دون ملف نهائي. راجع نتائج الأدوات.',
+  reply:verifiedDirectorReply(delivered,events)+
+   ' (توقفت دورة AI عند الحد الأقصى المسموح به: ست قرارات.)',
   result:delivered,actions:events,
  }
 }
