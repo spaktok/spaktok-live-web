@@ -75,6 +75,7 @@ PY
 resume(){
   repair_flash
   log 'Continue remaining official TRELLIS.2 CUDA extensions (NO --new-env; preserves existing torch).'
+  ensure_cuda124_build_toolkit
   cd "$TRELLIS"
   set +u
   # shellcheck disable=SC1091
