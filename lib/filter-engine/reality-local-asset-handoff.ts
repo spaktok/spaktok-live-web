@@ -195,6 +195,30 @@ export async function loadStudioFanoutManifest():
  }catch{return null}
  finally{db.close()}
 }
+/** Verify a private AI Director handoff BEFORE opening a destination studio.
+ * A stale/mismatched IndexedDB GLB must never be mislabeled as the active
+ * project. The same source fingerprint is consumed by every selected target.
+ */
+export async function loadVerifiedDirectorHandoff(
+ target?:import('./spaktok-ai-director').DirectorTarget,
+):Promise<{file:File;manifest:StudioFanoutManifest}|null>{
+ const [file,manifest]=await Promise.all([
+  loadLocalStudioGlb(),loadStudioFanoutManifest(),
+ ])
+ if(!file||!manifest)return null
+ if(target&&!manifest.project.outputTargets.includes(target))
+  throw Error('studio_target_not_dispatched')
+ if(file.name!==manifest.source.fileName||
+  file.size!==manifest.source.bytes)
+  throw Error('studio_handoff_metadata_mismatch')
+ const bytes=await file.arrayBuffer()
+ const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))
+ const sha=Array.from(digest).map(x=>x.toString(16).padStart(2,'0')).join('')
+ if(sha!==manifest.source.sha256)
+  throw Error('studio_handoff_sha256_mismatch')
+ return {file,manifest}
+}
+
 export async function clearStudioFanoutManifest():Promise<void>{
  const db=await openDb()
  try{
