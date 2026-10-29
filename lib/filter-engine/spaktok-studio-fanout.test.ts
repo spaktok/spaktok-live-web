@@ -60,6 +60,14 @@ describe('Studio fan-out manifest GPU-free production contract',()=>{
   expect(result.outputs.find(x=>x.target==='world')?.blockers)
    .toContain('collision_scale_and_lod_not_verified')
  })
+ it('routes a separate Video 3D Studio private preview without claiming video export',()=>{
+  const result=make({targets:['video']})
+  expect(result.outputs[0].destination).toBe('/video-studio')
+  expect(result.outputs[0].state).toBe('private-preview')
+  expect(result.outputs[0].blockers)
+   .toContain('video_timeline_source_and_keyframes_not_verified')
+  expect(result.outputs[0].published).toBe(false)
+ })
  it('flags oversized GLB for optimization in every requested department',()=>{
   const result=make({bytes:20*1024*1024,audit:{...audit,triangles:500000}})
   expect(result.outputs.every(x=>x.state==='needs-optimization')).toBe(true)
