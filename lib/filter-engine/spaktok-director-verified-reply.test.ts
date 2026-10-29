@@ -8,7 +8,7 @@ const asset={
  manifest:{source:{sha256:'a'.repeat(64)}},
  dispatch:{publication:'private-draft',
   steps:[{target:'world'},{target:'gift'}]},
-} as AgentAssetResult
+} as unknown as AgentAssetResult
 const success:AgentEvent[]=[
  {action:'recolor_asset',ok:true,detail:'gold output'},
  {action:'inspect_asset',ok:true,detail:'UV/PBR and triangles checked'},
