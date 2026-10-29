@@ -51,6 +51,24 @@ PyTorch wheels with a +cu121 suffix, and xformers attention is selected instead
 of flash-attn to avoid extra compilation risk. CUDA extensions still MUST
 be confirmed on the rented A100 before treating this as a working image.
 
+### Repair after partial installation: existing nvdiffrast source
+
+If the official setup prints `fatal: destination path '/tmp/extensions/nvdiffrast' already exists`
+after Kaolin installation, **DO NOT re-run install and DO NOT delete the directory**.
+The newer Spaktok script accepts `resume` and verifies that the old directory
+really is the official NVlabs source before compiling it in the existing
+TRELLIS Conda environment. Then it installs only the GPU API dependencies and
+performs CUDA and Python import checks, without redoing earlier installs:
+
+    cd /workspace/spaktok-forge
+    git pull --ff-only origin feat/vast-a100-forge-bridge-20261029
+    set -o pipefail
+    bash scripts/vast-a100-trellis1.sh resume 2>&1 | tee -a /workspace/spaktok-trellis1-install.log
+
+On `nvdiffrast directory remote is not the official NVlabs repository` the
+script intentionally stops; diagnose provenance before touching the existing
+directory. Only proceed to `smoke` when `Python imports passed` appears.
+
 To create a REAL sample from Microsoft's public image:
 
     bash scripts/vast-a100-trellis1.sh smoke
