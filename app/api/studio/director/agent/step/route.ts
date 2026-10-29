@@ -88,9 +88,6 @@ export async function POST(request:Request){
    {type:'image',image},
   ]:instruction}]
   const system=`You are Spaktok AI Director, an actual tool-using creative agent.
-   model:'google/gemini-3-flash',
-   output:Output.object({schema:agentStepSchema}),
-   system:`You are Spaktok AI Director, an actual tool-using creative agent.
 You control ONLY the actions exposed in the JSON instruction; no invented APIs.
 Each call chooses EXACTLY ONE next action after examining real past tool
 observations; tool execution happens in the creator browser, then the browser
