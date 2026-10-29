@@ -4,8 +4,10 @@ import {
 
 const MAX_UPLOAD=8*1024*1024
 const MAX_OUTPUT=35*1024*1024
+export type ForgeGpuProfile='mobile-preview'|'detail-preview'
 type DirectTicket=Readonly<{
- url:string;ticket:string;jobId:string;expiresAt:string
+ url:string;host:string;provider:'vast'|'runpod';engine:'trellis2'|'stable-fast-3d'
+ ticket:string;jobId:string;expiresAt:string
 }>
 export type ForgeDirectResult=Readonly<{
  file:File;inspection:WordGeneratedInspection
@@ -16,7 +18,10 @@ export type ForgeDirectResult=Readonly<{
  */
 export async function generateForgeGpuDirect(
  file:File,rights:'original'|'licensed',
+ profile:ForgeGpuProfile='mobile-preview',
 ):Promise<ForgeDirectResult>{
+ if(!['mobile-preview','detail-preview'].includes(profile))
+  throw Error('forge_direct_invalid_profile')
  if(file.size<128||file.size>MAX_UPLOAD||
   !['image/png','image/jpeg','image/webp'].includes(file.type))
   throw Error('forge_direct_invalid_image')
@@ -31,7 +36,7 @@ export async function generateForgeGpuDirect(
   headers:{'content-type':'application/json'},
   credentials:'same-origin',cache:'no-store',
   body:JSON.stringify({
-   sha256,size:file.size,mime:file.type,rights,
+   sha256,size:file.size,mime:file.type,rights,profile,
    approveCompute:'yes',approveTransfer:'yes',
   }),
  })
@@ -44,13 +49,22 @@ export async function generateForgeGpuDirect(
   throw Error('forge_direct_bad_ticket_response')
  const obj=value as Partial<DirectTicket>
  if(typeof obj.url!=='string'||typeof obj.ticket!=='string'||
-  typeof obj.expiresAt!=='string')
+  typeof obj.host!=='string'||typeof obj.provider!=='string'||
+  typeof obj.engine!=='string'||typeof obj.expiresAt!=='string')
   throw Error('forge_direct_bad_ticket_response')
  const destination=new URL(obj.url)
- // The first trial uses only RunPod's HTTPS-terminated proxy. Non-RunPod
- // GPU providers need separately reviewed host allowlist and TLS policy.
- if(destination.protocol!=='https:'||
-  !destination.hostname.endsWith('.proxy.runpod.net')||
+ // The authenticated server has pinned the exact host independently
+ // from the URL. Reject all browser-supplied or transient tunnel endpoints.
+ const vast=obj.provider==='vast'&&obj.engine==='trellis2'&&
+  obj.host===destination.hostname&&
+  /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(obj.host)&&
+  !obj.host.endsWith('.trycloudflare.com')&&
+  !obj.host.endsWith('.proxy.runpod.net')&&
+  !/\.(?:localhost|local|internal|test|invalid|example|onion)$/i.test(obj.host)
+ const runpod=obj.provider==='runpod'&&
+  obj.host===destination.hostname&&
+  destination.hostname.endsWith('.proxy.runpod.net')
+ if(destination.protocol!=='https:'||!(vast||runpod)||
   destination.pathname!=='/v1/generate'||
   destination.port||destination.username||destination.password||
   destination.search||destination.hash||
