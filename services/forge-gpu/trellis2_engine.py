@@ -29,7 +29,7 @@ def initialize():
     return _pipeline
 
 
-def generate_glb(image):
+def generate_glb(image, profile="preview"):
     """Use the verified upstream pipeline with conservative GLB output budgets.
 
     Quality and memory must be measured on the actual host before raising
@@ -37,6 +37,14 @@ def generate_glb(image):
     """
     import o_voxel
     import torch
+    if profile not in ("preview", "master"):
+        raise ValueError("trellis2_profile_invalid")
+    # Keep web previews small; allow separate high-detail masters for
+    # offline artist review/export, never direct through the 35MB browser API.
+    decimation_target, texture_size, max_bytes = (
+        (250000, 2048, 35 * 1024 * 1024) if profile == "preview"
+        else (1000000, 4096, 512 * 1024 * 1024)
+    )
     if _pipeline is None:
         raise RuntimeError("trellis2_not_initialized")
     with torch.inference_mode():
@@ -53,8 +61,8 @@ def generate_glb(image):
             attr_layout=mesh.layout,
             voxel_size=mesh.voxel_size,
             aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-            decimation_target=250000,
-            texture_size=2048,
+            decimation_target=decimation_target,
+            texture_size=texture_size,
             remesh=True,
             remesh_band=1,
             remesh_project=0,
@@ -65,7 +73,7 @@ def generate_glb(image):
         output = Path(tmp) / "result.glb"
         glb.export(str(output), extension_webp=False)
         payload = output.read_bytes()
-    if len(payload) < 28 or len(payload) > 35 * 1024 * 1024:
+    if len(payload) < 28 or len(payload) > max_bytes:
         raise ValueError("trellis2_glb_size_out_of_bounds")
     if payload[:4] != b"glTF" or int.from_bytes(payload[4:8], "little") != 2:
         raise ValueError("trellis2_invalid_glb_header")
