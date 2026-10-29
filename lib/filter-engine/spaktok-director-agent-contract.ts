@@ -135,6 +135,11 @@ export const agentAllowedTargets=(targets:readonly DirectorTarget[]) =>
 export function validateAgentStep(step:AgentStep,request:AgentRequest):
  {ok:boolean;reason:string}{
  if(!agentAllowedTargets(step.targets))return {ok:false,reason:'invalid_target_set'}
+ // Completed tasks are immutable. Apply this FIRST so the same rejection
+ // reason is returned regardless of which extra tool the model proposes.
+ if(request.steps.some(x=>['dispatch_asset','present_asset'].includes(x.action)&&x.ok)&&
+    step.action!=='finish')
+  return {ok:false,reason:'dispatch_already_complete'}
  if(step.action==='generate_relief'&&
   (request.workingSource!=='image'||!requiresRelief(request.prompt)))
   return {ok:false,reason:'relief_not_explicitly_requested'}
@@ -173,9 +178,7 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
  if(step.action==='present_asset'&&
    request.steps.some(x=>x.action==='present_asset'&&x.ok))
   return {ok:false,reason:'local_preview_already_shown'}
- if(request.steps.some(x=>['dispatch_asset','present_asset'].includes(x.action)&&x.ok)&&
-    step.action!=='finish')
-  return {ok:false,reason:'dispatch_already_complete'}
+
  if(step.action==='finish'&&request.steps.some(event=>
    ['generate_relief','generate_3d_gpu','recolor_asset'].includes(event.action)&&event.ok)&&
    !request.steps.some(event=>
