@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Radio, Sparkles } from 'lucide-react'
+import Link from 'next/link'
 import { BottomNavigation } from '@/components/spaktok/bottom-navigation'
 import { VideoFeed } from '@/components/spaktok/video-feed'
 import { StoryViewer } from '@/components/spaktok/story-viewer'
@@ -153,6 +154,11 @@ export default function SpakTok() {
         {activeTab === 'home' && (
           <div className="relative h-dvh overflow-hidden bg-black">
             {/* Feed Type Selector */}
+            <Link href="/spaktok-studio"
+              className="absolute right-3 top-14 z-30 flex items-center gap-2 rounded-full border border-indigo-300/35 bg-[#171536]/85 px-3 py-2 text-xs font-bold text-white shadow-xl shadow-indigo-900/40 backdrop-blur-xl transition hover:bg-indigo-500/70"
+              aria-label="افتح Spaktok Studio AI Director">
+              <Sparkles size={15} className="text-sky-300"/> AI Studio
+            </Link>
             <div className="absolute top-0 left-0 right-0 z-20 safe-top">
                 {/* Feed Tabs */}
                 <div className="flex items-center justify-center gap-6 py-2 bg-black/25 backdrop-blur-sm">
