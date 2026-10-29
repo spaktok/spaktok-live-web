@@ -11,10 +11,11 @@ describe('Spaktok AI Director private production router',()=>{
   expect(detectDirectorTargets('حوّل الصورة إلى افتار للايف مع فلتر و gift في العالم'))
    .toEqual(['avatar','live','filter','gift','world'])
   expect(detectDirectorTargets('live and avatar')).toEqual(['avatar','live'])
+  expect(detectDirectorTargets('فيديو ريلز')).toEqual(['video'])
   expect(detectDirectorTargets('أرسل المجسم إلى جميع الأقسام'))
-   .toEqual(['avatar','live','filter','gift','world'])
+   .toEqual(['avatar','live','filter','gift','world','video'])
   expect(detectDirectorTargets('send to all studios'))
-   .toEqual(['avatar','live','filter','gift','world'])
+   .toEqual(['avatar','live','filter','gift','world','video'])
  })
  it('blocks generation if private user image has no rights confirmation',()=>{
   const plan=planSpaktokDirector({
