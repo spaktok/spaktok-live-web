@@ -86,6 +86,15 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
  if(request.steps.some(x=>x.action==='dispatch_asset'&&x.ok)&&
     step.action!=='finish')
   return {ok:false,reason:'dispatch_already_complete'}
+ if(step.action==='finish'&&request.steps.some(event=>
+   ['generate_relief','generate_3d_gpu','recolor_asset'].includes(event.action)&&event.ok)&&
+   !request.steps.some(event=>event.action==='dispatch_asset'&&event.ok))
+  return {ok:false,reason:'generated_file_must_be_delivered'}
+ if(step.action==='finish'&&
+   /(?:أرسل|ارسل|وزع|جهز|جهّز|توزيع|send|dispatch|deliver)/i.test(request.prompt)&&
+   request.workingSource==='glb'&&
+   !request.steps.some(event=>event.action==='dispatch_asset'&&event.ok))
+  return {ok:false,reason:'requested_distribution_not_done'}
  if(step.action==='finish'&&request.steps.length===0&&
    request.workingSource!=='none')
   return {ok:false,reason:'cannot_claim_result_without_tool'}
