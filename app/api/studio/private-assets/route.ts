@@ -49,7 +49,7 @@ export async function POST(req:NextRequest){
  const v=body as Record<string,unknown>
  const size=v.bytes,sha=v.sha256,targets=v.targets,rights=v.rights
  if(typeof sha!=='string'||!/^[a-f0-9]{64}$/.test(sha)||
-  !Number.isSafeInteger(size)||typeof size!=='number'||
+  typeof size!=='number'||!Number.isSafeInteger(size)||
   size<128||size>STUDIO_PRIVATE_R2_MAX_BYTES||
   !['original','licensed'].includes(String(rights))||
   !Array.isArray(targets)||targets.length<1||
