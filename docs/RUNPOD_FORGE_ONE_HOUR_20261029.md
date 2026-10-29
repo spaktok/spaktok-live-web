@@ -54,16 +54,28 @@ require an actual running GPU and therefore can incur GPU billing.
 
 ## Recommended one-hour lifecycle
 
-### Safer: provider-side automatic termination at CREATE time
+### Important correction on RunPod automatic termination (2026-10-29)
 
-RunPod's documented `runpodctl pod create` supports
-`--terminate-after 1h` (permanently delete Pod) and
-`--stop-after 1h` (stop GPU but keep storage). For a disposable
-one-hour trial choose **terminate**, then back up any required files
-*before* it destroys the Pod.
+**A Pod cannot be guaranteed to stop after one hour using the old
+`--terminate-after` option.** RunPod's official runpodctl v2.12.0
+release (27 August 2026) explicitly removed `--stop-after` and
+`--terminate-after`; the RunPod official plugin guide states the
+backend never enforced those flags. Earlier documentation that still
+mentions `--terminate-after 1h` is STALE.
 
-From a trusted machine with official `runpodctl` already configured
-and an approved reviewed PyTorch/CUDA12.8 template:
+Do not start a paid Pod unattended expecting it to disappear after an
+hour. On-Demand means you pay for *actual running time*, not a one-hour
+prepaid reservation. The guarantee requires verified provider-side
+deletion, or a separate external deletion scheduler tested with the
+actual account before starting paid GPU compute.
+
+**The reviewed script** `scripts/runpod-forge-one-hour.sh` now
+runs in **dry-run-only** mode. Its `--apply` refuses paid creation.
+It still prints a reviewed GPU creation command, without unsafe TTL
+flags; it does NOT launch a Pod, provision model weights, configure
+secrets, or create a timer.
+
+From a trusted terminal with the official CLI installed:
 
 ```bash
 runpodctl gpu list
@@ -71,14 +83,20 @@ runpodctl template search
 export RUNPOD_GPU_ID='EXACT_NAME_FROM_GPU_LIST'
 export RUNPOD_TEMPLATE_ID='REVIEWED_PYTORCH_TEMPLATE_ID'
 bash scripts/runpod-forge-one-hour.sh --dry-run
-# ONLY after checking GPU price, available credit and provider terms:
-bash scripts/runpod-forge-one-hour.sh --apply
+# --apply intentionally fails closed. DO NOT rely on old --terminate-after.
 ```
 
-The shell script **defaults to a dry run**; `--apply` requires an
-interactive typed confirmation. It enforces one GPU, `--terminate-after
-1h`, 60GB ephemeral container storage and zero persistent Pod volumes.
-It does not create a model endpoint or configure Vercel secrets.
+If a Pod is launched **manually via the website**, keep the session
+under active supervision; terminate it explicitly in
+**RunPod Console → Pods → select Pod → Terminate** and verify the
+resource is gone. **Stop** preserves stopped-volume billing.
+If you're unable to monitor and delete it, do not start an On-Demand
+Pod. Consider a separately tested scale-to-zero Serverless deployment
+instead for non-interactive use.
+
+Sources:
+- https://github.com/runpod/runpodctl/releases/tag/v2.12.0
+- https://github.com/runpod/runpod-plugins-official/blob/main/plugins/runpod/skills/runpodctl/SKILL.md
 
 ### If using the Android browser's "Deploy a Pod" screen
 
@@ -88,11 +106,11 @@ It does not create a model endpoint or configure Vercel secrets.
    is not sufficient for reliable CUDA source builds + weights).
 4. Avoid persistent **Global Network Volume**, **Network Volume** or
    separate `/workspace` volume for this short-lived test.
-5. Verify whether the current RunPod UI offers **auto-terminate after
-   60 minutes** for a *new Pod*. The screenshot does NOT show this
-   control. **If not confirmed, do not assume the web UI will terminate
-   the Pod automatically.** Use the reviewed CLI creation command
-   instead or set a manual timer and be prepared to terminate manually.
+5. **There is no confirmed enforced 60-minute Pod TTL.** Old runpodctl
+   auto-stop/auto-terminate flags did not work. If you must cap use
+   to one hour, only launch while monitoring, and explicitly **Terminate**
+   (not Stop) before the hour ends. A phone alarm is only a reminder,
+   not an automatic billing guarantee.
 6. Before clicking **Deploy**, check the final rate including storage,
    and ensure billing credit is sufficient without autorenew surprises.
 7. Once deployed, visit **Pods** and verify name, running time and
@@ -106,6 +124,8 @@ It does not create a model endpoint or configure Vercel secrets.
 
 At the screenshot's $2.59 GPU hourly rate, **60 minutes of billed
 GPU use ≈ $2.59**, *plus storage/possible transfer/startup overhead*.
+The Pod DOES NOT stop charging after 60 minutes merely because you
+planned a one-hour test.
 Do not present it as a fixed $2.59 charge, since overhead and any
 unintended continuing volume can exceed the estimate.
 
@@ -129,7 +149,9 @@ Only after a real model API passes end-to-end:
 
 ## References
 
-- RunPod CLI `pod create`, `--terminate-after 1h`, storage:
+- RunPod CLI v2.12.0 removes nonfunctional TTL flags:
+  https://github.com/runpod/runpodctl/releases/tag/v2.12.0
+- RunPod CLI outdated docs (do NOT follow old --terminate-after):
   https://docs.runpod.io/runpodctl/reference/runpodctl-remove-pods
 - NVIDIA compute capability: https://developer.nvidia.com/cuda/gpus
 - PyTorch's Blackwell support (torch >=2.7/cu128):
