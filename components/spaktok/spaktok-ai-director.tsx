@@ -5,6 +5,7 @@ import {
  planSpaktokDirector,type DirectorTarget,type DirectorAssetQA,
 } from '@/lib/filter-engine/spaktok-ai-director'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
+import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-local-relief'
 import {
  createStudioFanoutManifest,type StudioFanoutManifest,
 } from '@/lib/filter-engine/spaktok-studio-fanout'
@@ -64,6 +65,7 @@ export default function SpaktokAIDirector({
  const [rights,setRights]=useState<'original'|'licensed'>('original')
  const [rightsApproved,setRightsApproved]=useState(false)
  const [gpuConsent,setGpuConsent]=useState(false)
+ const [imageMode,setImageMode]=useState<'local-2.5d'|'gpu-360'>('local-2.5d')
  const [transferConsent,setTransferConsent]=useState(false)
  const [health,setHealth]=useState<GPUHealth|null>(null)
  const [busy,setBusy]=useState(false)
@@ -79,13 +81,15 @@ export default function SpaktokAIDirector({
   description,targets,source:sourceKind,
   rightsApproved,gpuAvailable:health?.enabled===true,
   computeApproved:gpuConsent,transferApproved:transferConsent,
- }),[description,targets,sourceKind,rightsApproved,health,gpuConsent,transferConsent])
+  localReliefSelected:sourceKind==='image'&&imageMode==='local-2.5d',
+ }),[description,targets,sourceKind,rightsApproved,health,gpuConsent,transferConsent,imageMode])
  useEffect(()=>{
   // Word/Studio can replace the source without going through this picker.
   // Never carry an earlier rights/paid-compute approval to that new asset.
   setRightsApproved(false)
   setTransferConsent(false)
   setGpuConsent(false)
+  setImageMode('local-2.5d')
  },[sourceFile])
  useEffect(()=>{
   let active=true
@@ -111,6 +115,7 @@ export default function SpaktokAIDirector({
   }
   setOwnFile(file);setAsset(null);setQA(null);setManifest(null)
   setRightsApproved(false);setTransferConsent(false);setGpuConsent(false)
+  setImageMode('local-2.5d')
   setStatus(file?'المصدر جاهز للتخطيط، لم يتم رفعه إلى أي خادم.':'')
  }
  const storeRodin=async()=>{
@@ -167,7 +172,8 @@ export default function SpaktokAIDirector({
     chosen.filter(x=>x!==target):[...chosen,target]
   })
  }
- const commitGlb=async(file:File,gpuJobsUsed:0|1)=>{
+ const commitGlb=async(file:File,gpuJobsUsed:0|1,
+  sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d')=>{
   const bytes=await file.arrayBuffer()
   const inspection=inspectWordGeneratedGlb(bytes,file.name)
   const checked=evaluateDirectorAsset(inspection.audit,bytes.byteLength,
@@ -178,13 +184,15 @@ export default function SpaktokAIDirector({
   const draft=createStudioFanoutManifest({
    fileName:file.name,sha256:hash,bytes:bytes.byteLength,
    audit:inspection.audit,description,rights,targets:plan.targets,
-   gpuJobsUsed,
+   gpuJobsUsed,sourceEngine,
   })
   setAsset(file);setQA(checked);setManifest(draft)
   if(gpuJobsUsed)onGeneratedGlb?.(file)
-  setStatus('أنشأنا مسودة إنتاج للأقسام المختارة من GLB واحد، '+
-   'مع ملف إعدادات مستقل لكل قسم. يلزم تجهيز Rig والأنيميشن '+
-   'واختبارات الهاتف قبل أي نشر أمام الجمهور.')
+  setStatus((sourceEngine==='browser-2.5d'?
+   'نجح إنشاء GLB بارز 2.5D محليًا مجانًا دون رفع الصورة. '+
+   'هذا ليس نموذج وجه/جسم 360° ولا تصلح حركاته تلقائيًا. ':
+   'أنشأنا مسودة إنتاج للأقسام المختارة من GLB واحد. ')+
+   'تم إنشاء خطة لكل قسم، لكن Rig والحركات واختبارات Android والنشر غير مكتملة.')
  }
  const generate=async()=>{
   if(busy||!source||!rightsApproved||!plan.targets.length)return
@@ -192,10 +200,16 @@ export default function SpaktokAIDirector({
   try{
    if(sourceKind==='glb'){
     setStatus('فحص GLB الحالي دون GPU أو رفع إلى مزوّد خارجي…')
-    await commitGlb(source,0)
+    await commitGlb(source,0,'existing-glb')
     return
    }
    if(sourceKind!=='image')throw Error('director_source_required')
+   if(imageMode==='local-2.5d'){
+    setStatus('إنشاء مجسم 2.5D بارز من الصورة داخل المتصفح فقط…')
+    const relief=await createDirectorReliefGlb(source)
+    await commitGlb(relief.file,0,'browser-2.5d')
+    return
+   }
    if(!health?.enabled)throw Error('director_gpu_disabled')
    if(!gpuConsent||!transferConsent)
     throw Error('director_explicit_gpu_and_image_transfer_consent_required')
@@ -227,7 +241,7 @@ export default function SpaktokAIDirector({
     throw Error('director_result_too_large')
    await commitGlb(new File([output],'spaktok-director-ai-result.glb',{
     type:'model/gltf-binary',
-   }),1)
+   }),1,'ai-360-gpu')
   }catch(error){
    setStatus('لم تكتمل المهمة: '+(error instanceof Error?error.message:String(error))+
     '. إذا بدأ تشغيل GPU فالمحاولة قد تُحتسب؛ لا تعاود الإرسال دون فحص الحالة.')
@@ -331,9 +345,29 @@ export default function SpaktokAIDirector({
        onChange={select}
        className="mt-2 block w-full rounded-xl border border-white/20 bg-slate-950 p-3 text-xs"/>
      </label>
+     {sourceKind==='image'&&<div className="rounded-xl border border-white/20 bg-slate-950/60 p-3 text-xs">
+      <label className="block font-semibold">
+       طريقة الإنشاء من الصورة
+       <select value={imageMode}
+        onChange={e=>{
+         setImageMode(e.target.value as typeof imageMode)
+         setGpuConsent(false);setTransferConsent(false)
+         setAsset(null);setQA(null);setManifest(null)
+        }}
+        className="mt-2 block w-full rounded-lg border border-white/20 bg-slate-950 p-2">
+        <option value="local-2.5d">مجاني الآن: مجسم بارز 2.5D على الهاتف</option>
+        <option value="gpu-360">AI 360°: يحتاج GPU مرخصًا وموافقات</option>
+       </select>
+      </label>
+      {imageMode==='local-2.5d'&&<p className="mt-2 leading-5 text-amber-200">
+       هذا اختبار مجاني للخط الإنتاج فقط. يحفظ سطح الصورة وخلفية مبسطة،
+       ولا يعيد بناء الرأس أو الجسم ثلاثي الأبعاد بجودة Rodin.
+      </p>}
+     </div>}
      {source&&<p className="break-all text-xs text-cyan-200">
       {source.name} · {(source.size/1048576).toFixed(2)} MB ·
-      {sourceKind==='glb'?' إعادة استخدام دون GPU':' يتطلب GPU لتوليد 360°'}
+      {sourceKind==='glb'?' إعادة استخدام دون GPU':
+       imageMode==='local-2.5d'?' نمط بارز 2.5D مجاني':' يتطلب GPU لتوليد 360°'}
      </p>}
      <div className="flex flex-wrap gap-2 text-xs">
       <button type="button" onClick={()=>void deleteSavedDraft()}
@@ -390,6 +424,7 @@ export default function SpaktokAIDirector({
       <p className="mt-2 text-cyan-200">
        GPU: {plan.estimatedGpuJobs} مهمة ·
        {sourceKind==='glb'?' إعادة استعمال GLB':
+        imageMode==='local-2.5d'?' Forge المحلي المجاني 2.5D':
         health?.enabled?' GPU مرخص متصل':' GPU متوقف'}
       </p>
       {plan.stages.map(step=><div key={step.id}
@@ -414,7 +449,7 @@ export default function SpaktokAIDirector({
        onChange={e=>setRightsApproved(e.target.checked)} className="mt-1"/>
       أؤكد حقوق استخدام الصورة أو GLB وتحويله إلى أصل خاص للتجربة
      </label>
-     {sourceKind==='image'&&<div className="space-y-2 rounded-lg border border-amber-400/30 bg-amber-950/20 p-3">
+     {sourceKind==='image'&&imageMode==='gpu-360'&&<div className="space-y-2 rounded-lg border border-amber-400/30 bg-amber-950/20 p-3">
       <p className="text-xs text-amber-100">
        {health?.enabled?'الإنشاء الكامل GPU متصل لكنه قد يكون مدفوعًا للمشغّل.':
         'محرك AI 360° غير متصل بعد؛ يمكن إنشاء خطة أو استيراد GLB مجاني الآن.'}
@@ -434,11 +469,14 @@ export default function SpaktokAIDirector({
      </div>}
      <button type="button" onClick={()=>void generate()}
       disabled={busy||!rightsApproved||!source||!plan.targets.length||
-       (sourceKind==='image'&&(!health?.enabled||!gpuConsent||!transferConsent))||
+       (sourceKind==='image'&&imageMode==='gpu-360'&&
+        (!health?.enabled||!gpuConsent||!transferConsent))||
        sourceKind==='none'}
       className="w-full rounded-xl bg-violet-500 px-4 py-3 font-bold text-white disabled:opacity-40">
       {busy?'يتم العمل…':sourceKind==='glb'?
        'فحص المجسم وتجهيزه للأقسام — مجاني':
+       imageMode==='local-2.5d'?
+       'توليد مجسم 2.5D مجاني وتجهيزه للأقسام':
        'بدء مهمة AI 360° واحدة بعد الموافقة'}
      </button>
     </div>
