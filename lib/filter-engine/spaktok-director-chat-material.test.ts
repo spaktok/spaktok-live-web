@@ -7,6 +7,11 @@ describe('Spaktok Studio real material edit command parser',()=>{
   expect(style?.id).toBe('gold')
   expect(style?.metallic).toBeGreaterThan(.7)
  })
+ it('recognizes German material instructions consistently with policy',()=>{
+  expect(detectDirectorMaterialStyle('Färbe dieses GLB blau')?.id).toBe('blue')
+  expect(detectDirectorMaterialStyle('Mach das Geschenk silbern')?.id).toBe('silver')
+  expect(detectDirectorMaterialStyle('Ändere den Avatar auf rot')?.id).toBe('red')
+ })
  it('supports an English physical color update',()=>{
   expect(detectDirectorMaterialStyle('Recolor the gift blue')?.id).toBe('blue')
  })
