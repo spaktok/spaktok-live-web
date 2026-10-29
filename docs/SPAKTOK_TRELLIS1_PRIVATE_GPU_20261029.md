@@ -240,6 +240,39 @@ the list it prints, do not layer multiple CUDA variant wheels.
 After `SPCONV_READY` only, run the existing `smoke` once with logging.
 Future `smoke` and `serve` now preflight SpConv BEFORE expensive model loads.
 
+### Gaussian rasterizer needed during GLB texture export
+
+The first successful full inference on A100 reached 100% sampling, then failed
+while `postprocessing_utils.to_glb` was baking the model's textures via
+`render_multiview`:
+
+    ModuleNotFoundError: No module named 'diff_gaussian_rasterization'
+
+The **model inference succeeded**, but no GLB was created yet. This dependency
+comes from the official Microsoft TRELLIS setup option `--mipgaussian`,
+which installs the `autonomousvision/mip-splatting` source subdirectory
+`submodules/diff-gaussian-rasterization`. We chose a separate reproducible
+repair because the main environment and image generation have already passed.
+
+    cd /workspace/spaktok-forge
+    git pull --ff-only origin feat/vast-a100-forge-bridge-20261029
+    bash -n scripts/vast-a100-trellis1.sh
+    set -o pipefail
+    bash scripts/vast-a100-trellis1.sh repair-gaussian 2>&1 | tee -a /workspace/spaktok-trellis1-install.log
+
+This action pins the official source to commit
+`dda02ab5ecf45d6edb8c540d9bb65c7e451345a9` for newly cloned
+directories, verifies the remote and local code, and compiles only the
+rasterizer against existing CUDA 12.1, GCC12 and A100 architecture sm_80.
+The script verifies the Python imports and outputs `GAUSSIAN_READY`.
+
+Only after this success, run `smoke` once more. The `smoke` and `serve`
+commands now fail early if the rasterizer is missing rather than starting a
+costly model load.
+
+No output GLB is assumed to exist unless `CREATED` and the GLB audit both pass.
+Save the asset and logs off the rented GPU before terminating the instance.
+
 ## Remaining release blockers
 
 - GitHub Actions reports failure with missing job steps/logs; offline tests
