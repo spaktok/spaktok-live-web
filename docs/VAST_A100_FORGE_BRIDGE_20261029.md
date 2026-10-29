@@ -16,6 +16,10 @@
 6. The Forge API verifies origin, HMAC grant, nonce replay and exact image digest, and sends the GLB back privately.
 7. The studio checks the GLB; no public asset, gift, live avatar or native integration is auto-approved.
 
+## 15:56 Berlin — second live A100 install error and fix
+
+The owner sent a new trace from the same rented Vast instance: `flash-attn` now fails with `ModuleNotFoundError: No module named 'psutil'` (metadata-generation-failed), after the earlier `torch` build-isolation issue. The `repair-flash` stage now installs `psutil`, `packaging`, `ninja`, `wheel` and `setuptools` into the active `trellis2` Conda environment, checks imports, and only then attempts the no-build-isolation flash-attn build. This change is **committed but not tested on the user's GPU**. With the one-hour spending deadline near, no new expensive attempt is recommended. Destroy Vast instance 58258491 when finished and confirm billing has stopped.
+
 ## TRELLIS.2 first A100 install failure and safe recovery (15:54 Berlin, 2026-10-29)
 
 The owner's screenshot shows a completed `/workspace/spaktok-forge` checkout and successful A100 80GB / CUDA 12.8 preflight, but the first official TRELLIS.2 installation stopped at `flash-attn==2.7.3` with `ModuleNotFoundError: No module named 'torch'` from pip's **isolated build subprocess**. This does not show that the active Conda environment lacks torch.
