@@ -78,11 +78,14 @@ export async function POST(request:NextRequest){
  const imageSHA=data.sha256
  const size=data.size
  const mime=data.mime
+ const profile=data.profile??'mobile-preview'
  if(typeof imageSHA!=='string'||!/^[0-9a-f]{64}$/.test(imageSHA)||
   typeof size!=='number'||!Number.isSafeInteger(size)||
   size<128||size>MAX_IMAGE||
   !['image/png','image/jpeg','image/webp'].includes(String(mime)))
   return json({error:'forge_ticket_image_invalid'},422)
+ if(!['mobile-preview','detail-preview'].includes(String(profile)))
+  return json({error:'forge_ticket_profile_invalid'},422)
  if(!['original','licensed'].includes(String(data.rights))||
   data.approveCompute!=='yes'||data.approveTransfer!=='yes')
   return json({error:'forge_approvals_required'},422)
@@ -104,12 +107,14 @@ export async function POST(request:NextRequest){
  const claims={
   v:1,purpose:'forge-browser-one-use',nonce,
   origin:request.nextUrl.origin,
-  iat,exp:iat+120,sha256:imageSHA,size,mime,
+  iat,exp:iat+120,sha256:imageSHA,size,mime,profile,
  }
  const base=Buffer.from(JSON.stringify(claims)).toString('base64url')
  const signature=createHmac('sha256',cfg.token).update(base).digest('base64url')
  return json({
-  url:cfg.url,ticket:'st1.'+base+'.'+signature,
+  url:cfg.url,host:new URL(cfg.url).hostname,
+  provider:cfg.provider,engine:cfg.engine,
+  ticket:'st1.'+base+'.'+signature,
   jobId:nonce,expiresAt:new Date((iat+120)*1000).toISOString(),
   note:'This one-use grant consumed an operator daily job reservation. No automatic retry; never share the temporary ticket.',
  })
