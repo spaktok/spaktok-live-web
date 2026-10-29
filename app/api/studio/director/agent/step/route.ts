@@ -4,7 +4,7 @@ import {
  freeCloudflareAgentConfigured,requestCloudflareFreeAgentStep,
 } from '@/lib/server/spaktok-director-cloudflare'
 import {
- agentRequestSchema,agentStepSchema,validateAgentStep,
+ agentRequestSchema,agentStepSchema,validateAgentStep,type AgentStep,
 } from '@/lib/filter-engine/spaktok-director-agent-contract'
 
 export const runtime='nodejs'
@@ -114,7 +114,7 @@ Do not execute publishing, transfers, payments or streaming.
 Keep reply concise in Arabic; honest about which features remain pending.
 Do not retry a previously failed tool endlessly, especially paid GPU.
 All tool decisions remain subject to policy gates and owner consent.`
-  let step
+  let step:AgentStep
   let usedProvider='gateway'
   let neurons:number|null=null
   if(provider()==='cloudflare'){
