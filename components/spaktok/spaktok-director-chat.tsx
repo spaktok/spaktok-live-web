@@ -88,11 +88,16 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
  const draftIntent=useMemo(()=>routeDirectorChat(text,sourceKind),[text,sourceKind])
  useEffect(()=>{
   let live=true
-  fetch('/api/spaktok-forge/gpu-ticket',{cache:'no-store'})
-   .then(res=>res.ok?res.json():Promise.reject(Error('gpu_offline')))
-   .then(data=>{if(live)setGpuEnabled(data.enabled===true)})
-   .catch(()=>{if(live)setGpuEnabled(false)})
-  return()=>{live=false}
+  const refresh=()=>{
+   if(document.visibilityState==='hidden')return
+   fetch('/api/spaktok-forge/gpu-ticket',{cache:'no-store'})
+    .then(res=>res.ok?res.json():Promise.reject(Error('gpu_offline')))
+    .then(data=>{if(live)setGpuEnabled(data.enabled===true)})
+    .catch(()=>{if(live)setGpuEnabled(false)})
+  }
+  refresh()
+  const interval=window.setInterval(refresh,60000)
+  return()=>{live=false;window.clearInterval(interval)}
  },[])
  useEffect(()=>{
   // Only the attached photograph is displayed as thumbnail. Never send it
