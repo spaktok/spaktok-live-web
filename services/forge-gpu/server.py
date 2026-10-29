@@ -22,8 +22,6 @@ import torch
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from PIL import Image, ImageOps, UnidentifiedImageError
-from sf3d.system import SF3D
-from sf3d.utils import remove_background, resize_foreground
 from gpu_preflight import require_compatible_gpu
 
 MAX_PHOTO = 8 * 1024 * 1024
@@ -33,6 +31,8 @@ MAX_MULTIPART = MAX_PHOTO + 32768
 _gpu_lock = asyncio.Lock()
 _model = None
 _rembg_session = None
+_remove_background_fn = None
+_resize_foreground_fn = None
 
 
 @app.middleware("http")
@@ -58,13 +58,19 @@ async def admission_guard(request: Request, call_next):
 
 @app.on_event("startup")
 def load_model_once():
-    global _model, _rembg_session
+    global _model, _rembg_session, _remove_background_fn, _resize_foreground_fn
     token = os.environ.get("FORGE_GPU_TOKEN", "")
     if len(token) < 32:
         raise RuntimeError("FORGE_GPU_TOKEN must be set to >=32 characters")
     # This catches Blackwell sm_120 with CUDA 12.1/PyTorch 2.4 before
     # downloading gated weights or burning paid compute on a broken kernel.
     require_compatible_gpu(torch)
+    # Loading custom SF3D CUDA modules before the architecture preflight
+    # can fail expensively on an RTX PRO 6000 sm_120 with old cu121 torch.
+    from sf3d.system import SF3D
+    from sf3d.utils import remove_background, resize_foreground
+    _remove_background_fn = remove_background
+    _resize_foreground_fn = resize_foreground
     _model = SF3D.from_pretrained(
         "stabilityai/stable-fast-3d",
         config_name="config.yaml", weight_name="model.safetensors",
@@ -92,8 +98,8 @@ def _make_glb(photo: bytes) -> bytes:
     # Preserve creator-supplied transparent cutouts instead of wasting
     # extra segmentation on an image which already has an alpha mask.
     prepared = (rgba if rgba.getextrema()[3][0] < 255 else
-                remove_background(rgba, _rembg_session))
-    prepared = resize_foreground(prepared, .85)
+                _remove_background_fn(rgba, _rembg_session))
+    prepared = _resize_foreground_fn(prepared, .85)
     # Turing GPUs do not support BF16. The official CLI uses BF16 but
     # non-BF16 CUDA GPUs need the FP16 inference path.
     dtype = (torch.bfloat16 if torch.cuda.is_bf16_supported()
