@@ -277,6 +277,8 @@ of a fully signed user session:
   departments (including all six) and removes duplicates before
   `validateAgentStep` and the browser executor.
   Regression tests reproduce the actual failure and verify the repair.
+  Explicit destination exclusions such as `جميع الأقسام ما عدا اللايف`
+  also override model guesses; tests cover this case.
 - A live Cloudflare Browser Rendering call to
   `https://spaktok-director-ai.spaktok.workers.dev/health`
   confirmed the deployed Worker identified
