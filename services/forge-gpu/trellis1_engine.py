@@ -72,14 +72,33 @@ def initialize():
     import torch
     if not torch.cuda.is_available():
         raise RuntimeError("trellis1_cuda_unavailable")
-    from trellis.pipelines import TrellisImageTo3DPipeline
+    from trellis import models
+    from trellis.pipelines import TrellisImageTo3DPipeline, samplers
     from trellis.utils import postprocessing_utils
 
-    # Do not pass the remote repo directly into upstream's broad except:
-    # a failure inside models.from_pretrained silently falls back to
-    # "ckpts/foo" as a fake HF repository, hiding the actual traceback.
-    local_model_dir = _local_checkpoint_dir()
-    pipeline = TrellisImageTo3DPipeline.from_pretrained(local_model_dir)
+    # Upstream Pipeline.from_pretrained catches ANY model loading exception
+    # with a bare except and misroutes a fallback to hf.co/ckpts/*.json.
+    # Reconstruct the exact documented pipeline from verified LOCAL ckpts
+    # instead, preserving the original error if weights cannot load.
+    local_model_dir = Path(_local_checkpoint_dir())
+    args = json.loads((local_model_dir / "pipeline.json").read_text(
+        encoding="utf-8"))["args"]
+    loaded = {}
+    for name, checkpoint in args["models"].items():
+        print("[Spaktok TRELLIS v1] Loading verified local component:", name,
+              flush=True)
+        loaded[name] = models.from_pretrained(str(local_model_dir / checkpoint))
+    ss = args["sparse_structure_sampler"]
+    slat = args["slat_sampler"]
+    pipeline = TrellisImageTo3DPipeline(
+        models=loaded,
+        sparse_structure_sampler=getattr(samplers, ss["name"])(**ss["args"]),
+        slat_sampler=getattr(samplers, slat["name"])(**slat["args"]),
+        slat_normalization=args["slat_normalization"],
+        image_cond_model=args["image_cond_model"],
+    )
+    pipeline.sparse_structure_sampler_params = ss["params"]
+    pipeline.slat_sampler_params = slat["params"]
     pipeline.cuda()
     _pipeline = pipeline
     _to_glb = postprocessing_utils.to_glb
