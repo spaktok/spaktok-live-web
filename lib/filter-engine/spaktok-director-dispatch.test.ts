@@ -13,7 +13,7 @@ const manifest=(overrides:Partial<Parameters<typeof createStudioFanoutManifest>[
   fileName:'spaktok-trellis1-preview-mobile.glb',
   sha256:'21b916f662457d17a18a2a4d1337a3f34f0ec52ad1a96584d83d986621b924ff',
   bytes:2842496,audit,description:'World prop and avatar preview',
-  rights:'original',targets:['avatar','live','filter','gift','world'],
+  rights:'original',targets:['avatar','live','filter','gift','world','video'],
   sourceEngine:'ai-360-gpu',gpuJobsUsed:1,
   createdAt:'2026-10-29T19:39:00.000Z',
   ...overrides,
@@ -23,9 +23,9 @@ describe('Spaktok AI Director cross-department routing, private only',()=>{
   const plan=createDirectorDispatch(manifest())
   expect(plan.sourceSha256).toBe(
    '21b916f662457d17a18a2a4d1337a3f34f0ec52ad1a96584d83d986621b924ff')
-  expect(plan.steps.map(x=>x.target)).toEqual(['avatar','live','filter','gift','world'])
+  expect(plan.steps.map(x=>x.target)).toEqual(['avatar','live','filter','gift','world','video'])
   expect(plan.steps.map(x=>x.route)).toEqual(
-   ['avatar','live','filter','gift','world'].map(t=>
+   ['avatar','live','filter','gift','world','video'].map(t=>
     DIRECTOR_DEPARTMENT_ROUTES[t as keyof typeof DIRECTOR_DEPARTMENT_ROUTES]))
   expect(plan.steps.every(s=>s.published===false)).toBe(true)
   expect(plan.steps.every(s=>s.status==='private-preview-staged')).toBe(true)
@@ -41,6 +41,8 @@ describe('Spaktok AI Director cross-department routing, private only',()=>{
   expect(plan.steps.find(s=>s.target==='gift')?.requiresAnimation).toBe(true)
   expect(plan.steps.find(s=>s.target==='world')?.requiresWorldCollision).toBe(true)
   expect(plan.steps.find(s=>s.target==='live')?.requiresCameraTracking).toBe(true)
+  expect(plan.steps.find(s=>s.target==='video')?.blockers)
+   .toContain('video_timeline_source_and_keyframes_not_verified')
  })
  it('does not dispatch an oversized or missing-normals GLB to preview',()=>{
   const plan=createDirectorDispatch(manifest({
