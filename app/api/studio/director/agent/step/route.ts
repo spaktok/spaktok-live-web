@@ -57,7 +57,8 @@ export async function POST(request:Request){
  }
  try{
   const instruction=JSON.stringify({
-   goal:input.prompt,source:input.originalSource,
+   goal:input.prompt,conversationHistory:input.history,
+   source:input.originalSource,
    currentAsset:input.workingSource,
    executedToolObservations:input.steps,
    availableActions:{
