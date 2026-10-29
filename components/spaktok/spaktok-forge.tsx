@@ -8,6 +8,7 @@ import {
  buildForgeReliefGeometry,DEFAULT_FORGE_RELIEF,
  type ForgeReliefOptions,type ForgeReliefStats,
 } from '@/lib/filter-engine/spaktok-forge-relief'
+import {generateForgeGpuDirect} from '@/lib/filter-engine/spaktok-forge-direct-client'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
 
 const MAX_PHOTO_BYTES=8*1024*1024
@@ -56,6 +57,7 @@ export default function SpaktokForge({
  const [webglAvailable,setWebglAvailable]=useState(true)
  const [gpuAvailable,setGpuAvailable]=useState(false)
  const [gpuConsent,setGpuConsent]=useState(false)
+ const [transferConsent,setTransferConsent]=useState(false)
  const [sourceRights,setSourceRights]=useState<'original'|'licensed'>('original')
  const [generationMode,setGenerationMode]=useState<'relief'|'gpu'|null>(null)
  const source=selected??(isImage(sourceFile)?sourceFile:null)
@@ -73,7 +75,7 @@ export default function SpaktokForge({
   setMessage('تم تغيير إعدادات النحت. اضغط إنشاء GLB لتحديث المجسم.')
  }
  useEffect(()=>{
-  setResult(null);setApproved(false);setGpuConsent(false)
+  setResult(null);setApproved(false);setGpuConsent(false);setTransferConsent(false)
   setStats(null);setGenerationMode(null)
   if(previewRef.current&&sceneRef.current){
    sceneRef.current.remove(previewRef.current)
@@ -82,7 +84,7 @@ export default function SpaktokForge({
  },[sourceFile,selected])
  useEffect(()=>{
   let live=true
-  fetch('/api/spaktok-forge/gpu',{cache:'no-store'})
+  fetch('/api/spaktok-forge/gpu-ticket',{cache:'no-store'})
    .then(r=>r.ok?r.json():Promise.reject(Error('gpu_health_error')))
    .then(data=>{if(live)setGpuAvailable(data.enabled===true)})
    .catch(()=>{if(live)setGpuAvailable(false)})
@@ -212,31 +214,14 @@ export default function SpaktokForge({
   }
  }
  const buildFull3D=async()=>{
-  if(!source||!approved||!gpuConsent||busy||!gpuAvailable)return
+  if(!source||!approved||!gpuConsent||!transferConsent||busy||!gpuAvailable)return
   setBusy(true)
   setMessage('توليد 3D كامل بواسطة GPU خاص بالمشغل. قد يستهلك وقت معالجة مدفوعًا؛ لا يُرسَل إلى Rodin…')
   try{
    if(!isImage(source)||source.size<128||source.size>MAX_PHOTO_BYTES)
     throw Error('forge_gpu_invalid_source')
-   const form=new FormData()
-   form.set('image',source)
-   form.set('rights',sourceRights)
-   form.set('approveCompute','yes')
-   form.set('approveTransfer','yes')
-   const response=await fetch('/api/spaktok-forge/gpu',{
-    method:'POST',body:form,credentials:'same-origin',
-    cache:'no-store',signal:AbortSignal.timeout(115000),
-   })
-   if(!response.ok){
-    let error='forge_gpu_request_failed'
-    try{const body=await response.json();error=body.error??error}catch{}
-    throw Error(error)
-   }
-   const length=Number(response.headers.get('content-length')??0)
-   if(length>35*1024*1024)throw Error('forge_gpu_result_too_large')
-   const bytes=await response.arrayBuffer()
-   const out=inspectWordGeneratedGlb(bytes,'spaktok-forge-ai.glb')
-   const file=new File([bytes],out.fileName,{type:'model/gltf-binary'})
+   const {file,inspection:out}=await generateForgeGpuDirect(source,sourceRights)
+   const bytes=await file.arrayBuffer()
    setResult(file);setGenerationMode('gpu');setStats(null)
    if(bytes.byteLength<=15*1024*1024&&sceneRef.current){
     try{
@@ -357,11 +342,15 @@ export default function SpaktokForge({
       <label className="mt-2 flex gap-2 text-xs leading-5 text-amber-100">
        <input type="checkbox" checked={gpuConsent}
         onChange={e=>setGpuConsent(e.target.checked)} className="mt-1"/>
-       أوافق على إرسال صورتي إلى خادم GPU الخاص بالمشغّل
-       واستهلاك وقت حسابه المدفوع لمهمة واحدة فقط.
+       أوافق على استهلاك مهمة GPU واحدة من الحصة المدفوعة للمشغّل.
+      </label>
+      <label className="mt-2 flex gap-2 text-xs leading-5 text-amber-100">
+       <input type="checkbox" checked={transferConsent}
+        onChange={e=>setTransferConsent(e.target.checked)} className="mt-1"/>
+       أوافق منفصلًا على نقل صورتي مباشرة إلى خادم GPU الخاص بالمشغّل.
       </label>
       <button type="button" onClick={()=>void buildFull3D()}
-       disabled={!source||!approved||!gpuConsent||busy}
+       disabled={!source||!approved||!gpuConsent||!transferConsent||busy}
        className="mt-3 w-full rounded-lg bg-violet-500 px-3 py-3 text-xs font-bold disabled:opacity-40">
        إنشاء مجسم 360° بواسطة AI GPU
       </button>
