@@ -7,6 +7,11 @@ const AI_DOMAIN='spaktok-director-ai-step-v1';
 const ED_PUBLIC='MCowBQYDK2VwAyEAN/tgkUKQRZ7J3fpryNYw3JFrK8OqQOxPpZDp05LcsLw=';
 const MODEL='@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 const LIMIT=8000;
+// Allow a conservative portion of the shared account's daily free-neuron
+// allocation; this CANNOT know neuron usage by other Workers AI projects.
+// Do NOT turn on paid overflow automatically.
+const NEURON_CAP=7000;
+const REQUEST_RESERVE=250;
 const actions=['inspect_asset','generate_relief','generate_3d_gpu',
   'recolor_asset','dispatch_asset','finish'];
 const targets=['avatar','live','filter','gift','world','video'];
@@ -44,6 +49,26 @@ async function signatureIsValid(request,body){
     new TextEncoder().encode(payload));
  }catch{return false}
 }
+async function reserveFreeBudget(db){
+ if(!db)throw Error('ai_neuron_budget_db_unavailable');
+ const day=new Date().toISOString().slice(0,10);
+ await db.prepare(`INSERT OR IGNORE INTO director_ai_daily_usage
+  (day,spent_neurons,reserved_neurons,requests)
+  VALUES (?,0,0,0)`).bind(day).run();
+ const claim=await db.prepare(`UPDATE director_ai_daily_usage
+  SET reserved_neurons=reserved_neurons+?,
+      requests=requests+1, updated_at=datetime('now')
+  WHERE day=? AND spent_neurons+reserved_neurons+? <= ?`)
+  .bind(REQUEST_RESERVE,day,REQUEST_RESERVE,NEURON_CAP).run();
+ return claim?.meta?.changes===1?day:null;
+}
+async function settleBudget(db,day,used){
+ await db.prepare(`UPDATE director_ai_daily_usage
+  SET reserved_neurons=MAX(0,reserved_neurons-?),
+      spent_neurons=spent_neurons+?,updated_at=datetime('now')
+  WHERE day=?`).bind(REQUEST_RESERVE,
+    Number.isFinite(used)?Math.max(0,used):REQUEST_RESERVE,day).run();
+}
 async function handle(request,env){
  const url=new URL(request.url);
  if(url.pathname==='/health'&&request.method==='GET')
@@ -64,8 +89,13 @@ async function handle(request,env){
     input.instruction.length>7000||
     typeof input.system!=='string'||input.system.length>3500)
   return json({error:'invalid_payload'},422);
- // The Worker cannot execute GLB edits, publish, spend GPU, or call databases.
- // It decides the next permitted tool; Node and the browser validate again.
+ // The Worker cannot edit GLB, publish, spend GPU, or read owner media.
+ // Only aggregated free-budget accounting is stored in D1.
+ let day;
+ try{day=await reserveFreeBudget(env.DIRECTOR_BUDGET_D1)}
+ catch{return json({error:'ai_budget_store_unavailable'},503)}
+ if(!day)return json({error:'free_daily_neuron_budget_reached'},429);
+ let usage=REQUEST_RESERVE; // fail closed: count reservation on unknown usage
  try{
   const result=await env.AI.run(MODEL,{
    messages:[
@@ -75,6 +105,8 @@ async function handle(request,env){
    response_format:{type:'json_schema',json_schema:schema},
    max_tokens:240,temperature:0,
   });
+  if(typeof result?.usage?.neurons==='number')
+   usage=result.usage.neurons;
   const candidate=result?.response||result?.choices?.[0]?.message?.content;
   const parsed=typeof candidate==='string'?JSON.parse(candidate):candidate;
   if(!parsed||!actions.includes(parsed.action)||
@@ -90,6 +122,9 @@ async function handle(request,env){
   // A free allowance can be exhausted. Never fall back to an unconsented
   // paid model or an unauthenticated public endpoint.
   return json({error:'workers_ai_unavailable',cause:String(error).slice(0,120)},503);
+ }finally{
+  // Conservative charge on uncertain errors; never abandon reservations.
+  try{await settleBudget(env.DIRECTOR_BUDGET_D1,day,usage)}catch{}
  }
 }
 export default {
