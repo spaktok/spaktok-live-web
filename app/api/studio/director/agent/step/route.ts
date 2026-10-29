@@ -4,7 +4,7 @@ import {
  freeCloudflareAgentConfigured,requestCloudflareFreeAgentStep,
 } from '@/lib/server/spaktok-director-cloudflare'
 import {
- agentRequestSchema,agentStepSchema,validateAgentStep,type AgentStep,
+ agentRequestSchema,agentStepSchema,validateAgentStep,normalizeAgentDecision,type AgentStep,
 } from '@/lib/filter-engine/spaktok-director-agent-contract'
 
 export const runtime='nodejs'
@@ -128,9 +128,10 @@ All tool decisions remain subject to policy gates and owner consent.`
    })
    step=agentStepSchema.parse(response.output)
   }
-  const policy=validateAgentStep(step,input)
+  const constrained=normalizeAgentDecision(step,input.prompt)
+  const policy=validateAgentStep(constrained,input)
   if(!policy.ok)return reply({error:'agent_policy_rejected',reason:policy.reason},422)
-  return reply({enabled:true,step,modelDriven:true,provider:usedProvider,
+  return reply({enabled:true,step:constrained,modelDriven:true,provider:usedProvider,
    freeDailyQuota:usedProvider!=='gateway',neurons,sourceVision:image!==null})
  }catch{
   return reply({error:'model_unavailable'},503)
