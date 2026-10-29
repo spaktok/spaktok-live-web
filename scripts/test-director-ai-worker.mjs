@@ -16,6 +16,15 @@ try{
  assert.equal(data.provider,'cloudflare-workers-ai')
  assert.equal(data.auth,'signed-server-only')
  checks.push('health: pass, no token required')
+ const check=await get('/self-test')
+ assert.equal(check.status,200)
+ const metrics=await check.json()
+ assert.equal(metrics.ok,true)
+ assert.equal(metrics.unsignedDenied,true)
+ assert.equal(metrics.forgedDenied,true)
+ assert.equal(metrics.modelInvoked,false)
+ assert.equal(metrics.budgetDebited,false)
+ checks.push('Ed25519 signature negative tests: pass, no inference used')
  const blocked=await get('/v1/agent/step',{
   method:'POST',headers:{'content-type':'application/json'},
   body:JSON.stringify({system:'test',instruction:'test'}),
