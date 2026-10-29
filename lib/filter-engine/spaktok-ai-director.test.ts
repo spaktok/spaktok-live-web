@@ -43,6 +43,18 @@ describe('Spaktok AI Director private production router',()=>{
   expect(plan.publication).toBe('private-draft')
   expect(plan.stages.find(s=>s.id==='gift-animation')?.status).toBe('requires-work')
  })
+ it('supports free browser-only 2.5D preview even when GPU is disabled',()=>{
+  const plan=planSpaktokDirector({
+   description:'أفاتار وفلتر',targets:[],source:'image',
+   rightsApproved:true,gpuAvailable:false,localReliefSelected:true,
+  })
+  expect(plan.targets).toEqual(['avatar','filter'])
+  expect(plan.estimatedGpuJobs).toBe(0)
+  expect(plan.uploadsSourceImage).toBe(false)
+  expect(plan.stages.find(x=>x.id==='generation')?.status).toBe('ready')
+  expect(plan.stages.find(x=>x.id==='generation')?.reason)
+   .toBe('browser_only_2_5d_relief_not_360')
+ })
  it('accepts valid GLB as input with ZERO GPU cost but never claims a rig',()=>{
   const plan=planSpaktokDirector({
    description:'',targets:['avatar','world'],source:'glb',
