@@ -130,10 +130,14 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
  if(step.action==='dispatch_asset'&&
    request.steps.some(event=>event.action==='recolor_asset'&&!event.ok))
   return {ok:false,reason:'requested_recolor_failed_no_silent_fallback'}
- if(step.action==='dispatch_asset'&&
-  /(?:جميع|كل|كافة)\s+(?:الأقسام|الاقسام)|all\s+studios/i.test(request.prompt)&&
-  step.targets.length!==DIRECTOR_TARGETS.length)
-  return {ok:false,reason:'all_studios_requested'}
+ if(step.action==='dispatch_asset'){
+  const expected=normalizeAgentDecision(step,request.prompt).targets
+  const matches=step.targets.length===expected.length&&
+   step.targets.every((target,i)=>target===expected[i])
+  if(!matches)return {ok:false,reason:
+   /(?:جميع|كل|كافة)\s+(?:الأقسام|الاقسام)|all\s+studios/i.test(request.prompt)?
+    'all_studios_requested':'creator_destinations_mismatch'}
+ }
  if(step.action==='inspect_asset'){
   const lastChange=request.steps.reduce((index,event,i)=>
    ['generate_relief','generate_3d_gpu','recolor_asset'].includes(event.action)&&event.ok?i:index,-1)
