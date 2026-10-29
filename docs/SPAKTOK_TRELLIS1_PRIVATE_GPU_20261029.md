@@ -140,6 +140,36 @@ The model access flag is a manual operator declaration about the CHOSEN
 engine's model license and weights. It is not a Meta DINOv3 approval.
 Until sample and security checks pass, leave BOTH enabled flags false.
 
+### Torch/Transformers mismatch discovered after CUDA + import success
+
+The screenshot on the real A100 showed:
+- GPU preflight OK: NVIDIA A100 sm_80, PyTorch 2.4.0+cu121, toolkit 12.1.
+- nvdiffrast, Kaolin and Forge Python imports passed.
+- A newer Transformers version printed **"Disabling PyTorch because PyTorch >= 2.6 is required but found 2.4.0"**.
+
+This is a Python package compatibility warning, NOT a reason to upgrade Torch,
+which would invalidate already compiled CUDA extensions.
+
+Run **only** the lightweight isolated Python dependency repair; it pins
+Transformers 4.46.3 (compatible with Torch 2.4) and checks the PyTorch
+backend remains enabled. It does not rebuild CUDA/torch/nvdiffrast:
+
+    cd /workspace/spaktok-forge
+    git pull --ff-only origin feat/vast-a100-forge-bridge-20261029
+    bash -n scripts/vast-a100-trellis1.sh
+    bash scripts/vast-a100-trellis1.sh repair-python
+
+Expected: FORGE_STACK prints torch=2.4.0+cu121, transformers=4.46.3,
+transformers_torch_enabled=True, cuda=12.1.
+
+Only then perform the paid *real* image-to-GLB test with one Microsoft sample:
+
+    bash scripts/vast-a100-trellis1.sh smoke
+
+Do not claim a real GLB exists until the file appears AND the GLB quality
+audit passes. A Warp CUDA toolkit version shown in logs is separate from
+the PyTorch build and still requires validation in an actual model run.
+
 ## Remaining release blockers
 
 - GitHub Actions reports failure with missing job steps/logs; offline tests
