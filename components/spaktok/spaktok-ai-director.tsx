@@ -5,6 +5,7 @@ import {
  planSpaktokDirector,type DirectorTarget,type DirectorAssetQA,
 } from '@/lib/filter-engine/spaktok-ai-director'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
+import {generateForgeGpuDirect} from '@/lib/filter-engine/spaktok-forge-direct-client'
 import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-local-relief'
 import {
  createStudioFanoutManifest,type StudioFanoutManifest,
@@ -93,7 +94,7 @@ export default function SpaktokAIDirector({
  },[sourceFile])
  useEffect(()=>{
   let active=true
-  fetch('/api/spaktok-forge/gpu',{cache:'no-store'})
+  fetch('/api/spaktok-forge/gpu-ticket',{cache:'no-store'})
    .then(r=>r.ok?r.json():Promise.reject(Error('forge_gpu_health')))
    .then(x=>{if(active)setHealth({
     enabled:x.enabled===true,
@@ -216,32 +217,11 @@ export default function SpaktokAIDirector({
    if(source.size<128||source.size>8*1024*1024)
     throw Error('director_invalid_image_size')
    setStatus('إرسال مهمة GPU واحدة بعد موافقتك، وتوليد GLB من الصورة…')
-   // Existing gateway enforces signed-in user, one job/user/day, operator
-   // global D1 quota, fixed HTTPS host and a 90s upstream time limit.
-   // The text prompt is used for DESTINATION planning ONLY, not as a
-   // provider image instruction — SF3D does not accept a text prompt.
-   const body=new FormData()
-   body.set('image',source)
-   body.set('rights',rights)
-   body.set('approveCompute','yes')
-   body.set('approveTransfer','yes')
-   const response=await fetch('/api/spaktok-forge/gpu',{
-    method:'POST',body,cache:'no-store',credentials:'same-origin',
-   })
-   if(!response.ok){
-    const data=await response.json().catch(()=>({error:'unknown'}))
-    throw Error(typeof data.error==='string'?data.error:
-     'director_gpu_provider_failed')
-   }
-   const declared=Number(response.headers.get('content-length')??0)
-   if(declared>35*1024*1024)
-    throw Error('director_result_too_large')
-   const output=await response.arrayBuffer()
-   if(output.byteLength>35*1024*1024)
-    throw Error('director_result_too_large')
-   await commitGlb(new File([output],'spaktok-director-ai-result.glb',{
-    type:'model/gltf-binary',
-   }),1,'ai-360-gpu')
+   // Small authenticated D1 quota ticket goes to Vercel; the image
+   // and potentially 35MB GLB travel DIRECTLY to the licensed GPU host.
+   // Source text routes output departments but does not condition SF3D.
+   const generated=await generateForgeGpuDirect(source,rights)
+   await commitGlb(generated.file,1,'ai-360-gpu')
   }catch(error){
    setStatus('لم تكتمل المهمة: '+(error instanceof Error?error.message:String(error))+
     '. إذا بدأ تشغيل GPU فالمحاولة قد تُحتسب؛ لا تعاود الإرسال دون فحص الحالة.')
