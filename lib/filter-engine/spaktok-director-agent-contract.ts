@@ -84,8 +84,12 @@ export function normalizeAgentDecision(step:AgentStep,prompt:string):AgentStep{
   for(const target of detectDirectorTargets(clause))excluded.add(target)
  }
  const selected=explicit.length?[...explicit]:unique
+ // No specialist was requested for a result-only operation. The neutral
+ // World mesh preview profile is an INTERNAL manifest placeholder only:
+ // present_asset NEVER persists or hands off anything to World/Live.
+ const localOnly=step.action==='present_asset'&&explicit.length===0
  return {...step,
-  targets:selected.filter(target=>!excluded.has(target)),
+  targets:localOnly?['world']:selected.filter(target=>!excluded.has(target)),
   color:step.action==='recolor_asset'?step.color:null,
  }
 }
