@@ -22,6 +22,7 @@ import {
 } from '@/lib/filter-engine/spaktok-director-chat-router'
 import DirectorChatGlbViewer from './studio/director-chat-glb-viewer'
 import StudioPrivateCloudPanel from './studio/studio-private-cloud-panel'
+import {runDirectorAgent} from '@/lib/filter-engine/spaktok-director-agent-client'
 
 type Result=Readonly<{
  file:File;manifest:StudioFanoutManifest;dispatch:DirectorDispatch
@@ -77,6 +78,9 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
  const [transferApproved,setTransferApproved]=useState(false)
  const [computeApproved,setComputeApproved]=useState(false)
  const [gpuEnabled,setGpuEnabled]=useState(false)
+ const [agentEnabled,setAgentEnabled]=useState(false)
+ const [agentStatus,setAgentStatus]=useState('جارٍ فحص محرك AI…')
+ const [visionConsent,setVisionConsent]=useState(false)
  const [busy,setBusy]=useState(false)
  const [imagePreview,setImagePreview]=useState('')
  const fileRef=useRef<HTMLInputElement|null>(null)
@@ -98,6 +102,22 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
   refresh()
   const interval=window.setInterval(refresh,60000)
   return()=>{live=false;window.clearInterval(interval)}
+ },[])
+ useEffect(()=>{
+  let live=true
+  fetch('/api/studio/director/agent/step',{cache:'no-store',credentials:'same-origin'})
+   .then(r=>r.ok?r.json():Promise.reject(Error('unavailable')))
+   .then(x=>{
+    if(!live)return
+    setAgentEnabled(x.enabled===true)
+    setAgentStatus(x.enabled===true?'وكيل AI متصل بالمحركات':
+     x.reason==='login_required'?'وكيل AI يحتاج تسجيل الدخول':
+      'وكيل AI غير مفعّل؛ المتاح توجيه محلي بالقواعد')
+   })
+   .catch(()=>{if(live){
+    setAgentEnabled(false);setAgentStatus('وكيل AI غير متصل؛ وضع محلي فقط')
+   }})
+  return()=>{live=false}
  },[])
  useEffect(()=>{
   // Only the attached photograph is displayed as thumbnail. Never send it
@@ -131,6 +151,7 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
   }
   setSelected(candidate);setLastInput(candidate)
   setRightsApproved(false);setTransferApproved(false);setComputeApproved(false)
+  setVisionConsent(false)
  }
  const patch=(id:string,fields:Partial<ChatMessage>)=>
   setMessages(prev=>prev.map(m=>m.id===id?{...m,...fields}:m))
@@ -174,6 +195,32 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
     text:'أفهم طلبك وأجهّز المحرك المناسب…'}])
   setText('');setBusy(true)
   try{
+   if(agentEnabled){
+    if(file&&!rightsApproved){
+     patch(assistantId,{state:'error',text:'أكد حقوق المصدر أولًا. وكيل AI لن يرفع صورة أو يشغّل GPU دون موافقة.'})
+     return
+    }
+    const answer=await runDirectorAgent({
+     prompt,source:file??null,rights,rightsApproved,visionConsent,
+     gpuAvailable:gpuEnabled,
+     gpuTransferConsent:transferApproved,
+     gpuComputeConsent:computeApproved,
+     onProgress:progress=>patch(assistantId,{text:progress}),
+    })
+    if(answer.result){
+     setLastResult(answer.result)
+     setSelected(null);setLastInput(null)
+     if(answer.result.sourceEngine!=='existing-glb')
+      onGeneratedGlb?.(answer.result.file)
+    }
+    setVisionConsent(false);setTransferApproved(false);setComputeApproved(false)
+    patch(assistantId,{state:'done',text:answer.reply+
+     (answer.actions.length?'\\nالأدوات المنفذة: '+answer.actions.map(
+      a=>a.action+':'+(a.ok?'نجاح':'فشل')).join(' · '):''),
+     ...(answer.result?{result:answer.result}:{})})
+    return
+   }
+   // Deterministic fallback is NOT represented as a live agent or AI.
    // The optional private LLM classifies ONLY the command text. Source
    // images/models are NEVER sent to it. If it is offline, the deterministic
    // local routing logic is immediately available, with no paid retry.
@@ -291,7 +338,7 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
    </div>
    <div className="flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/[.06] px-3 py-1.5 text-[11px] text-emerald-300">
     <span className="h-2 w-2 rounded-full bg-emerald-400"/>
-    {gpuEnabled?'GPU متصل · مهام باشتراك':'المحركات المحلية جاهزة · GPU غير متصل'}
+    {agentEnabled?'AI Agent متصل · '+(gpuEnabled?'GPU متاح':'GPU غير متصل'):agentStatus}
    </div>
   </header>
   <div className="relative grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_225px]">
@@ -405,8 +452,15 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
        <label className="flex items-center gap-2"><input type="checkbox" checked={transferApproved} onChange={e=>setTransferApproved(e.target.checked)}/> أوافق على إرسال الصورة إلى GPU</label>
        <label className="flex items-center gap-2"><input type="checkbox" checked={computeApproved} onChange={e=>setComputeApproved(e.target.checked)}/> أوافق على تكلفة مهمة GPU واحدة</label>
       </div>}
+     {agentEnabled&&sourceKind==='image'&&<label className="flex items-center gap-2 text-[11px] text-sky-200">
+      <input type="checkbox" checked={visionConsent}
+       onChange={e=>setVisionConsent(e.target.checked)}/>
+      أوافق أن يرى نموذج AI نسخة مصغرة من الصورة لفهم محتواها (ليس الملف الأصلي).
+     </label>}
      <p className="text-[10px] leading-5 text-slate-500">
-      المخرجات خاصة وغير منشورة. لا تُحلَّل محتويات الصور في نموذج لغوي؛ تُستخدم الصورة فقط في محرك التوليد الذي وافقت عليه. لا يُعاد تشغيل GPU تلقائيًا.
+      {agentEnabled?
+       'AI يختار أداة، ينفذها المحرك داخل المتصفح، ثم يقرأ نتيجة التنفيذ ويقرر التالي. تحليل الصورة اختياري بموافقة منفصلة. لا نشر أو دفع أو تشغيل GPU دون تفويض.':
+       'وكيل AI غير مفعّل؛ هذا وضع أدوات محلية بقواعد وليس ذكاءً اصطناعيًا مستقلًا. النماذج والملفات لا تُنشر تلقائيًا.'}
      </p>
     </footer>
    </div>
