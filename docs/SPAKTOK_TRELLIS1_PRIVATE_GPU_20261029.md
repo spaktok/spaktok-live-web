@@ -43,10 +43,13 @@ Only when ready to watch compilation and hourly costs:
 
     bash scripts/vast-a100-trellis1.sh install
 
-The script uses isolated PyTorch 2.4.0+cu121 and nvcc12.x to avoid the
-official default cu118 vs previous Vast CUDA12.x toolchain major mismatch.
-Even minor mismatches and upstream extension builds MUST be confirmed
-on the actual rented A100 before relying on the environment.
+The currently observed Vast A100 host has nvcc12.9. The script installs NVIDIA's
+isolated CUDA Toolkit 12.1.1 in Conda, pins PyTorch 2.4.0+cu121,
+and REQUIRES the active nvcc to report CUDA12.1 before building extensions.
+The official setup script's exact torch-version matching is normalized for
+PyTorch wheels with a +cu121 suffix, and xformers attention is selected instead
+of flash-attn to avoid extra compilation risk. CUDA extensions still MUST
+be confirmed on the rented A100 before treating this as a working image.
 
 To create a REAL sample from Microsoft's public image:
 
