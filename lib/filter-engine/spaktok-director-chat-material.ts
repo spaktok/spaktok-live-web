@@ -19,18 +19,18 @@ const STYLES:Readonly<Record<DirectorMaterialStyle['id'],DirectorMaterialStyle>>
  white:{id:'white',color:0xf5f7fc,metallic:.05,roughness:.58,label:'أبيض'},
 }
 const RULES:readonly [RegExp,DirectorMaterialStyle['id']][]=[
- [/ذهبي|ذهبية|ذهبية|\bgold\b|\bgolden\b/i,'gold'],
- [/فضي|فضية|\bsilver\b/i,'silver'],
- [/أحمر|احمر|حمراء|حمراء|\bred\b/i,'red'],
- [/أزرق|ازرق|زرقاء|\bblue\b/i,'blue'],
- [/أخضر|اخضر|خضراء|\bgreen\b/i,'green'],
- [/بنفسجي|بنفسجية|أرجواني|\bpurple\b|\bviolet\b/i,'purple'],
- [/أسود|اسود|سوداء|\bblack\b/i,'black'],
- [/أبيض|ابيض|بيضاء|\bwhite\b/i,'white'],
+ [/ذهبي|ذهبية|\bgold\b|\bgolden\b|vergold/i,'gold'],
+ [/فضي|فضية|\bsilver\b|silber/i,'silver'],
+ [/أحمر|احمر|حمراء|\bred\b|\brot(?:e|en|es|em|er)?\b/i,'red'],
+ [/أزرق|ازرق|زرقاء|\bblue\b|\bblau(?:e|en|es|em|er)?\b/i,'blue'],
+ [/أخضر|اخضر|خضراء|\bgreen\b|grün|gruen/i,'green'],
+ [/بنفسجي|بنفسجية|أرجواني|\bpurple\b|\bviolet\b|violett|lila/i,'purple'],
+ [/أسود|اسود|سوداء|\bblack\b|schwarz/i,'black'],
+ [/أبيض|ابيض|بيضاء|\bwhite\b|weiß|weiss/i,'white'],
 ]
 export function detectDirectorMaterialStyle(prompt:string):
  DirectorMaterialStyle|null{
- if(!/(غيّر|غير|بدّل|بدل|لوّن|لون|اجعل|خليه|خلّي|حوّل|حول|paint|recolor|make|color|colour|material|خامة)/i.test(prompt))
+ if(!/(غيّر|غير|بدّل|بدل|لوّن|لون|اجعل|خليه|خلّي|حوّل|حول|paint|recolor|make|color|colour|material|خامة|färb|faerb|ändere|aendere|farbe|mach(?:e)?|kolorier|tön)/i.test(prompt))
   return null
  for(const [test,key] of RULES)if(test.test(prompt))return STYLES[key]
  return null
