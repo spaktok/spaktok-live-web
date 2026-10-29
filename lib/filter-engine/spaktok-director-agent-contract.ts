@@ -1,6 +1,5 @@
 import {z} from 'zod'
 import {DIRECTOR_TARGETS,type DirectorTarget} from './spaktok-ai-director'
-import {detectDirectorMaterialStyle} from './spaktok-director-chat-material'
 
 export const AGENT_ACTIONS=[
  'inspect_asset','generate_relief','generate_3d_gpu','recolor_asset',
@@ -33,6 +32,17 @@ export const agentRequestSchema=z.object({
  imagePreview:z.string().max(230000).nullable(),
 }).strict()
 export type AgentRequest=z.infer<typeof agentRequestSchema>
+const COLOR_TESTS:Readonly<Record<typeof AGENT_STYLES[number],RegExp>>={
+ gold:/ذهبي|ذهبية|gold|golden/i,
+ silver:/فضي|فضية|silver/i,
+ red:/احمر|أحمر|حمراء|red/i,
+ blue:/ازرق|أزرق|زرقاء|blue/i,
+ green:/اخضر|أخضر|خضراء|green/i,
+ purple:/بنفسجي|بنفسجية|أرجواني|purple|violet/i,
+ black:/اسود|أسود|سوداء|black/i,
+ white:/ابيض|أبيض|بيضاء|white/i,
+}
+const MATERIAL_EDIT=/غيّر|غير|بدّل|بدل|لوّن|لون|اجعل|خليه|خلّي|حوّل|حول|paint|recolor|make|color|colour|material|خامة/i
 export const requiresRelief=(prompt:string)=>/\b2[.,]?5d\b|بارز|relief|heightfield|نحت سطحي/i.test(prompt)
 export const agentAllowedTargets=(targets:readonly DirectorTarget[]) =>
  targets.length>0&&targets.length<=6&&
@@ -50,9 +60,9 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
   (request.workingSource!=='image'||request.steps.some(s=>s.action==='generate_3d_gpu')))
   return {ok:false,reason:'paid_gpu_cannot_repeat'}
  if(step.action==='recolor_asset'){
-  const requested=detectDirectorMaterialStyle(request.prompt)
-  if(request.workingSource!=='glb'||!requested||
-      step.color!==requested.id)
+  if(request.workingSource!=='glb'||!step.color||
+      !MATERIAL_EDIT.test(request.prompt)||
+      !COLOR_TESTS[step.color].test(request.prompt))
    return {ok:false,reason:'unapproved_material_change'}
  }
  if(['inspect_asset','dispatch_asset'].includes(step.action)&&
