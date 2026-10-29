@@ -52,6 +52,19 @@ describe('Real Spaktok AI tool execution guards',()=>{
    {action:'inspect_asset',ok:true,detail:'valid 28000 triangles'}]})
   expect(requiredAgentAction(inspected)).toBe('dispatch_asset')
  })
+ it('neutralizes a hallucinated Live destination when user asks only for a local result',()=>{
+  const prompt='اجعل المجسم ذهبيًا فقط، لا ترسله إلى أي قسم'
+  const corrected=normalizeAgentDecision(step({
+   action:'present_asset',targets:['live'],color:null,
+  }),prompt)
+  expect(corrected.targets).toEqual(['world'])
+  const state=req({prompt,steps:[
+   {action:'recolor_asset',ok:true,detail:'real edited GLB'},
+   {action:'inspect_asset',ok:true,detail:'verified GLB'},
+  ]})
+  expect(requiredAgentAction(state)).toBe('present_asset')
+  expect(validateAgentStep(corrected,state).ok).toBe(true)
+ })
  it('returns a real recolored file in chat without distributing it',()=>{
   const prompt='اجعل المجسم ذهبيًا'
   const steps=[
