@@ -51,6 +51,31 @@ PyTorch wheels with a +cu121 suffix, and xformers attention is selected instead
 of flash-attn to avoid extra compilation risk. CUDA extensions still MUST
 be confirmed on the rented A100 before treating this as a working image.
 
+### Repair CUDA 12.1 / GCC host compiler incompatibility
+
+The owner's A100 reported nvdiffrast compile error from CUDA 12.1
+host_config.h: "gcc versions later than 12 are not supported". This means
+the host compiler is too new, **not** a broken NVIDIA A100, failed Torch install,
+or a gated DINOv3 checkpoint.
+
+`scripts/vast-a100-trellis1.sh resume` now checks for GCC/G++ 12, installs
+ONLY these packages with apt when running as root if they are missing, sets
+CC/CXX/CUDAHOSTCXX/NVCC_CCBIN to the GCC12 binaries, and compiles the existing
+verified nvdiffrast source under the isolated CUDA 12.1 environment. It does
+NOT reinstall CUDA, PyTorch or Kaolin and does NOT pass the dangerous
+`--allow-unsupported-compiler` flag.
+
+Suggested restart after updating the repo:
+
+    cd /workspace/spaktok-forge
+    git pull --ff-only origin feat/vast-a100-forge-bridge-20261029
+    bash -n scripts/vast-a100-trellis1.sh
+    set -o pipefail
+    bash scripts/vast-a100-trellis1.sh resume 2>&1 | tee -a /workspace/spaktok-trellis1-install.log
+
+Stop and inspect the **first** compiler error if a new failure appears.
+Do not rerun expensive builds blindly or enable creator API yet.
+
 ### Repair after partial installation: existing nvdiffrast source
 
 If the official setup prints `fatal: destination path '/tmp/extensions/nvdiffrast' already exists`
