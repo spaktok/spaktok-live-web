@@ -39,6 +39,8 @@ function config(origin:string){
  const urlText=process.env.SPAKTOK_FORGE_GPU_URL??''
  const token=process.env.SPAKTOK_FORGE_GPU_TOKEN??''
  const provider=process.env.SPAKTOK_FORGE_GPU_PROVIDER??'runpod'
+ const engine=process.env.SPAKTOK_FORGE_GPU_ENGINE??'stable-fast-3d'
+ if(engine!=='stable-fast-3d'&&engine!=='trellis2')return null
  if(!expectedOrigin||expectedOrigin!==origin||
   token.length<32||!urlText||!host)return null
  try{
@@ -46,14 +48,14 @@ function config(origin:string){
   const originURL=new URL(expectedOrigin)
   if(originURL.protocol!=='https:'||originURL.origin!==expectedOrigin||
    !isForgeGpuEndpoint(urlText,host,provider))return null
-  return {url:url.toString(),token,globalCap,provider}
+  return {url:url.toString(),token,globalCap,provider,engine}
  }catch{return null}
 }
 const allowed=(request:NextRequest)=>
  request.headers.get('origin')===request.nextUrl.origin&&
  request.headers.get('sec-fetch-site')!=='cross-site'
 
-async function gpuHealthy(cfg:{url:string;token:string}):Promise<boolean>{
+async function gpuHealthy(cfg:{url:string;token:string;engine:string}):Promise<boolean>{
  // Prove the endpoint knows the operator key WITHOUT ever sending the
  // secret over a public tunnel. A random TLS tunnel URL alone proves nothing.
  const nonce=randomBytes(16).toString('hex')
@@ -67,7 +69,7 @@ async function gpuHealthy(cfg:{url:string;token:string}):Promise<boolean>{
   if(!r.ok)return false
   const actual=r.headers.get('x-forge-health-signature')??''
   const expected=createHmac('sha256',cfg.token)
-   .update('forge-health-v1:'+nonce+':stable-fast-3d:ready')
+   .update('forge-health-v1:'+nonce+':'+cfg.engine+':ready')
    .digest('hex')
   if(!/^[0-9a-f]{64}$/.test(actual)||
    !timingSafeEqual(Buffer.from(actual,'hex'),Buffer.from(expected,'hex')))
@@ -77,7 +79,7 @@ async function gpuHealthy(cfg:{url:string;token:string}):Promise<boolean>{
   const parsed:unknown=JSON.parse(raw)
   return !!parsed&&typeof parsed==='object'&&
    (parsed as {ready?:unknown;engine?:unknown}).ready===true&&
-   (parsed as {ready?:unknown;engine?:unknown}).engine==='stable-fast-3d'
+   (parsed as {ready?:unknown;engine?:unknown}).engine===cfg.engine
  }catch{return false}
 }
 
@@ -87,7 +89,7 @@ export async function GET(request:NextRequest){
  return json({
   enabled:online,delivery:'direct-private-ticket',
   provider:cfg?.provider??null,
-  engine:'Stable Fast 3D (licensed self-host)',
+  engine:cfg?.engine??'disabled',
   full360:true,dailyCapPerOwner:1,
   globalDailyCap:cfg?.globalCap??null,maxImageMB:8,
   maxResultMB:35,
