@@ -61,14 +61,17 @@ export function normalizeAgentDecision(step:AgentStep,prompt:string):AgentStep{
  // This avoids copying a private source into an explicitly excluded studio.
  const excluded=new Set<DirectorTarget>()
  const normalized=prompt.normalize('NFKC')
- const exclusions=/(?:بدون|ما عدا|عدا|إلا|الا|except|without)\s+([^،,.؛\n]{1,75})/gi
+ const exclusions=/(?:بدون|ما عدا|عدا|إلا|الا|except|without|außer|ausser|ohne)\s+([^،,.؛\n]{1,75})/gi
  for(const match of normalized.matchAll(exclusions)){
   // A contrastive clause ("بدون اللايف لكن في العالم") is not an exclusion.
-  const clause=match[1].split(/\s+(?:لكن|ولكن|بل|instead|however)\s+/i)[0]
+  const clause=match[1].split(/\s+(?:لكن|ولكن|بل|instead|however|aber|sondern)\s+/i)[0]
   for(const target of detectDirectorTargets(clause))excluded.add(target)
  }
  const selected=explicit.length?[...explicit]:unique
- return {...step,targets:selected.filter(target=>!excluded.has(target))}
+ return {...step,
+  targets:selected.filter(target=>!excluded.has(target)),
+  color:step.action==='recolor_asset'?step.color:null,
+ }
 }
 /** Proof-driven execution state. Model messages and user-supplied success
  * strings are NOT proof; these are intended only to gate the browser executor.
