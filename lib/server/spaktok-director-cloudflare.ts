@@ -1,10 +1,13 @@
 import 'server-only'
-import {createHash,createPrivateKey,sign} from 'node:crypto'
+import {createHash,createPrivateKey,createPublicKey,sign} from 'node:crypto'
 import {agentStepSchema,type AgentStep} from '@/lib/filter-engine/spaktok-director-agent-contract'
 
 const DOMAIN='spaktok-director-ai-step-v1'
 const URL='https://spaktok-director-ai.spaktok.workers.dev/v1/agent/step'
 const PUBLIC_PROVIDER='cloudflare-workers-ai'
+// The SAME signing identity must be configured on server and deployed Worker.
+// An incorrect environment secret MUST fail closed before any LLM billing.
+const DEPLOYED_SIGNER_SPKI='MCowBQYDK2VwAyEAN/tgkUKQRZ7J3fpryNYw3JFrK8OqQOxPpZDp05LcsLw='
 const PAYLOAD_MAX=8000
 
 export function freeCloudflareAgentConfigured():boolean{
@@ -28,6 +31,10 @@ export function signCloudflareAgentInstruction(
  const digest=createHash('sha256').update(body,'utf8').digest('hex')
  const canonical=[DOMAIN,digest,expires].join('\n')
  const key=createPrivateKey(Buffer.from(secret,'base64').toString('utf8'))
+ const currentPublic=createPublicKey(key).export({type:'spki',format:'der'})
+ if(!Buffer.isBuffer(currentPublic)||
+    currentPublic.toString('base64')!==DEPLOYED_SIGNER_SPKI)
+  throw Error('director_cloudflare_signer_key_mismatch')
  const signature=sign(null,Buffer.from(canonical,'utf8'),key).toString('base64url')
  return {body,headers:{
   'content-type':'application/json',
