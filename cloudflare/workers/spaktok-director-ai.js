@@ -74,6 +74,25 @@ async function handle(request,env){
  if(url.pathname==='/health'&&request.method==='GET')
   return json({ok:true,provider:'cloudflare-workers-ai',
    auth:'signed-server-only',model:MODEL,freeTier:'quota-limited'});
+ if(url.pathname==='/self-test'&&request.method==='GET'){
+  // Read-only public probe: uses fake requests and MUST NOT reach env.AI
+  // or D1; it proves unsigned and forged POST requests fail closed.
+  const payload=JSON.stringify({system:'canary',instruction:'canary'});
+  const endpoint=new URL('/v1/agent/step',url).href;
+  const make=(headers)=>new Request(endpoint,{method:'POST',headers:{
+   'content-type':'application/json',
+   'content-length':String(payload.length),...headers,
+  },body:payload});
+  const unsigned=await handle(make({}),env);
+  const forged=await handle(make({
+   'x-spaktok-director-expires':String(Math.floor(Date.now()/1000)+20),
+   'x-spaktok-director-signature':'A'.repeat(86),
+  }),env);
+  const ok=unsigned.status===401&&forged.status===401;
+  return json({ok,unsignedDenied:unsigned.status===401,
+   forgedDenied:forged.status===401,modelInvoked:false,
+   budgetDebited:false},ok?200:503);
+ }
  if(request.method!=='POST'||url.pathname!=='/v1/agent/step')
   return json({error:'not_found'},404);
  const declared=Number(request.headers.get('content-length'));
