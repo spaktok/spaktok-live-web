@@ -84,7 +84,8 @@ export async function POST(request:Request){
     generate_relief:'Create real LOCAL 2.5D shallow textured GLB. ONLY if user EXPLICITLY asks 2.5D or relief.',
     generate_3d_gpu:'Generate real full 3D image-to-GLB on owner private GPU. ALWAYS requires explicit image transfer/paid credit consent, and may be offline.',
     recolor_asset:'Really recolor an existing static GLB with a named material preset. ONLY if user asks for that exact color.',
-    dispatch_asset:'Verify SHA256 and send SAME real GLB to six specialist private draft previews.',
+    dispatch_asset:'Verify SHA256 and SAVE same real GLB to creator-requested specialized private drafts ONLY if distribution was requested.',
+    present_asset:'Verify SHA256 and return real GLB inside chat without saving it to specialist departments.',
     finish:'Finish based on tool observations ONLY, or explain a needed source. No fake artifacts.',
    },
   })
@@ -117,7 +118,7 @@ the user explicitly requests a material recolor; then recolor, inspect,
 dispatch. For images, choose generate_3d_gpu for full-360 requests,
 or generate_relief ONLY if explicitly asked for 2.5D relief, then inspect
 and dispatch. A blocked GPU is not an invitation to silently make 2.5D.
-After successful dispatch, choose finish. Never claim that text alone
+After verified presentation or dispatch, choose finish. Never claim that text alone
 created a model, rig, animation, live stream, video export or filter.
 The six internal targets: avatar, live, filter, gift, world, video.
 Choose only applicable targets from the creator's wording. If the creator
