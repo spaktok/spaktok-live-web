@@ -23,6 +23,7 @@ export type AgentRunResult=Readonly<{
 }>
 type Params=Readonly<{
  prompt:string
+ history:readonly {role:'user'|'assistant';text:string}[]
  source:File|null
  rights:'original'|'licensed'
  rightsApproved:boolean
@@ -100,6 +101,9 @@ export async function runDirectorAgent(params:Params):Promise<AgentRunResult>{
   const workingSource=working?(isGlb(working)?'glb':isImage(working)?'image':'none'):'none'
   const request:AgentRequest={
    prompt:params.prompt.slice(0,1000),originalSource,workingSource,
+   history:params.history.slice(-8).map(m=>({
+    role:m.role,text:m.text.slice(0,350),
+   })),
    steps:events.map(x=>({...x,detail:x.detail.slice(0,300)})),
    imagePreview:index===0?vision:null,
   }
