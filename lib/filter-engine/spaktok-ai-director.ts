@@ -29,6 +29,10 @@ const TARGET_SYNONYMS:Readonly<Record<DirectorTarget,RegExp>>={
 }
 export function detectDirectorTargets(description:string):readonly DirectorTarget[]{
  const normalized=description.normalize('NFKC').toLowerCase()
+ // A creator can ask the Director to route ONE asset to all existing
+ // departments using natural Arabic or English without five checkboxes.
+ if(/(?:جميع|كل|كافة)\s+(?:الأقسام|الاقسام|الاستوديوهات|الستوديوهات|المحركات|الاقسام الموجودة)|(?:all|every)\s+(?:studios|departments|targets|sections)/i.test(normalized))
+  return DIRECTOR_TARGETS
  return DIRECTOR_TARGETS.filter(t=>TARGET_SYNONYMS[t].test(normalized))
 }
 export function planSpaktokDirector(input:Readonly<{
