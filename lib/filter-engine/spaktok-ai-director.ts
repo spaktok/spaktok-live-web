@@ -4,10 +4,10 @@ import type {StudioGlbAudit} from './reality-production-glb-audit'
  * Text selects intended uses; it does not control the GPU 3D geometry yet.
  * Never describe an unrigged GLB as a camera-ready avatar.
  */
-export const DIRECTOR_TARGETS=['avatar','live','filter','gift','world'] as const
+export const DIRECTOR_TARGETS=['avatar','live','filter','gift','world','video'] as const
 export type DirectorTarget=typeof DIRECTOR_TARGETS[number]
 export type DirectorStage='source'|'generation'|'geometry'|'rig'|'filter'|
- 'gift-animation'|'world-placement'|'mobile-qa'|'publish'
+ 'gift-animation'|'world-placement'|'video-composition'|'mobile-qa'|'publish'
 export type DirectorStageStatus='ready'|'requires-work'|'blocked'
 export type DirectorStageCheck=Readonly<{
  id:DirectorStage;status:DirectorStageStatus;reason:string
@@ -26,6 +26,7 @@ const TARGET_SYNONYMS:Readonly<Record<DirectorTarget,RegExp>>={
  filter:/\bfilter\b|فلاتر|فلتر|قناع|mask|\bar\b/,
  gift:/\bgift\b|هدي[ةه]|هدايا|هدية|جفت/,
  world:/\bworld\b|عالم|خريطة|بيئة افتراضي[ةه]/,
+ video:/\bvideo\b|فيديو|مقاطع|ريلز|reels|clip/,
 }
 export function detectDirectorTargets(description:string):readonly DirectorTarget[]{
  const normalized=description.normalize('NFKC').toLowerCase()
@@ -84,6 +85,9 @@ export function planSpaktokDirector(input:Readonly<{
  if(targets.includes('world'))
   stages.push({id:'world-placement',status:'requires-work',
    reason:'requires_scale_collision_lod_and_world_integration'})
+ if(targets.includes('video'))
+  stages.push({id:'video-composition',status:'requires-work',
+   reason:'requires_creator_video_timeline_keyframes_and_export_qa'})
  stages.push({id:'mobile-qa',status:'requires-work',
   reason:'requires_android_fps_memory_thermal_checks'})
  stages.push({id:'publish',status:'blocked',
