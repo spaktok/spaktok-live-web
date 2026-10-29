@@ -6,7 +6,11 @@ import {
 } from '@/lib/filter-engine/spaktok-ai-director'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
 import {
- saveLocalStudioGlb,saveActiveOwnerRodinHead,
+ createStudioFanoutManifest,type StudioFanoutManifest,
+} from '@/lib/filter-engine/spaktok-studio-fanout'
+import {
+ saveStudioFanoutBundle,loadStudioFanoutManifest,
+ loadLocalStudioGlb,saveActiveOwnerRodinHead,
  loadActiveOwnerRodinHead,clearActiveOwnerRodinHead,
 } from '@/lib/filter-engine/reality-local-asset-handoff'
 
@@ -65,6 +69,7 @@ export default function SpaktokAIDirector({
  const [busy,setBusy]=useState(false)
  const [asset,setAsset]=useState<File|null>(null)
  const [qa,setQA]=useState<DirectorAssetQA|null>(null)
+ const [manifest,setManifest]=useState<StudioFanoutManifest|null>(null)
  const [status,setStatus]=useState('')
  const [show,setShow]=useState(true)
  const [ownerBusy,setOwnerBusy]=useState(false)
@@ -104,7 +109,7 @@ export default function SpaktokAIDirector({
    setStatus('الصورة يجب أن تكون أقل من 8MB، وGLB أقل من 35MB.')
    return
   }
-  setOwnFile(file);setAsset(null);setQA(null)
+  setOwnFile(file);setAsset(null);setQA(null);setManifest(null)
   setRightsApproved(false);setTransferConsent(false);setGpuConsent(false)
   setStatus(file?'المصدر جاهز للتخطيط، لم يتم رفعه إلى أي خادم.':'')
  }
@@ -113,7 +118,7 @@ export default function SpaktokAIDirector({
   setOwnerBusy(true)
   try{
    const calibrated=await saveActiveOwnerRodinHead(source)
-   setOwnFile(calibrated);setAsset(null);setQA(null)
+   setOwnFile(calibrated);setAsset(null);setQA(null);setManifest(null)
    setStatus('تم حفظ نسخة رأس Rodin الأصلية المضبوطة بشكل خاص في هذا المتصفح. '+
     'ارتفاع المعاينة 34 سم افتراضي وليس قياسًا تشريحيًا؛ لا توجد حركات وجه أو خامات الصور الأصلية.')
   }catch(error){
@@ -127,7 +132,7 @@ export default function SpaktokAIDirector({
   try{
    const last=await loadActiveOwnerRodinHead()
    if(!last){setStatus('لا يوجد رأس Rodin محفوظ في هذا المتصفح.');return}
-   setOwnFile(last);setAsset(null);setQA(null)
+   setOwnFile(last);setAsset(null);setQA(null);setManifest(null)
    setRightsApproved(false);setTransferConsent(false);setGpuConsent(false)
    setStatus('استعدنا نسخة Rodin الخاصة. أكّد حقوقها قبل فحصها أو نقلها للأقسام.')
   }catch(error){setStatus('تعذّر استعادة المجسم: '+String(error))}
@@ -149,24 +154,32 @@ export default function SpaktokAIDirector({
     chosen.filter(x=>x!==target):[...chosen,target]
   })
  }
- const commitGlb=async(file:File)=>{
+ const commitGlb=async(file:File,gpuJobsUsed:0|1)=>{
   const bytes=await file.arrayBuffer()
   const inspection=inspectWordGeneratedGlb(bytes,file.name)
   const checked=evaluateDirectorAsset(inspection.audit,bytes.byteLength,
    plan.targets)
   if(!checked.valid)throw Error('director_failed_glb_qa')
-  setAsset(file);setQA(checked)
-  onGeneratedGlb?.(file)
-  setStatus('اكتمل فحص GLB البنيوي. هذا مسودّة خاصة، وليست أفاتارًا '+
-   'متحركًا أو هدية أو فلترًا أو أصلًا منشورًا تلقائيًا.')
+  const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))
+  const hash=Array.from(digest).map(b=>b.toString(16).padStart(2,'0')).join('')
+  const draft=createStudioFanoutManifest({
+   fileName:file.name,sha256:hash,bytes:bytes.byteLength,
+   audit:inspection.audit,description,rights,targets:plan.targets,
+   gpuJobsUsed,
+  })
+  setAsset(file);setQA(checked);setManifest(draft)
+  if(gpuJobsUsed)onGeneratedGlb?.(file)
+  setStatus('أنشأنا مسودة إنتاج للأقسام المختارة من GLB واحد، '+
+   'مع ملف إعدادات مستقل لكل قسم. يلزم تجهيز Rig والأنيميشن '+
+   'واختبارات الهاتف قبل أي نشر أمام الجمهور.')
  }
  const generate=async()=>{
   if(busy||!source||!rightsApproved||!plan.targets.length)return
-  setBusy(true);setAsset(null);setQA(null)
+  setBusy(true);setAsset(null);setQA(null);setManifest(null)
   try{
    if(sourceKind==='glb'){
     setStatus('فحص GLB الحالي دون GPU أو رفع إلى مزوّد خارجي…')
-    await commitGlb(source)
+    await commitGlb(source,0)
     return
    }
    if(sourceKind!=='image')throw Error('director_source_required')
@@ -201,23 +214,72 @@ export default function SpaktokAIDirector({
     throw Error('director_result_too_large')
    await commitGlb(new File([output],'spaktok-director-ai-result.glb',{
     type:'model/gltf-binary',
-   }))
+   }),1)
   }catch(error){
    setStatus('لم تكتمل المهمة: '+(error instanceof Error?error.message:String(error))+
     '. إذا بدأ تشغيل GPU فالمحاولة قد تُحتسب؛ لا تعاود الإرسال دون فحص الحالة.')
   }finally{setBusy(false)}
  }
- const send=(target:DirectorTarget)=>async()=>{
-  if(!asset||!qa?.previewReady||busy||!rightsApproved)return
+ const persistDraft=async()=>{
+  if(!asset||!manifest||busy)return
   setBusy(true)
   try{
-   await saveLocalStudioGlb(asset.name,await asset.arrayBuffer())
+   await saveStudioFanoutBundle(asset,manifest)
+   setStatus('تم حفظ GLB والمسودة الخاصة معًا في هذا المتصفح لمدة 24 ساعة. لا يوجد رفع إلى السحابة.')
+  }catch(error){
+   setStatus('تعذّر حفظ المسودة الخاصة: '+String(error))
+  }finally{setBusy(false)}
+ }
+ const restoreDraft=async()=>{
+  if(busy)return
+  setBusy(true)
+  try{
+   const [file,saved]=await Promise.all([
+    loadLocalStudioGlb(),loadStudioFanoutManifest(),
+   ])
+   if(!file||!saved||file.name!==saved.source.fileName||
+    file.size!==saved.source.bytes)
+    throw Error('لا توجد مسودة متطابقة محفوظة خلال 24 ساعة')
+   const bytes=await file.arrayBuffer()
+   const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))
+   const hash=Array.from(digest).map(b=>b.toString(16).padStart(2,'0')).join('')
+   if(hash!==saved.source.sha256)
+    throw Error('بصمة الملف لا تطابق المسودة')
+   const inspection=inspectWordGeneratedGlb(bytes,file.name)
+   const checked=evaluateDirectorAsset(
+    inspection.audit,bytes.byteLength,saved.project.outputTargets)
+   setOwnFile(file);setAsset(file);setQA(checked);setManifest(saved)
+   setDescription(saved.project.description)
+   setManualTargets([...saved.project.outputTargets])
+   setRightsApproved(false);setGpuConsent(false);setTransferConsent(false)
+   setStatus('استُعيد مشروعك الخاص من هذا المتصفح، دون أي GPU. '+
+    'موافقات استخدام المصدر تُراجع من جديد عند بدء إنتاج جديد.')
+  }catch(error){
+   setStatus('تعذّرت الاستعادة: '+String(error))
+  }finally{setBusy(false)}
+ }
+ const send=(target:DirectorTarget)=>async()=>{
+  if(!asset||!manifest||!qa?.previewReady||busy||
+   !manifest.project.outputTargets.includes(target))return
+  setBusy(true)
+  try{
+   await saveStudioFanoutBundle(asset,manifest)
    window.location.assign(TARGET_DESTINATIONS[target])
   }catch(error){
    setStatus('تعذّر النقل المحلي: '+String(error)+
     '. استعمل تنزيل GLB والاستيراد اليدوي.')
    setBusy(false)
   }
+ }
+ const downloadManifest=()=>{
+  if(!manifest)return
+  const blob=new Blob([JSON.stringify(manifest,null,2)],{
+   type:'application/json',
+  })
+  const u=URL.createObjectURL(blob)
+  const a=document.createElement('a')
+  a.href=u;a.download='spaktok-studio-production-plan.json';a.click()
+  window.setTimeout(()=>URL.revokeObjectURL(u),1000)
  }
  const download=()=>{
   if(!asset)return
@@ -261,6 +323,11 @@ export default function SpaktokAIDirector({
       {sourceKind==='glb'?' إعادة استخدام دون GPU':' يتطلب GPU لتوليد 360°'}
      </p>}
      <div className="flex flex-wrap gap-2 text-xs">
+      <button type="button" onClick={()=>void restoreDraft()}
+       disabled={busy}
+       className="rounded-lg border border-emerald-400/30 px-3 py-2 text-emerald-100 disabled:opacity-40">
+       استعادة مشروع الإنتاج الأخير
+      </button>
       <button type="button" onClick={()=>void restoreRodin()}
        disabled={ownerBusy}
        className="rounded-lg border border-cyan-400/30 px-3 py-2 text-cyan-100 disabled:opacity-40">
@@ -373,13 +440,43 @@ export default function SpaktokAIDirector({
       className="rounded-lg border border-white/25 px-3 py-2 text-xs">
       تنزيل GLB
      </button>
+     <button type="button" disabled={!manifest}
+      onClick={downloadManifest}
+      className="rounded-lg border border-white/25 px-3 py-2 text-xs disabled:opacity-40">
+      تنزيل خطة إنتاج الأقسام JSON
+     </button>
+     <button type="button" disabled={!manifest||busy}
+      onClick={()=>void persistDraft()}
+      className="rounded-lg border border-emerald-400/25 px-3 py-2 text-xs disabled:opacity-40">
+      حفظ مسودة GLB وخطة الأقسام
+     </button>
      {plan.targets.map(target=><button key={target} type="button"
-      disabled={!qa.previewReady||busy||!rightsApproved}
+      disabled={!qa.previewReady||busy||!manifest}
       onClick={()=>void send(target)()}
       className="rounded-lg bg-indigo-600 px-3 py-2 text-xs disabled:opacity-40">
       معاينة {TARGET_LABELS[target]}
      </button>)}
     </div>
+    {manifest&&<div className="grid gap-2 sm:grid-cols-2">
+     {manifest.outputs.map(output=><div key={output.target}
+      className="rounded-lg border border-white/15 bg-slate-950/50 p-3 text-xs">
+      <p className="font-semibold text-cyan-200">
+       {TARGET_LABELS[output.target]}
+      </p>
+      <p className="mt-1 text-slate-300">
+       {output.state==='private-preview'?
+        'مسودة معاينة قابلة للنقل · غير منشورة':
+        'يلزم تخفيف/إصلاح GLB قبل نقلها للمعاينة'}
+      </p>
+      <p className="mt-1 text-amber-200">
+       {output.rigNeeded?'Rig · ':''}
+       {output.animationNeeded?'Animation · ':''}
+       {output.cameraTrackingNeeded?'Camera QA · ':''}
+       {output.collisionNeeded?'Collision · ':''}
+       Android QA · مراجعة النشر
+      </p>
+     </div>)}
+    </div>}
     {!!qa.issues.length&&<div className="text-xs leading-6 text-amber-100">
      <p className="font-semibold">ما ينقص قبل الاستخدام أمام الجمهور:</p>
      <p>{qa.issues.map(issue=>ISSUE_AR[issue]??issue).join(' · ')}</p>
