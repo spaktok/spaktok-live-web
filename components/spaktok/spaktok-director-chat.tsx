@@ -58,9 +58,11 @@ const manifestDownload=(manifest:StudioFanoutManifest)=>{
 }
 const initial:ChatMessage[]=[
  {id:'welcome',role:'assistant',state:'done',
-  text:'مرحبًا بك في Spaktok AI Director. ارفع صورة أو ملف GLB، وقل لي النتيجة المطلوبة. سأختار المحركات الداخلية وأنفّذ ما هو متاح، ثم أعرض المجسم والتقرير هنا مباشرة. لا تحتاج إلى فتح أقسام المنصة يدويًا.'},
+  text:'مرحبًا بك في Spaktok Studio. أرفق صورة أو GLB واكتب المطلوب. عندما يكون وكيل AI متصلًا سيختار أدوات Spaktok ويشغلها ويراجع نتائجها. وإذا كان غير متصل سأعرض أن الوضع الحالي توجيه محلي بالقواعد فقط؛ ولن أدّعي نجاح عمل لم يُنفَّذ.'},
 ]
-/** Chat-first studio. The LLM/text router never gets source pixels.
+/** Chat-first studio. Source photo pixels go to an LLM ONLY after explicit
+ * opt-in vision consent, as a reduced JPEG preview. Actual full-image data
+ * goes to private GPU only with separate paid-compute + transfer approvals.
  * The actual result comes ONLY from real local GLB/relief or approved GPU.
  * All specialty departments receive an audited private draft, not an
  * invented animation, facial rig, filter APK, public gift or live stream.
