@@ -63,7 +63,9 @@ export function normalizeAgentDecision(step:AgentStep,prompt:string):AgentStep{
  const normalized=prompt.normalize('NFKC')
  const exclusions=/(?:بدون|ما عدا|عدا|إلا|الا|except|without)\s+([^،,.؛\n]{1,75})/gi
  for(const match of normalized.matchAll(exclusions)){
-  for(const target of detectDirectorTargets(match[1]))excluded.add(target)
+  // A contrastive clause ("بدون اللايف لكن في العالم") is not an exclusion.
+  const clause=match[1].split(/\s+(?:لكن|ولكن|بل|instead|however)\s+/i)[0]
+  for(const target of detectDirectorTargets(clause))excluded.add(target)
  }
  const selected=explicit.length?[...explicit]:unique
  return {...step,targets:selected.filter(target=>!excluded.has(target))}
