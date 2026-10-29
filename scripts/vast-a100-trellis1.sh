@@ -46,10 +46,27 @@ install(){
     log 'Existing trellis environment: no blind reinstall; diagnose and run smoke first.'
     return
   fi
-  # Official documented environment defaults to PyTorch 2.4.0 / CUDA 11.8.
-  # Compiles CUDA extensions: run only while supervising paid GPU costs.
-  log 'Installing official TRELLIS environment; monitor cost and compiler logs.'
-  source ./setup.sh --new-env --basic --xformers --flash-attn \
+  # The previous Vast A100 image had nvcc 12.4. Avoid the official
+  # --new-env default (cu118) which would mismatch CUDA major during builds.
+  # Use cu121 torch2.4.0 so nvcc12.4 is a MINOR mismatch, and the upstream
+  # setup.sh knows compatible xformers/kaolin wheels for torch2.4.0+cu121.
+  nvcc_line="$(nvcc --version | grep 'release ' || true)"
+  [[ "$nvcc_line" == *"release 12."* ]] ||
+    fail 'This scripted build expects CUDA toolkit nvcc 12.x; use a reviewed separate setup for 11.x.'
+  log 'Creating isolated PyTorch 2.4.0+cu121 Conda environment; monitor paid GPU time.'
+  conda create -y -n trellis python=3.10 pip
+  conda activate trellis
+  python -m pip install torch==2.4.0 torchvision==0.19.0 \
+    --index-url https://download.pytorch.org/whl/cu121
+  python - <<'PY'
+import torch
+assert torch.cuda.is_available(), "cuda_missing"
+assert torch.version.cuda == "12.1", "wrong_pytorch_cuda"
+print("PRECHECK", torch.__version__, torch.version.cuda)
+PY
+  # Install only the supported official components, never upgrade torch
+  # without validating extension ABI and matching GPU architecture.
+  source ./setup.sh --basic --xformers --flash-attn \
     --diffoctreerast --spconv --mipgaussian --kaolin --nvdiffrast
   conda activate trellis
   python -m pip install 'fastapi>=0.115,<1' 'uvicorn[standard]>=0.30,<1' \
