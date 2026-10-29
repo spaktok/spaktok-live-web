@@ -110,6 +110,23 @@ class Trellis1Contracts(unittest.TestCase):
         self.assertGreater(engine._PROFILES["master"]["max_bytes"],
                            engine._PROFILES["preview"]["max_bytes"])
 
+    def test_local_snapshot_selects_only_explicit_checkpoint_pairs(self):
+        manifest = {"args": {"models": {
+            "slat_decoder_mesh": "ckpts/slat_dec_mesh_swin8_B_64l8m256c_fp16",
+            "ss_flow": "ckpts/ss_flow_img_dit_L_16l8_fp16",
+        }}}
+        paths = engine._checkpoint_patterns(manifest)
+        self.assertEqual(paths[0], "pipeline.json")
+        self.assertEqual(len(paths), 5)
+        self.assertIn("ckpts/slat_dec_mesh_swin8_B_64l8m256c_fp16.json", paths)
+        self.assertIn("ckpts/ss_flow_img_dit_L_16l8_fp16.safetensors", paths)
+
+    def test_local_snapshot_rejects_traversal_and_untrusted_sources(self):
+        for bad in ("../../private", "other/repo", "ckpts/../evil",
+                    "ckpts/evil.safetensors", ""):
+            with self.assertRaises(ValueError):
+                engine._checkpoint_patterns({"args": {"models": {"x": bad}}})
+
     def test_official_model_id_is_immutable(self):
         self.assertEqual(engine.MODEL_ID, "microsoft/TRELLIS-image-large")
 
