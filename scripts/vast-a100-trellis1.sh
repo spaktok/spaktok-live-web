@@ -56,7 +56,13 @@ install(){
   # CUDA PyTorch wheel reports "2.4.0+cu121". Normalize that suffix only
   # in the local pinned source checkout, so it selects the correct
   # xformers and kaolin wheels instead of silently skipping both.
-  sed -i 's/print(torch.__version__)/print(torch.__version__.split("+")[0])/' setup.sh
+  # chr(43) avoids nested quote removal by the upstream python -c "..." shell.
+  # First repair a previous interrupted local attempt, then handle pristine upstream.
+  sed -i 's/print(torch.__version__.split("+")\[0\])/print(torch.__version__.split(chr(43))[0])/' setup.sh
+  sed -i 's/print(torch.__version__)/print(torch.__version__.split(chr(43))[0])/' setup.sh
+  # Validate the exact interpolated Python fragment before running installers.
+  grep -Fq 'print(torch.__version__.split(chr(43))[0])' setup.sh ||
+    fail 'Failed to normalize upstream PyTorch version syntax.'
   source "$(conda info --base)/etc/profile.d/conda.sh"
   if [[ ! -d "$HOME/.config/spaktok" ]]; then
     mkdir -p "$HOME/.config/spaktok"
