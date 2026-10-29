@@ -7,6 +7,7 @@ import {
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
 import {generateForgeGpuDirect} from '@/lib/filter-engine/spaktok-forge-direct-client'
 import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-local-relief'
+import StudioPrivateCloudPanel from './studio/studio-private-cloud-panel'
 import {
  createStudioFanoutManifest,type StudioFanoutManifest,
 } from '@/lib/filter-engine/spaktok-studio-fanout'
@@ -478,7 +479,17 @@ export default function SpaktokAIDirector({
      </button>
     </div>
    </div>
-   {qa&&asset&&<div className="space-y-3 rounded-xl border border-cyan-400/25 p-3">
+   <StudioPrivateCloudPanel asset={asset} manifest={manifest}
+     rightsApproved={rightsApproved}
+     onRestore={(file,chosen)=>{
+      setOwnFile(file);setAsset(null);setQA(null);setManifest(null)
+      setDispatch(null);setAutoHandoff(false)
+      setManualTargets([...chosen]);setRightsApproved(false)
+      setTransferConsent(false);setGpuConsent(false)
+      setImageMode('local-2.5d')
+      setStatus('استُعيد GLB من R2 الخاص. أكّد حقوقه مجددًا ثم اضغط فحص المجسم؛ لا تحتاج GPU.')
+     }}/>
+    {qa&&asset&&<div className="space-y-3 rounded-xl border border-cyan-400/25 p-3">
     <p className="font-semibold text-cyan-200">
      الملف الناتج: {asset.name} · {qa.triangles.toLocaleString()} مثلث
     </p>
