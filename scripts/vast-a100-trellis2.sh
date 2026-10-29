@@ -200,10 +200,30 @@ serve(){
   log 'Starting Forge API on localhost:8000. Use a SEPARATE TLS tunnel; never the Jupyter portal tunnel.'
   exec python -m uvicorn server:app --host 127.0.0.1 --port 8000 --workers 1 --no-access-log
 }
+check_model_access(){
+  activate
+  conda activate trellis2
+  log 'Checking Hugging Face account access to the gated DINOv3 model (small config only).'
+  python - <<'PY'
+import sys
+from huggingface_hub import hf_hub_download
+from huggingface_hub.errors import GatedRepoError, HfHubHTTPError
+repo = 'facebook/dinov3-vitl16-pretrain-lvd1689m'
+try:
+    path = hf_hub_download(repo_id=repo, filename='config.json', token=True)
+    print('[Spaktok A100] DINOv3 license/access approved and authenticated. Config:', path)
+except (GatedRepoError, HfHubHTTPError, ValueError, OSError) as exc:
+    print('[Spaktok A100] DINOv3 access NOT ready. Open https://huggingface.co/' + repo)
+    print('[Spaktok A100] Agree to the model license/request access in your OWN browser, await approval, then run: hf auth login')
+    print('[Spaktok A100] No paid 3D model inference performed.')
+    sys.exit(3)
+PY
+}
 smoke(){
   activate; conda activate trellis2
   [[ -d "$TRELLIS" ]] || fail 'Run install first.'
   export PYTHONPATH="$FORGE:$TRELLIS${PYTHONPATH:+:$PYTHONPATH}"
+  check_model_access
   cd "$TRELLIS"
   python - <<'PY'
 from pathlib import Path
@@ -223,6 +243,7 @@ PY
 }
 case "$ACTION" in
  preflight) preflight;;
+ check-model-access) check_model_access;;
  diagnose-nvdiffrast) diagnose_nvdiffrast;;
  finish-extensions) finish_extensions;;
  install) install;;
@@ -230,5 +251,5 @@ case "$ACTION" in
  resume) resume;;
  serve) serve;;
  smoke) smoke;;
- *) fail 'Usage: vast-a100-trellis2.sh {preflight|diagnose-nvdiffrast|finish-extensions|install|repair-flash|resume|smoke|serve}';;
+ *) fail 'Usage: vast-a100-trellis2.sh {preflight|check-model-access|diagnose-nvdiffrast|finish-extensions|install|repair-flash|resume|smoke|serve}';;
 esac
