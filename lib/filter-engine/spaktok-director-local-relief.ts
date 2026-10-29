@@ -50,7 +50,7 @@ export async function createDirectorReliefGlb(
   material=new THREE.MeshStandardMaterial({
    map:texture,roughness:.68,metalness:.04,
    side:THREE.DoubleSide,transparent,
-   alphaTest:transparent?.08:0,
+   alphaTest:transparent ? 0.08 : 0,
   })
   const mesh=new THREE.Mesh(geometry,material)
   mesh.name='Spaktok Director 2.5D local relief — NOT 360 reconstruction'
