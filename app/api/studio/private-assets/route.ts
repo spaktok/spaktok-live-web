@@ -74,7 +74,7 @@ export async function POST(req:NextRequest){
     rights as string,JSON.stringify(targets),user.id])
   if(!result.rows.length)return json({error:'studio_daily_limit'},429)
   const ticket=signStudioPrivateR2Request('PUT',user.id,id,size,sha)
-  return json({id,...ticket,expiresInSeconds:90,private:true,
+  return json({id,...ticket,expiresInSeconds:300,private:true,
    next:'confirm',note:'Opt-in private R2 upload, no public release.'},201)
  }catch{return json({error:'studio_cloud_reserve_failed'},503)}
 }
