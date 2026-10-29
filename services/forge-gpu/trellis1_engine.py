@@ -115,12 +115,20 @@ def generate_glb(image, profile="preview"):
     from glb_quality import inspect_glb_bytes
 
     options = _PROFILES[profile]
-    with torch.inference_mode():
-        # Gaussian colors + mesh geometry are both needed for texture baking.
+    # Only neural-network sampling runs without gradients. The official
+    # pipeline.run is already @torch.no_grad; an explicit no_grad scope is
+    # safe and unlike inference_mode does not produce "inference tensors".
+    with torch.no_grad():
         outputs = _pipeline.run(image, seed=1, formats=["gaussian", "mesh"])
-        if (not isinstance(outputs, dict)
-                or not outputs.get("gaussian") or not outputs.get("mesh")):
-            raise ValueError("trellis1_missing_gaussian_or_mesh")
+    if (not isinstance(outputs, dict)
+            or not outputs.get("gaussian") or not outputs.get("mesh")):
+        raise ValueError("trellis1_missing_gaussian_or_mesh")
+
+    # CRITICAL: official to_glb() performs 2500 texture optimization steps
+    # in bake_texture(mode='opt'), which calls loss.backward(). Putting the
+    # baking stage inside torch.inference_mode()/no_grad() always fails:
+    # "element 0 of tensors does not require grad". Keep it differentiable.
+    with torch.enable_grad():
         glb = _to_glb(
             outputs["gaussian"][0],
             outputs["mesh"][0],
