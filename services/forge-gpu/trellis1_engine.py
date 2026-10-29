@@ -5,7 +5,9 @@ with registers (not the gated DINOv3 required by TRELLIS.2).
 No model or user input is proxied through a third-party hosted demo.
 The operator must verify source/submodule licenses before commercial use.
 """
+import json
 import os
+import re
 import tempfile
 from pathlib import Path
 
@@ -26,6 +28,44 @@ _pipeline = None
 _to_glb = None
 
 
+def _checkpoint_patterns(manifest: dict) -> list[str]:
+    """Select exact necessary files, not all 3D checkpoints in the repo."""
+    model_files = manifest.get("args", {}).get("models", {})
+    if not isinstance(model_files, dict) or not model_files:
+        raise ValueError("trellis1_empty_model_manifest")
+    patterns = ["pipeline.json"]
+    for model_name in model_files.values():
+        if (not isinstance(model_name, str)
+                or not re.fullmatch(r"ckpts/[A-Za-z0-9_/-]+", model_name)
+                or ".." in model_name):
+            raise ValueError("trellis1_unsafe_checkpoint_name")
+        patterns.extend((model_name + ".json", model_name + ".safetensors"))
+    return list(dict.fromkeys(patterns))
+
+
+def _local_checkpoint_dir():
+    """Fetch only official weights once; prevent upstream's masked HF 401.
+
+    Upstream Pipeline.from_pretrained catches ANY load error then retries
+    'ckpts/modelname' as if it were a Hugging Face repository. That converts
+    unrelated errors into misleading RepositoryNotFoundError/401 responses.
+    A fully verified local snapshot forces all model files onto the local
+    loading path. Subsequent runs reuse the Hugging Face cache.
+    """
+    from huggingface_hub import hf_hub_download, snapshot_download
+    manifest_file = hf_hub_download(repo_id=MODEL_ID, filename="pipeline.json")
+    manifest = json.loads(Path(manifest_file).read_text(encoding="utf-8"))
+    patterns = _checkpoint_patterns(manifest)
+    print("[Spaktok TRELLIS v1] Downloading/verifying official Microsoft checkpoints;",
+          (len(patterns) - 1) // 2, "model components; cache is reusable.", flush=True)
+    snapshot = Path(snapshot_download(repo_id=MODEL_ID, allow_patterns=patterns))
+    for filename in patterns:
+        checkpoint = snapshot / filename
+        if not checkpoint.is_file() or checkpoint.stat().st_size == 0:
+            raise RuntimeError("trellis1_missing_local_checkpoint: " + filename)
+    return str(snapshot)
+
+
 def initialize():
     """Only run after CUDA, model-license and dependency preflights."""
     global _pipeline, _to_glb
@@ -35,7 +75,11 @@ def initialize():
     from trellis.pipelines import TrellisImageTo3DPipeline
     from trellis.utils import postprocessing_utils
 
-    pipeline = TrellisImageTo3DPipeline.from_pretrained(MODEL_ID)
+    # Do not pass the remote repo directly into upstream's broad except:
+    # a failure inside models.from_pretrained silently falls back to
+    # "ckpts/foo" as a fake HF repository, hiding the actual traceback.
+    local_model_dir = _local_checkpoint_dir()
+    pipeline = TrellisImageTo3DPipeline.from_pretrained(local_model_dir)
     pipeline.cuda()
     _pipeline = pipeline
     _to_glb = postprocessing_utils.to_glb
