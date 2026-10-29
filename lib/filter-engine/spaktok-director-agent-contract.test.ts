@@ -52,6 +52,39 @@ describe('Real Spaktok AI tool execution guards',()=>{
    {action:'inspect_asset',ok:true,detail:'valid 28000 triangles'}]})
   expect(requiredAgentAction(inspected)).toBe('dispatch_asset')
  })
+ it('returns a real recolored file in chat without distributing it',()=>{
+  const prompt='اجعل المجسم ذهبيًا'
+  const steps=[
+   {action:'recolor_asset' as const,ok:true,detail:'gold GLB created'},
+   {action:'inspect_asset' as const,ok:true,detail:'QA valid'},
+  ]
+  const request=req({prompt,steps})
+  expect(requiredAgentAction(request)).toBe('present_asset')
+  expect(validateAgentStep(step({action:'dispatch_asset',targets:['world']}),request).reason)
+   .toBe('required_next_action_present_asset')
+  expect(validateAgentStep(step({action:'present_asset',targets:['world']}),request).ok)
+   .toBe(true)
+  const done=req({prompt,steps:[...steps,{
+   action:'present_asset' as const,ok:true,detail:'only in chat',
+  }]})
+  expect(requiredAgentAction(done)).toBe('finish')
+  expect(validateAgentStep(step({action:'finish',targets:['world']}),done).ok).toBe(true)
+ })
+ it('returns a generated 3D to chat when no studio was requested',()=>{
+  const request=req({prompt:'حوّل هذه الصورة إلى مجسم ثلاثي الأبعاد',
+   originalSource:'image',workingSource:'glb',steps:[
+    {action:'generate_3d_gpu',ok:true,detail:'glb created'},
+    {action:'inspect_asset',ok:true,detail:'QA good'},
+   ]})
+  expect(requiredAgentAction(request)).toBe('present_asset')
+ })
+ it('does not distribute merely because inspection mentions a target',()=>{
+  const prompt='افحص المجسم للأفاتار فقط ولا ترسله'
+  const request=req({prompt,steps:[{
+   action:'inspect_asset',ok:true,detail:'QA good',
+  }]})
+  expect(requiredAgentAction(request)).toBe('finish')
+ })
  it('permits an inspection-only user request without distributing media',()=>{
   const p=req({prompt:'افحص هذا الملف لمعرفة عدد المثلثات'})
   expect(requiredAgentAction(p)).toBe('inspect_asset')
