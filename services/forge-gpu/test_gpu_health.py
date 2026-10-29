@@ -13,6 +13,13 @@ class SignedGpuHealthTests(unittest.TestCase):
         ).hexdigest()
         self.assertEqual(sign_ready_health(nonce, secret), expected)
 
+    def test_trellis2_has_distinct_engine_proof(self):
+        nonce = 'a'*32
+        key = 'x'*40
+        self.assertNotEqual(sign_ready_health(nonce, key, 'trellis2'), sign_ready_health(nonce, key))
+        with self.assertRaises(ValueError):
+            sign_ready_health(nonce, key, 'untrusted-engine')
+
     def test_bad_nonces_fail_closed(self):
         for nonce in ("", "z" * 32, "0" * 31, "0" * 33, "0" * 32 + "\r\n"):
             with self.assertRaises(ValueError):
