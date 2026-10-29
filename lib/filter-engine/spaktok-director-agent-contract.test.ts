@@ -3,7 +3,7 @@ import {agentRequestSchema,agentStepSchema,validateAgentStep,
  type AgentRequest,type AgentStep} from './spaktok-director-agent-contract'
 const req=(patch:Partial<AgentRequest>={}):AgentRequest=>({
  prompt:'أرسل المجسم إلى جميع الأقسام',
- originalSource:'glb',workingSource:'glb',steps:[],imagePreview:null,
+ originalSource:'glb',workingSource:'glb',history:[],steps:[],imagePreview:null,
  ...patch,
 })
 const step=(patch:Partial<AgentStep>={}):AgentStep=>({
