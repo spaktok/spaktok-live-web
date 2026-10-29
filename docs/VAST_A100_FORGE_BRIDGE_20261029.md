@@ -18,7 +18,7 @@
 
 ## Needed on Vast.ai (must be performed from an authenticated operator terminal)
 1. Confirm one working CUDA A100 and that paid GPU time is supervised. **Destroy** the instance after exporting any useful results: the selected one-hour search duration is not an auto-termination timer.
-2. Use `nvidia-smi` and `python services/forge-gpu/gpu_preflight.py` to test CUDA. The published `services/forge-gpu/Dockerfile` for Ampere is **unverified** on this rented host, and may require building dependencies.
+2. Checkout the feature branch (not main) with `git switch feat/vast-a100-forge-bridge-20261029`; then use `nvidia-smi` and `python services/forge-gpu/gpu_preflight.py` to test CUDA. The published `services/forge-gpu/Dockerfile` for Ampere is **unverified** on this rented host, and may require building dependencies.
 3. Complete any Stability AI model registration/licensing/gated weight access. Do not use the community Hunyuan3D-2.1 license as an EU commercial substitute.
 4. Start a **separate single-worker** FastAPI service from `services/forge-gpu/server.py` on port 8000, with a unique >=32-character `FORGE_GPU_TOKEN` and exact `FORGE_GPU_ALLOWED_ORIGIN`. Do not expose this token to browsers.
 5. Expose **only port 8000** through its **own** TLS-terminated Cloudflare Tunnel. The portal/ComfyUI/Jupyter tunnel must remain separate.
