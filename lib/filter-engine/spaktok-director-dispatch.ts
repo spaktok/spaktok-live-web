@@ -13,6 +13,7 @@ export const DIRECTOR_DEPARTMENT_ROUTES:Readonly<Record<DirectorTarget,string>>=
  filter:'/reality-studio?from=ai-director',
  gift:'/gift-studio?from=ai-director',
  world:'/spaktok-world?from=ai-director',
+ video:'/video-studio?from=ai-director',
 }
 export type DirectorDepartmentDispatch=Readonly<{
  target:DirectorTarget
