@@ -57,7 +57,8 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
   (request.workingSource!=='image'||!requiresRelief(request.prompt)))
   return {ok:false,reason:'relief_not_explicitly_requested'}
  if(step.action==='generate_3d_gpu'&&
-  (request.workingSource!=='image'||request.steps.some(s=>s.action==='generate_3d_gpu')))
+  (request.workingSource!=='image'||requiresRelief(request.prompt)||
+   request.steps.some(s=>s.action==='generate_3d_gpu')))
   return {ok:false,reason:'paid_gpu_cannot_repeat'}
  if(step.action==='recolor_asset'){
   if(request.workingSource!=='glb'||!step.color||
@@ -68,6 +69,16 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
  if(['inspect_asset','dispatch_asset'].includes(step.action)&&
    request.workingSource!=='glb')
   return {ok:false,reason:'glb_required'}
+ if(step.action==='dispatch_asset'&&
+  /(?:جميع|كل|كافة)\\s+(?:الأقسام|الاقسام)|all\\s+studios/i.test(request.prompt)&&
+  step.targets.length!==DIRECTOR_TARGETS.length)
+  return {ok:false,reason:'all_studios_requested'}
+ if(step.action==='inspect_asset'){
+  const lastChange=request.steps.reduce((index,event,i)=>
+   ['generate_relief','generate_3d_gpu','recolor_asset'].includes(event.action)&&event.ok?i:index,-1)
+  if(request.steps.slice(lastChange+1).some(event=>event.action==='inspect_asset'&&event.ok))
+   return {ok:false,reason:'already_inspected_unchanged_asset'}
+ }
  if(step.action==='finish'&&request.steps.length===0&&
    request.workingSource!=='none')
   return {ok:false,reason:'cannot_claim_result_without_tool'}
