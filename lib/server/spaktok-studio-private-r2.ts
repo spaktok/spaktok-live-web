@@ -28,7 +28,7 @@ export function signStudioPrivateR2Request(
  const secret=process.env.SPAKTOK_D1_BRIDGE_SIGNING_KEY
  if(!secret)throw Error('studio_r2_missing_signer')
  const key=createPrivateKey(Buffer.from(secret,'base64').toString('utf8'))
- const expires=String(Math.floor(Date.now()/1000)+90)
+ const expires=String(Math.floor(Date.now()/1000)+(method==='PUT'?300:90))
  const message=[DOMAIN,method,userId,id,sha256,String(size),expires].join('\n')
  const signature=sign(null,Buffer.from(message),key).toString('base64url')
  return {
