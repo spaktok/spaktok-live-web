@@ -8,7 +8,7 @@ if [[ "${SPAKTOK_FORGE_OPERATOR_APPROVED:-}" != "yes" ]]; then
   echo >&2 "operator_approval_required (SPAKTOK_FORGE_OPERATOR_APPROVED=yes)"
   exit 2
 fi
-if [[ "${#FORGE_GPU_TOKEN}" -lt 32 ]]; then
+if [[ "${#FORGE_GPU_TOKEN:-0}" -lt 32 ]]; then
   echo >&2 "FORGE_GPU_TOKEN must be >=32 characters (secret never printed)"
   exit 2
 fi
