@@ -65,6 +65,7 @@ const DESTINATIONS:Readonly<Record<DirectorTarget,string>>={
  filter:'/reality-studio',
  gift:'/gift-studio',
  world:'/spaktok-world',
+ video:'/video-studio',
 }
 const safeFile=(s:string)=>/^[^\\/\x00-\x1f]{1,120}\.glb$/i.test(s)
 const validHash=(s:string)=>/^[a-f0-9]{64}$/.test(s)
@@ -114,6 +115,7 @@ export function createStudioFanoutManifest(input:Readonly<{
   if(target==='filter')blockers.push('face_anchor_and_occlusion_not_calibrated')
   if(target==='gift')blockers.push('gift_effect_animation_and_payment_review_required')
   if(target==='world')blockers.push('collision_scale_and_lod_not_verified')
+  if(target==='video')blockers.push('video_timeline_source_and_keyframes_not_verified')
   blockers.push('real_android_fps_and_thermal_not_verified')
   blockers.push('human_rights_and_publication_review_required')
   return {
