@@ -136,6 +136,46 @@ if transformers.__version__ != '4.46.3' or not is_torch_available():
 PY
 }
 
+# TRELLIS upstream setup.sh uses spconv-cu120 for all CUDA 12.x builds.
+# Pin the exact CUDA 12.1 prebuilt wheel instead, with no compiler rebuild.
+# Failing early on a conflicting cumm/spconv family is preferable to corrupting
+# the working GPU environment by installing overlapping binary distributions.
+check_spconv(){
+  activate
+  python - <<'PY'
+import torch
+assert torch.__version__.startswith("2.4.0+cu121") and torch.version.cuda == "12.1", "unexpected_torch_cuda_version"
+import spconv.pytorch as spconv
+from importlib.metadata import version
+print("[Spaktok TRELLIS v1] SPCONV_READY:",
+      version("spconv-cu121"), "SparseConv3d:", bool(spconv.SparseConv3d),
+      "torch:", torch.__version__, flush=True)
+PY
+}
+repair_spconv(){
+  activate
+  python - <<'PY'
+from importlib.metadata import distributions
+installed = sorted((d.metadata.get("Name", ""), d.version)
+                   for d in distributions()
+                   if d.metadata.get("Name", "").lower().replace("_", "-").startswith(("spconv", "cumm")))
+print("[Spaktok TRELLIS v1] Existing SpConv/Cumm packages:", installed, flush=True)
+conflicts = [n for n, _ in installed
+             if n.lower().replace("_", "-").startswith("spconv") and
+                n.lower().replace("_", "-") != "spconv-cu121"]
+conflicts += [n for n, _ in installed
+              if n.lower().replace("_", "-").startswith("cumm") and
+                 n.lower().replace("_", "-") != "cumm-cu121"]
+if conflicts:
+    raise SystemExit("Conflicting spconv/cumm variants detected: " + ", ".join(conflicts)
+                     + ". Stop; do not overwrite binary wheels.")
+PY
+  log 'Installing only Python 3.10 Linux spconv-cu121==2.3.8 CUDA wheel.'
+  python -m pip install --only-binary=:all: 'spconv-cu121==2.3.8'
+  check_spconv
+  log 'SpConv verified. Next: smoke; no model inference performed in repair.'
+}
+
 resume(){
   [[ -d "$TRELLIS" ]] || fail 'TRELLIS source missing: run install first.'
   finish_nvdiffrast
@@ -202,7 +242,8 @@ PY
   export ATTN_BACKEND=xformers
   select_cuda_host_compiler
   source ./setup.sh --basic --xformers \
-    --diffoctreerast --spconv --mipgaussian --kaolin
+    --diffoctreerast --mipgaussian --kaolin
+  repair_spconv
   # Upstream nvdiffrast clone may already exist from previous GPU sessions.
   # Install it separately without deleting /tmp/extensions.
   finish_nvdiffrast
@@ -214,6 +255,7 @@ smoke(){
   [[ -d "$TRELLIS" ]] || fail 'Run install first.'
   activate
   check_python_stack
+  check_spconv
   export PYTHONPATH="$FORGE:$TRELLIS"
   export SPCONV_ALGO=native
   export ATTN_BACKEND=xformers
@@ -239,6 +281,7 @@ serve(){
   prepare
   [[ -d "$TRELLIS" ]] || fail 'Run install first.'
   check_python_stack
+  check_spconv
   origin="$(printenv FORGE_GPU_ALLOWED_ORIGIN || true)"
   [[ "$origin" == https://* ]] || fail 'Set the exact HTTPS FORGE_GPU_ALLOWED_ORIGIN.'
   activate
@@ -269,7 +312,8 @@ case "$ACTION" in
   install) install;;
   resume) resume;;
   repair-python) repair_python;;
+  repair-spconv) repair_spconv;;
   smoke) smoke;;
   serve) serve;;
-  *) fail 'Usage: vast-a100-trellis1.sh {preflight|install|resume|repair-python|smoke|serve}';;
+  *) fail 'Usage: vast-a100-trellis1.sh {preflight|install|resume|repair-python|repair-spconv|smoke|serve}';;
 esac
