@@ -1,6 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {createHmac,randomBytes,timingSafeEqual} from 'node:crypto'
 import {isForgeGpuEndpoint} from '@/lib/filter-engine/spaktok-forge-gpu-endpoint'
+import {forgeGpuReadiness,parseForgeModelAccess} from '@/lib/filter-engine/spaktok-forge-readiness'
 import {getNativeUser,rateLimit} from '@/lib/native/auth'
 import {queryD1} from '@/lib/native/d1'
 import {
@@ -84,10 +85,13 @@ async function gpuHealthy(cfg:{url:string;token:string;engine:string}):Promise<b
 }
 
 export async function GET(request:NextRequest){
+ const access=parseForgeModelAccess(process.env.SPAKTOK_FORGE_GPU_MODEL_ACCESS)
  const cfg=config(request.nextUrl.origin)
- const online=cfg?await gpuHealthy(cfg):false
+ // Never contact a paid endpoint before operator explicitly confirms model access.
+ const online=cfg&&access==='approved'?await gpuHealthy(cfg):false
+ const status=forgeGpuReadiness({enabled:!!cfg,modelAccess:access,online:!!online})
  return json({
-  enabled:online,delivery:'direct-private-ticket',
+  enabled:status==='ready',status,delivery:'direct-private-ticket',
   provider:cfg?.provider??null,
   engine:cfg?.engine??'disabled',
   full360:true,dailyCapPerOwner:1,
@@ -100,6 +104,10 @@ export async function POST(request:NextRequest){
  if(!allowed(request))return json({error:'forge_invalid_origin'},403)
  const cfg=config(request.nextUrl.origin)
  if(!cfg)return json({error:'forge_gpu_disabled'},503)
+ const access=parseForgeModelAccess(process.env.SPAKTOK_FORGE_GPU_MODEL_ACCESS)
+ if(access!=='approved')return json({error:
+  access==='pending'?'forge_gpu_model_access_pending':'forge_gpu_model_access_unverified'
+ },503)
  if(!await gpuHealthy(cfg))
   return json({error:'forge_gpu_provider_not_ready'},503)
  const length=Number(request.headers.get('content-length')??0)
