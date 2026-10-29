@@ -89,7 +89,7 @@ export default function SpaktokForge({
   fetch('/api/spaktok-forge/gpu-ticket',{cache:'no-store'})
    .then(r=>r.ok?r.json():Promise.reject(Error('gpu_health_error')))
    .then(data=>{if(live){
-    const status=typeof data.status==='string'&&data.status in FORGE_GPU_READINESS_AR?
+    const status=typeof data?.status==='string'&&Object.prototype.hasOwnProperty.call(FORGE_GPU_READINESS_AR,data.status)?
      data.status as ForgeGpuReadiness:'provider-offline'
     setGpuReadiness(status)
     setGpuAvailable(data.enabled===true&&status==='ready')
