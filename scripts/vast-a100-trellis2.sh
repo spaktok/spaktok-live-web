@@ -92,8 +92,10 @@ from trellis2_engine import initialize, generate_glb
 image=Path("assets/example_image/T.png")
 if not image.exists(): raise SystemExit("Official sample image missing")
 initialize()
-payload=generate_glb(Image.open(image).convert("RGBA"))
-out=Path("/workspace/spaktok-trellis2-test.glb")
+import os
+profile=os.environ.get("SPAKTOK_OUTPUT_PROFILE","preview")
+payload=generate_glb(Image.open(image).convert("RGBA"),profile)
+out=Path("/workspace/spaktok-trellis2-"+profile+".glb")
 out.write_bytes(payload)
 print("CREATED",out,"bytes",len(payload))
 PY
