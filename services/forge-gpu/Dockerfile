@@ -2,6 +2,7 @@
 # Run: docker build -f services/forge-gpu/Dockerfile -t spaktok-forge-gpu .
 # CUDA GPU required at runtime. This builds Python/CUDA extensions, so the
 # base image MUST be the CUDA devel variant with nvcc.
+# For Hopper (H100, sm_90) and Ampere/Ada (sm_8x), NOT Blackwell sm_120.
 # Unverified until built and smoke-tested on real NVIDIA GPU hardware.
 FROM nvidia/cuda:12.1.1-cudnn8-devel-ubuntu22.04
 
@@ -39,6 +40,7 @@ RUN useradd -m -u 10001 forge \
  && chown -R forge:forge /home/forge /opt/spaktok
 
 COPY --chown=forge:forge services/forge-gpu/server.py /opt/spaktok/server.py
+COPY --chown=forge:forge services/forge-gpu/gpu_preflight.py /opt/spaktok/gpu_preflight.py
 WORKDIR /opt/spaktok
 USER forge
 # Model weights are gated: download into your own runtime cache after accepting
