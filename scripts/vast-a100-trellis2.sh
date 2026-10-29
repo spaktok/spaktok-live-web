@@ -40,7 +40,7 @@ activate(){
   # shellcheck disable=SC1090
   source "$base/etc/profile.d/conda.sh"
 }
-install(){
+prepare_source(){
   check
   activate
   if [[ ! -d "$TRELLIS/.git" ]];then
@@ -50,16 +50,49 @@ install(){
   cd "$TRELLIS"
   git checkout --detach "$TRELLIS_COMMIT"
   git submodule update --init --recursive
-  [[ "${SPAKTOK_ACCEPT_UPSTREAM_SETUP:-}" == yes ]] || fail 'Review the official TRELLIS.2/setup.sh and set SPAKTOK_ACCEPT_UPSTREAM_SETUP=yes.'
-  log 'Building the official CUDA extension stack in an isolated conda environment.'
+  [[ "${SPAKTOK_ACCEPT_UPSTREAM_SETUP:-}" == yes ]] || fail 'Review upstream setup.sh and set SPAKTOK_ACCEPT_UPSTREAM_SETUP=yes.'
+}
+ensure_torch(){
+  conda activate trellis2
+  python - <<'PY'
+import torch
+print("TRELLIS conda PyTorch:", torch.__version__, "CUDA:", torch.version.cuda)
+assert torch.cuda.is_available(), "TRELLIS conda CUDA unavailable"
+PY
+}
+repair_flash(){
+  prepare_source
+  ensure_torch
+  log 'Install flash-attn in the existing trellis2 conda environment WITHOUT PEP517 build isolation.'
+  log 'This can build CUDA extensions for several minutes: supervise billing.'
+  python -m pip install --no-build-isolation 'flash-attn==2.7.3'
+}
+resume(){
+  repair_flash
+  log 'Continue remaining official TRELLIS.2 CUDA extensions (NO --new-env; preserves existing torch).'
+  cd "$TRELLIS"
   set +u
   # shellcheck disable=SC1091
-  source ./setup.sh --new-env --basic --flash-attn --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm
+  source ./setup.sh --nvdiffrast --nvdiffrec --cumesh --o-voxel --flexgemm
   set -u
   conda activate trellis2
-  python3 "$FORGE/gpu_preflight.py" || fail 'CUDA verification failed in new trellis2 environment.'
+  python3 "$FORGE/gpu_preflight.py" || fail 'CUDA verification failed in trellis2 conda environment.'
   python -m pip install 'fastapi>=0.115,<1' 'uvicorn>=0.30,<1' 'python-multipart>=0.0.9,<1'
-  log 'Installation complete. Model weights may still require downloads or license acceptance.'
+  log 'Dependencies ready. Model weights and GPU inference are still unverified.'
+}
+install(){
+  prepare_source
+  if conda env list --json | python3 -c 'import json,sys;print(any(p.endswith("/trellis2") for p in json.load(sys.stdin)["envs"]))' | grep -qx True;then
+    log 'Reusing previously created trellis2 conda environment.'
+  else
+    log 'Creating the official isolated conda environment; no flash-attn until torch is installed.'
+    cd "$TRELLIS"
+    set +u
+    # shellcheck disable=SC1091
+    source ./setup.sh --new-env --basic
+    set -u
+  fi
+  resume
 }
 serve(){
   activate
@@ -104,7 +137,9 @@ PY
 case "$ACTION" in
  preflight) preflight;;
  install) install;;
+ repair-flash) repair_flash;;
+ resume) resume;;
  serve) serve;;
  smoke) smoke;;
- *) fail 'Usage: vast-a100-trellis2.sh {preflight|install|smoke|serve}';;
+ *) fail 'Usage: vast-a100-trellis2.sh {preflight|install|repair-flash|resume|smoke|serve}';;
 esac
