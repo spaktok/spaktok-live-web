@@ -47,6 +47,18 @@ const COLOR_TESTS:Readonly<Record<typeof AGENT_STYLES[number],RegExp>>={
  white:/ابيض|أبيض|بيضاء|white|weiß|weiss/i,
 }
 const MATERIAL_EDIT=/غيّر|غير|بدّل|بدل|لوّن|لون|اجعل|خليه|خلّي|حوّل|حول|paint|recolor|make|color|colour|material|خامة|färb|faerb|ändere|aendere|farbe|mach(?:e)?|kolorier|tön/i
+/** Ask once instead of guessing an unsupported or ambiguous color.
+ * The current material engine supports ONE solid PBR color per command.
+ */
+export function creatorClarification(prompt:string):string|null{
+ if(!MATERIAL_EDIT.test(prompt))return null
+ const colors=Object.entries(COLOR_TESTS).filter(([,pattern])=>pattern.test(prompt))
+ if(colors.length===0)
+  return 'أستطيع تعديل خامة المجسم، لكنك لم تحدد اللون. ما اللون المطلوب؟ يمكنك اختيار الذهبي أو الفضي أو الأحمر أو الأزرق أو الأخضر أو البنفسجي أو الأسود أو الأبيض.'
+ if(colors.length>1)
+  return 'وجدت أكثر من لون في طلبك. محرك الخامات الحالي يطبّق لونًا أساسيًا واحدًا لكل عملية. أي لون تريد تطبيقه أولًا؟'
+ return null
+}
 export const requiresRelief=(prompt:string)=>/\b2[.,]?5d\b|بارز|relief|heightfield|نحت سطحي/i.test(prompt)
 /** Deterministic creator intent is an AUTHORITATIVE routing constraint.
  * An LLM may hallucinate six copies of Gifts for "all studios".
