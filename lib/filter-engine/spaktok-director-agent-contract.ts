@@ -57,7 +57,16 @@ export const requiresRelief=(prompt:string)=>/\b2[.,]?5d\b|بارز|relief|heigh
 export function normalizeAgentDecision(step:AgentStep,prompt:string):AgentStep{
  const explicit=detectDirectorTargets(prompt)
  const unique=[...new Set(step.targets)]
- return {...step,targets:explicit.length?[...explicit]:unique}
+ // Creator exclusions override even an earlier "جميع الأقسام" instruction.
+ // This avoids copying a private source into an explicitly excluded studio.
+ const excluded=new Set<DirectorTarget>()
+ const normalized=prompt.normalize('NFKC')
+ const exclusions=/(?:بدون|ما عدا|عدا|إلا|الا|except|without)\s+([^،,.؛\n]{1,75})/gi
+ for(const match of normalized.matchAll(exclusions)){
+  for(const target of detectDirectorTargets(match[1]))excluded.add(target)
+ }
+ const selected=explicit.length?[...explicit]:unique
+ return {...step,targets:selected.filter(target=>!excluded.has(target))}
 }
 export const agentAllowedTargets=(targets:readonly DirectorTarget[]) =>
  targets.length>0&&targets.length<=6&&
