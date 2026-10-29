@@ -76,6 +76,8 @@ export function validateAgentStep(step:AgentStep,request:AgentRequest):
    request.steps.some(s=>s.action==='generate_3d_gpu')))
   return {ok:false,reason:'paid_gpu_cannot_repeat'}
  if(step.action==='recolor_asset'){
+  if(request.steps.some(event=>event.action==='recolor_asset'&&event.ok))
+   return {ok:false,reason:'material_already_changed'}
   if(request.workingSource!=='glb'||!step.color||
       !MATERIAL_EDIT.test(request.prompt)||
       !COLOR_TESTS[step.color].test(request.prompt))
