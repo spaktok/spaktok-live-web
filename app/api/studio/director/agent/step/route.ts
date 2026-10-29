@@ -1,7 +1,7 @@
 import {generateText,Output} from 'ai'
 import {getNativeUser,rateLimit} from '@/lib/native/auth'
 import {
- freeCloudflareAgentConfigured,requestCloudflareFreeAgentStep,
+ freeCloudflareAgentConfigured,cloudflareAgentReadiness,requestCloudflareFreeAgentStep,
 } from '@/lib/server/spaktok-director-cloudflare'
 import {
  agentRequestSchema,agentStepSchema,validateAgentStep,normalizeAgentDecision,requiredAgentAction,type AgentStep,
@@ -21,8 +21,11 @@ const active=()=>process.env.SPAKTOK_DIRECTOR_AGENT_ENABLED==='true'&&
 export async function GET(){
  if(!active())return reply({enabled:false,reason:'agent_not_configured'})
  const user=await getNativeUser().catch(()=>null)
+ if(!user)return reply({enabled:false,reason:'login_required'})
+ const healthy=provider()==='cloudflare'?
+  await cloudflareAgentReadiness():true
  return reply({
-  enabled:!!user,reason:user?'ready':'login_required',
+  enabled:healthy,reason:healthy?'ready':'agent_worker_unavailable',
   provider:provider()==='cloudflare'?'Cloudflare Workers AI (free quota)':'Vercel AI Gateway',
   vision:provider()!=='cloudflare',
  })
