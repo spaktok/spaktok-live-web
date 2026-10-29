@@ -83,6 +83,7 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
  const [agentEnabled,setAgentEnabled]=useState(false)
  const [agentStatus,setAgentStatus]=useState('جارٍ فحص محرك AI…')
  const [visionConsent,setVisionConsent]=useState(false)
+ const [agentSupportsVision,setAgentSupportsVision]=useState(false)
  const [busy,setBusy]=useState(false)
  const [imagePreview,setImagePreview]=useState('')
  const fileRef=useRef<HTMLInputElement|null>(null)
@@ -112,7 +113,10 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
    .then(x=>{
     if(!live)return
     setAgentEnabled(x.enabled===true)
-    setAgentStatus(x.enabled===true?'وكيل AI متصل بالمحركات':
+    setAgentSupportsVision(x.enabled===true&&x.vision===true)
+    setAgentStatus(x.enabled===true?
+     (x.provider==='Cloudflare Workers AI (free quota)'?
+      'Cloudflare AI متصل · ضمن الحصة المجانية':'وكيل AI متصل بالمحركات'):
      x.reason==='login_required'?'وكيل AI يحتاج تسجيل الدخول':
       'وكيل AI غير مفعّل؛ المتاح توجيه محلي بالقواعد')
    })
@@ -205,7 +209,8 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
     const answer=await runDirectorAgent({
      prompt,
      history:messages.slice(-8).map(m=>({role:m.role,text:m.text.slice(0,350)})),
-     source:file??null,rights,rightsApproved,visionConsent,
+     source:file??null,rights,rightsApproved,
+     visionConsent:visionConsent&&agentSupportsVision,
      gpuAvailable:gpuEnabled,
      gpuTransferConsent:transferApproved,
      gpuComputeConsent:computeApproved,
@@ -456,14 +461,14 @@ export default function SpaktokDirectorChat({sourceFile=null,onGeneratedGlb}:Rea
        <label className="flex items-center gap-2"><input type="checkbox" checked={transferApproved} onChange={e=>setTransferApproved(e.target.checked)}/> أوافق على إرسال الصورة إلى GPU</label>
        <label className="flex items-center gap-2"><input type="checkbox" checked={computeApproved} onChange={e=>setComputeApproved(e.target.checked)}/> أوافق على تكلفة مهمة GPU واحدة</label>
       </div>}
-     {agentEnabled&&sourceKind==='image'&&<label className="flex items-center gap-2 text-[11px] text-sky-200">
+     {agentEnabled&&agentSupportsVision&&sourceKind==='image'&&<label className="flex items-center gap-2 text-[11px] text-sky-200">
       <input type="checkbox" checked={visionConsent}
        onChange={e=>setVisionConsent(e.target.checked)}/>
       أوافق أن يرى نموذج AI نسخة مصغرة من الصورة لفهم محتواها (ليس الملف الأصلي).
      </label>}
      <p className="text-[10px] leading-5 text-slate-500">
       {agentEnabled?
-       'AI يختار أداة، ينفذها المحرك داخل المتصفح، ثم يقرأ نتيجة التنفيذ ويقرر التالي. تحليل الصورة اختياري بموافقة منفصلة. لا نشر أو دفع أو تشغيل GPU دون تفويض.':
+       'نموذج AI يختار الأداة، ينفذها المحرك ثم يقرأ النتيجة ويقرر التالي. فهم الصورة اختياري فقط إذا دعمه النموذج وبموافقة منفصلة. لا نشر أو تشغيل GPU دون تفويض.':
        'وكيل AI غير مفعّل؛ هذا وضع أدوات محلية بقواعد وليس ذكاءً اصطناعيًا مستقلًا. النماذج والملفات لا تُنشر تلقائيًا.'}
      </p>
     </footer>
