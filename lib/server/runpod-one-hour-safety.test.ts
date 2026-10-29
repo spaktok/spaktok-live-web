@@ -22,7 +22,7 @@ describe('RunPod paid one-hour trial safety contract',()=>{
   const source=readFileSync(script,'utf8')
   expect(source).not.toMatch(/^\s*--terminate-after(?:\s|=)/m)
   expect(source).not.toMatch(/^\s*--stop-after(?:\s|=)/m)
-  expect(source).toContain('DO NOT rely on old --terminate-after')
+  expect(source).toContain('Earlier versions accepted but DID NOT enforce')
  })
  it('produces a dry-run only without accessing RunPod or paid resources',()=>{
   const result=spawnSync('bash',[script,'--dry-run'],{
