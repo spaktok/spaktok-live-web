@@ -14,6 +14,35 @@ export function freeCloudflareAgentConfigured():boolean{
  return process.env.SPAKTOK_DIRECTOR_AGENT_PROVIDER==='cloudflare'&&
   !!process.env.SPAKTOK_D1_BRIDGE_SIGNING_KEY
 }
+/** Read-only provider probe; does not consume LLM neurons.
+ * Do not label the chat "AI connected" merely because env flags exist.
+ * Both the configured signing identity and the deployed model must match.
+ */
+export async function cloudflareAgentReadiness():Promise<boolean>{
+ if(!freeCloudflareAgentConfigured())return false
+ try{
+  const secret=process.env.SPAKTOK_D1_BRIDGE_SIGNING_KEY
+  if(!secret)return false
+  const key=createPrivateKey(Buffer.from(secret,'base64').toString('utf8'))
+  const publicKey=createPublicKey(key).export({type:'spki',format:'der'})
+  if(!Buffer.isBuffer(publicKey)||
+     publicKey.toString('base64')!==DEPLOYED_SIGNER_SPKI)
+   return false
+  const response=await fetch(
+   'https://spaktok-director-ai.spaktok.workers.dev/health',{
+    method:'GET',cache:'no-store',redirect:'error',
+    signal:AbortSignal.timeout(4000),
+   })
+  if(!response.ok)return false
+  const result:unknown=await response.json()
+  if(!result||typeof result!=='object')return false
+  const health=result as Record<string,unknown>
+  return health.ok===true&&health.auth==='signed-server-only'&&
+   health.provider==='cloudflare-workers-ai'&&
+   health.model==='@cf/meta/llama-3.3-70b-instruct-fp8-fast'
+ }catch{return false}
+}
+
 /** Sign a domain-separated SHA256 of exactly the bytes sent to Workers AI.
  * No API keys are passed to users, browser or the Cloudflare Worker.
  */
