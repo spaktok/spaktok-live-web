@@ -18,7 +18,6 @@ import secrets
 import hashlib
 import time
 
-import rembg
 import torch
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -119,6 +118,7 @@ def load_model_once():
         raise RuntimeError("unsupported_forge_gpu_engine")
     # Loading custom SF3D CUDA modules before the architecture preflight
     # can fail expensively on an RTX PRO 6000 sm_120 with old cu121 torch.
+    import rembg
     from sf3d.system import SF3D
     from sf3d.utils import remove_background, resize_foreground
     _remove_background_fn = remove_background
