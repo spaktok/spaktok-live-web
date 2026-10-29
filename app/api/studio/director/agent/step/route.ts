@@ -1,6 +1,9 @@
 import {generateText,Output} from 'ai'
 import {getNativeUser,rateLimit} from '@/lib/native/auth'
 import {
+ freeCloudflareAgentConfigured,requestCloudflareFreeAgentStep,
+} from '@/lib/server/spaktok-director-cloudflare'
+import {
  agentRequestSchema,agentStepSchema,validateAgentStep,
 } from '@/lib/filter-engine/spaktok-director-agent-contract'
 
@@ -9,14 +12,20 @@ export const dynamic='force-dynamic'
 export const maxDuration=20
 const noCache={'cache-control':'private,no-store','x-content-type-options':'nosniff'} as const
 const reply=(v:unknown,status=200)=>Response.json(v,{status,headers:noCache})
-const active=()=>process.env.SPAKTOK_DIRECTOR_AGENT_ENABLED==='true'
+const provider=()=>process.env.SPAKTOK_DIRECTOR_AGENT_PROVIDER||'cloudflare'
+const active=()=>process.env.SPAKTOK_DIRECTOR_AGENT_ENABLED==='true'&&
+ (provider()==='cloudflare'?freeCloudflareAgentConfigured():provider()==='gateway')
 
 /** Capability read is truthful: if disabled or unauthenticated, the UI
  * must say "rule-based" rather than impersonating a working AI agent. */
 export async function GET(){
  if(!active())return reply({enabled:false,reason:'agent_not_configured'})
  const user=await getNativeUser().catch(()=>null)
- return reply({enabled:!!user,reason:user?'ready':'login_required'})
+ return reply({
+  enabled:!!user,reason:user?'ready':'login_required',
+  provider:provider()==='cloudflare'?'Cloudflare Workers AI (free quota)':'Vercel AI Gateway',
+  vision:provider()!=='cloudflare',
+ })
 }
 /** One bounded agent decision. The next turn includes REAL observations
  * returned by browser-local tools; model never executes arbitrary code.
@@ -70,13 +79,15 @@ export async function POST(request:Request){
     finish:'Finish based on tool observations ONLY, or explain a needed source. No fake artifacts.',
    },
   })
+  if(provider()==='cloudflare'&&image)
+   return reply({error:'free_agent_text_only_disable_vision_consent'},422)
   const messages:[{role:'user';content:string|Array<
    {type:'text';text:string}|{type:'image';image:Buffer}
   >}]=[{role:'user',content:image?[
    {type:'text',text:instruction},
    {type:'image',image},
   ]:instruction}]
-  const response=await generateText({
+  const system=`You are Spaktok AI Director, an actual tool-using creative agent.
    model:'google/gemini-3-flash',
    output:Output.object({schema:agentStepSchema}),
    system:`You are Spaktok AI Director, an actual tool-using creative agent.
@@ -102,15 +113,28 @@ downsized preview when its owner opted in. Never request personal identity.
 Do not execute publishing, transfers, payments or streaming.
 Keep reply concise in Arabic; honest about which features remain pending.
 Do not retry a previously failed tool endlessly, especially paid GPU.
-All tool decisions remain subject to policy gates and owner consent.`,
-   messages,
-   temperature:0,
-   abortSignal:AbortSignal.timeout(15000),
-  })
-  const step=agentStepSchema.parse(response.output)
+All tool decisions remain subject to policy gates and owner consent.`
+  let step
+  let usedProvider='gateway'
+  let neurons:number|null=null
+  if(provider()==='cloudflare'){
+   const result=await requestCloudflareFreeAgentStep(system,instruction)
+   step=result.step
+   usedProvider=result.provider
+   neurons=result.neurons
+  }else{
+   const response=await generateText({
+    model:'google/gemini-3-flash',
+    output:Output.object({schema:agentStepSchema}),
+    system,messages,temperature:0,
+    abortSignal:AbortSignal.timeout(15000),
+   })
+   step=agentStepSchema.parse(response.output)
+  }
   const policy=validateAgentStep(step,input)
   if(!policy.ok)return reply({error:'agent_policy_rejected',reason:policy.reason},422)
-  return reply({enabled:true,step,modelDriven:true,sourceVision:image!==null})
+  return reply({enabled:true,step,modelDriven:true,provider:usedProvider,
+   freeDailyQuota:usedProvider!=='gateway',neurons,sourceVision:image!==null})
  }catch{
   return reply({error:'model_unavailable'},503)
  }
