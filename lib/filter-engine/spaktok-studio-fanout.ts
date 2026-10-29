@@ -163,7 +163,7 @@ export function assertStudioFanoutManifest(value:unknown):
  asserts value is StudioFanoutManifest{
  if(!value||typeof value!=='object'||Array.isArray(value))
   throw Error('studio_fanout_manifest_invalid')
- const v=value as Partial<StudioFanoutManifest>
+ const v=value as StudioFanoutManifest
  if(v.format!=='SpaktokStudioFanout'||v.version!==1||
   typeof v.createdAt!=='string'||!validIso(v.createdAt)||
   !v.source||!safeFile(v.source.fileName)||
