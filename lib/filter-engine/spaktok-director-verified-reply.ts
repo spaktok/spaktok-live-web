@@ -14,9 +14,11 @@ export function verifiedDirectorReply(
   ' ولم أنفذ الإجراء التالي تلقائيًا. السبب: '+failure.detail+
   '. لا يوجد نشر عام ولا إعادة تشغيل مدفوعة.'
  const sent=actions.some(x=>x.action==='dispatch_asset'&&x.ok)
+ const presented=actions.some(x=>x.action==='present_asset'&&x.ok)
  if(result){
-  if(!sent||!result.manifest||!result.manifest.source.sha256||
-   result.dispatch.publication!=='private-draft')
+  if((!sent&&!presented)||!result.manifest||!result.manifest.source.sha256||
+   result.dispatch.publication!=='private-draft'||
+   result.handoffStored!==sent)
    return 'لم يكتمل التحقق من نتيجة AI Director؛ لن أصف الملف بأنه جاهز للنشر.'
   const affected=result.dispatch.steps.map(s=>s.target).join('، ')
   const edited=actions.some(x=>x.action==='recolor_asset'&&x.ok)
@@ -25,8 +27,10 @@ export function verifiedDirectorReply(
   const operation=edited?'تعديل خامة ثلاثية الأبعاد':generated?
    'توليد 3D عبر GPU':relief?'إنشاء مجسم بارز 2.5D':
    'فحص ملف GLB موجود'
-  return 'تحقق التنفيذ: '+operation+'؛ تم فحص GLB وحفظ المسودة الخاصة '+
-   'لـ '+affected+'. المخرجات: '+result.qa.triangles+
+  return 'تحقق التنفيذ: '+operation+'؛ '+
+   (sent?'تم فحص GLB وحفظ المسودة الخاصة لـ '+affected+'. ':
+    'تم فحص GLB وإرجاع الملف داخل الدردشة فقط. لم يُوزَّع على أي قسم. ')+
+   'المخرجات: '+result.qa.triangles+
    ' مثلث، '+(result.file.size/1048576).toFixed(2)+
    ' MiB، وبصمة SHA-256 مثبتة في خطة المشروع. '+
    'يمكنك تدوير الملف وتنزيله هنا. Rig والتحريك والتتبع واللايف '+
