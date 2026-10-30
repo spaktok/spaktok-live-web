@@ -43,9 +43,25 @@ Then compare against a Rodin GLB made from the same image:
       --spaktok /workspace/spaktok-ladder/spaktok-studio-hd.glb \
       --rodin /workspace/rodin-same-input.glb
 
+## Async job queue (built)
+`forge_jobs.py` + `/v1/jobs` in `server.py` (TRELLIS.2 engine only,
+operator Bearer token only, requires `FORGE_GPU_HD_ENABLED=yes`):
+
+    TOKEN=...; GPU=https://<tunnel>
+    curl -H "Authorization: Bearer $TOKEN" -F image=@ref.png \
+      -F profile=studio-ultra -F poly_budget=300000 $GPU/v1/jobs   # 202 {id}
+    curl -H "Authorization: Bearer $TOKEN" $GPU/v1/jobs/<id>       # poll
+    curl -H "Authorization: Bearer $TOKEN" -o out.glb $GPU/v1/jobs/<id>/glb
+
+One GPU job at a time (shares the sync lock), queue depth 8, no retries,
+photo dropped from memory when the job starts, result 0600 on disk,
+expires after 1 h, errors are categories only. Output limit 256 MiB.
+Env: `FORGE_GPU_JOB_DIR`, `FORGE_GPU_JOB_QUEUE`, `FORGE_GPU_JOB_TTL`.
+Then push the GLB to R2 with `push_first_glb_to_spaktok_r2.py`.
+
 ## Remaining Rodin gaps (not built yet)
-1. Async job queue for HD/ultra (submit → poll → R2), required before
-   `studio-ultra` can be offered in Studio.
+1. Studio UI + Next server route that submits/polls `/v1/jobs` and
+   streams the result to R2 automatically.
 2. Multi-view (up to 5 references): TRELLIS.2 is single-image only.
    Options are TRELLIS v1 `run_multi_image` or view fusion.
 3. Text-to-3D: text → image (AI Gateway) → TRELLIS.2.

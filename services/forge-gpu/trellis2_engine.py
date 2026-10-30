@@ -72,6 +72,29 @@ def make_glb(photo: bytes, profile: str = "mobile-preview",
     return generate_with_quality(photo, quality, job_id=job_id)
 
 
+MAX_ASYNC_GLB_BYTES = 256 * 1024 * 1024
+
+
+def make_glb_async_job(photo: bytes, profile: str, poly_budget, job_id: str) -> bytes:
+    """Operator async queue entry: permits async-only presets (studio-ultra)."""
+    if _pipeline is None:
+        raise RuntimeError("trellis2_model_not_ready")
+    from trellis2_quality import PRESETS, select_trellis2_quality, with_poly_budget
+    if profile not in PRESETS:
+        raise ValueError("unsupported_trellis2_profile")
+    import torch
+    quality = select_trellis2_quality(
+        profile,
+        vram_bytes=torch.cuda.get_device_properties(0).total_memory,
+        hd_authorized=os.environ.get("FORGE_GPU_HD_ENABLED") == "yes",
+        async_operator_run=True,
+    )
+    if poly_budget is not None:
+        quality = with_poly_budget(quality, int(poly_budget))
+    return generate_with_quality(photo, quality, job_id=job_id,
+                                 max_bytes=MAX_ASYNC_GLB_BYTES)
+
+
 def generate_with_quality(photo: bytes, quality, *, job_id: str,
                           max_bytes: int = MAX_GLB_BYTES) -> bytes:
     """Shared generation core. Callers MUST pass an already-selected preset."""
