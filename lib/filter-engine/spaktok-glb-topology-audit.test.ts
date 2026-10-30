@@ -1,7 +1,7 @@
 import {describe,expect,it} from 'vitest'
 import {inspectStudioGlbTopology} from './spaktok-glb-topology-audit'
 
-function makeGlb(indices:number[],vertices=5,indexType:5123):ArrayBuffer{
+function makeGlb(indices:number[],vertices=5,indexType:5121|5123|5125=5123):ArrayBuffer{
  const nbytes=indexType===5125?4:indexType===5123?2:1
  const aligned=Math.ceil(indices.length*nbytes/4)*4
  const doc={
