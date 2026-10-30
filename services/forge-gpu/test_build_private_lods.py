@@ -304,6 +304,40 @@ class MultiLODTests(unittest.TestCase):
                     generate_lods(origin, output, conservative=True)
             self.assertFalse(output.exists())
 
+    def test_position_welded_source_defects_block_recommendations_even_with_small_lods(self):
+        from build_private_lods import scan_glb_position_weld
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "private-lods"
+            fixture(origin, 1000)
+
+            def fake_weld(path):
+                report = scan_glb_position_weld(path)
+                if path.name == "owner.glb":
+                    report["nonmanifold_edges_after_position_weld"] = 3
+                return report
+
+            def fake_run(args, **kwargs):
+                count = 480 if args[args.index("-si") + 1] == "0.50" else 190
+                fixture(Path(args[args.index("-o") + 1]), count)
+                return subprocess.CompletedProcess(args, 0, "", "")
+
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run), \
+                 patch("build_private_lods.scan_glb_position_weld",
+                       side_effect=fake_weld):
+                result = generate_lods(origin, output)
+            self.assertTrue(result["triangleTargetsMet"])
+            self.assertTrue(result["positionWeldGeometryReviewRequired"])
+            self.assertTrue(result["needsOptimization"])
+            self.assertEqual(result["privateStudioRecommendations"], {})
+            self.assertTrue(result["review"]["automaticDistributionBlocked"])
+            self.assertTrue(result["review"]["requiresVisualReview"])
+            self.assertEqual(
+                result["variants"]["lod0"]["positionWeldTopology"][
+                    "nonmanifold_edges_after_position_weld"], 3
+            )
+
     def test_no_gpu_or_download_when_binary_missing(self):
         with tempfile.TemporaryDirectory() as root:
             origin = Path(root) / "owner.glb"
