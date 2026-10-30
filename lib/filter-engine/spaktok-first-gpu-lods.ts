@@ -1,7 +1,8 @@
-/** Verified PRIVATE Cloudflare R2 GLB LOD variants from the owner's A100 output.
- * Generated and independently read back from R2 on 2026-10-30.
- * LOD1/LOD2 use prototype spatial-UV clustering, NOT gltfpack/QEM.
- * No asset here is public, visual-QA approved, rigged or native-ready.
+/** Owner-private Cloudflare R2 LOD variants, SHA-256 verified.
+ * lod1/lod2 are defective preview clustering prototypes.
+ * lod1c/lod2c use gltfpack 1.3 conservative CPU simplification, with zero
+ * detected non-manifold INDEX edges but unachieved target LOD budgets.
+ * None is automatically approved for Live, AR, gifts or public publishing.
  */
 export const SPAKTOK_FIRST_GPU_LODS=Object.freeze({
  lod0:Object.freeze({
@@ -22,6 +23,27 @@ export const SPAKTOK_FIRST_GPU_LODS=Object.freeze({
   objectKey:'studio/private/pilot-20261030/lods/lod1.glb',
   description:'متوسط 2.83MB — معاينة الأفـاتار والهدايا',
  }),
+ // Professionally simplified on CPU with gltfpack 1.3; R2 read-back and
+ // SHA-256 matched on 2026-10-30. Neither achieved its 50%/20% goal.
+ // These are PRIVATE QA candidates, not Live/AR-ready production assets.
+ lod1c:Object.freeze({
+  id:'lod1c',fileName:'spaktok-lod1-conservative.glb',
+  sha256:'765011185736c0d2f53e9252b51346b10f4107d3128934ccbbbee7b1f9cd3bbd',
+  bytes:5087128,triangles:109406,vertices:100512,nonManifoldEdges:0,
+  meanVertexDriftPercent:null,p95VertexDriftPercent:null,
+  uvCollapsedTriangles:3,surfaceAreaChangePercent:-0.00857227,uvAreaSumChangePercent:null,
+  objectKey:'studio/private/pilot-20261030/professional-candidates-v1/lod1-conservative.glb',
+  description:'LOD1 احترافي محافظ 5.09MB — فحص خاص، الهدف لم يتحقق',
+ }),
+ lod2c:Object.freeze({
+  id:'lod2c',fileName:'spaktok-lod2-conservative.glb',
+  sha256:'6b434a87299c2ad653efe10969cffb11b14c9608fb5574eb40b0228d2444ca23',
+  bytes:4992732,triangles:106428,vertices:98679,nonManifoldEdges:0,
+  meanVertexDriftPercent:null,p95VertexDriftPercent:null,
+  uvCollapsedTriangles:2,surfaceAreaChangePercent:-0.00711598,uvAreaSumChangePercent:null,
+  objectKey:'studio/private/pilot-20261030/professional-candidates-v1/lod2-conservative.glb',
+  description:'LOD2 احترافي محافظ 4.99MB — فحص خاص، الهدف لم يتحقق',
+ }),
  lod2:Object.freeze({
   id:'lod2',fileName:'spaktok-first-lod2.glb',
   sha256:'bfadca41f907c577be9de6590f07cf95ff6f2e17c56ce518fd008e0cbd8c8742',
@@ -34,7 +56,7 @@ export const SPAKTOK_FIRST_GPU_LODS=Object.freeze({
 } as const)
 export type SpaktokFirstLodId=keyof typeof SPAKTOK_FIRST_GPU_LODS
 export const SPAKTOK_FIRST_GPU_LOD_IDS=Object.freeze(
- ['lod0','lod1','lod2'] as const
+ ['lod0','lod1c','lod2c','lod1','lod2'] as const
 )
 export function isSpaktokFirstLodId(v:unknown):v is SpaktokFirstLodId{
  return typeof v==='string' &&
