@@ -2,7 +2,7 @@
 import {isIP} from 'node:net'
 import {parseForgeDailyJobLimit} from './spaktok-forge-budget'
 
-export type ForgeGpuEngine='stable-fast-3d'|'trellis2'
+export type ForgeGpuEngine='stable-fast-3d'|'trellis-v1'
 export type ForgeGpuProvider='runpod'|'vast'
 export interface ForgeGpuBackend {
  url:string
@@ -25,7 +25,7 @@ export function resolveForgeGpuBackend(
  const provider=env.SPAKTOK_FORGE_GPU_PROVIDER??'runpod'
  const engine=env.SPAKTOK_FORGE_GPU_ENGINE??'stable-fast-3d'
  if((provider!=='runpod'&&provider!=='vast')||
-  (engine!=='stable-fast-3d'&&engine!=='trellis2')||
+  (engine!=='stable-fast-3d'&&engine!=='trellis-v1')||
   !expectedOrigin||expectedOrigin!==origin||
   !rawUrl||!host||token.length<32)return null
  try{
@@ -45,7 +45,7 @@ export function resolveForgeGpuBackend(
    // tunnel hostname, pinned independently from the endpoint URL.
    // No raw mapped HTTP IP:port, quick tunnel URL or user URL allowed.
    const pinned=env.SPAKTOK_FORGE_GPU_VAST_HOSTNAME??''
-   if(pinned!==host||host.endsWith('.proxy.runpod.net')||
+   if(engine!=='trellis-v1'||pinned!==host||host.endsWith('.proxy.runpod.net')||
     host.endsWith('.trycloudflare.com')||host==='trycloudflare.com')
     return null
   }
