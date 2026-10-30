@@ -69,6 +69,16 @@ def make_glb(photo: bytes, profile: str = "mobile-preview",
         vram_bytes=torch.cuda.get_device_properties(0).total_memory,
         hd_authorized=os.environ.get("FORGE_GPU_HD_ENABLED") == "yes",
     )
+    return generate_with_quality(photo, quality, job_id=job_id)
+
+
+def generate_with_quality(photo: bytes, quality, *, job_id: str,
+                          max_bytes: int = MAX_GLB_BYTES) -> bytes:
+    """Shared generation core. Callers MUST pass an already-selected preset."""
+    if _pipeline is None:
+        raise RuntimeError("trellis2_model_not_ready")
+    profile = quality.profile
+    import torch
     from PIL import Image, ImageOps
     import o_voxel
 
@@ -119,11 +129,11 @@ def make_glb(photo: bytes, profile: str = "mobile-preview",
         scene.export(path, extension_webp=True)
         _stage("glb_exported", job_id, bytes=os.path.getsize(path))
         byte_size = os.path.getsize(path)
-        if not 28 <= byte_size <= MAX_GLB_BYTES:
+        if not 28 <= byte_size <= max_bytes:
             raise ValueError("invalid_or_oversized_glb")
         with open(path, "rb") as binary:
-            result = binary.read(MAX_GLB_BYTES + 1)
-    if (result[:4] != b"glTF" or len(result) > MAX_GLB_BYTES or
+            result = binary.read(max_bytes + 1)
+    if (result[:4] != b"glTF" or len(result) > max_bytes or
             int.from_bytes(result[4:8], "little") != 2 or
             int.from_bytes(result[8:12], "little") != len(result)):
         raise ValueError("invalid_glb_header_or_size")
