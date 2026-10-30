@@ -185,6 +185,10 @@ async def generate(request: Request, image: UploadFile = File(...)):
     if len(data) < 128 or len(data) > MAX_PHOTO:
         raise HTTPException(status_code=413, detail="invalid_image_size")
     ticket = getattr(request.state, "gpu_ticket", None)
+    if ticket and ticket.get("profile") == "studio-hd" and (
+        _ENGINE_NAME != "trellis2" or os.environ.get("FORGE_GPU_HD_ENABLED") != "yes"
+    ):
+        raise HTTPException(status_code=403, detail="gpu_hd_not_enabled")
     if ticket and (
         image.content_type != ticket["mime"]
         or len(data) != ticket["size"]
