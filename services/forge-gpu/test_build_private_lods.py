@@ -204,6 +204,106 @@ class MultiLODTests(unittest.TestCase):
                     generate_lods(origin, Path(root) / "lod")
                 process.assert_not_called()
 
+    def test_conservative_retries_reject_bad_topology_and_disclose_actual_ratios(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "private-lods"
+            fixture(origin, 1000)
+            before = hashlib.sha256(origin.read_bytes()).hexdigest()
+            calls = []
+
+            def fake_run(args, **kwargs):
+                calls.append(args)
+                self.assertIn("-se", args)
+                cap = args[args.index("-se") + 1]
+                target = Path(args[args.index("-o") + 1])
+                ratio = args[args.index("-si") + 1]
+                if ratio == "0.50":
+                    fixture(target, 930 if cap == "0.0014" else 920,
+                            malformed_edges=(cap == "0.0014"))
+                else:
+                    fixture(target, 890 if cap == "0.0025" else 880,
+                            malformed_edges=(cap == "0.0025"))
+                return subprocess.CompletedProcess(args, 0, "", "")
+
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \\
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                manifest = generate_lods(origin, output, conservative=True)
+            self.assertEqual(len(calls), 4)
+            self.assertEqual(manifest["optimizationMode"],
+                             "bounded-conservative-cpu")
+            self.assertFalse(manifest["triangleTargetsMet"])
+            self.assertTrue(manifest["needsOptimization"])
+            self.assertEqual(manifest["privateStudioRecommendations"], {})
+            self.assertTrue(manifest["review"]["automaticDistributionBlocked"])
+            self.assertTrue(manifest["review"]["requiresVisualReview"])
+            self.assertEqual(manifest["variants"]["lod1"]["triangles"], 920)
+            self.assertEqual(manifest["variants"]["lod2"]["triangles"], 880)
+            self.assertAlmostEqual(
+                manifest["variants"]["lod1"]["achievedTriangleRatio"], .92)
+            self.assertAlmostEqual(
+                manifest["variants"]["lod2"]["achievedTriangleRatio"], .88)
+            self.assertEqual(
+                manifest["variants"]["lod1"]["maxSimplificationErrorUsed"],
+                "0.0012")
+            self.assertEqual(
+                manifest["variants"]["lod2"]["maxSimplificationErrorUsed"],
+                "0.0022")
+            self.assertEqual(
+                [v["result"] for v in
+                 manifest["variants"]["lod1"]["optimizationAttempts"]],
+                ["rejected", "accepted"])
+            self.assertEqual(hashlib.sha256(origin.read_bytes()).hexdigest(),
+                             before)
+            self.assertEqual(json.loads((output / "pack.json").read_text()),
+                             manifest)
+
+    def test_conservative_all_attempts_rejected_no_partial_pack(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "rejected"
+            fixture(origin, 1000)
+            calls = []
+
+            def fake_run(args, **kwargs):
+                calls.append(args)
+                fixture(Path(args[args.index("-o") + 1]), 900,
+                        malformed_edges=True)
+                return subprocess.CompletedProcess(args, 0, "", "")
+
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \\
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                with self.assertRaisesRegex(
+                    ValueError, "lod_no_valid_conservative_candidate_lod1"
+                ):
+                    generate_lods(origin, output, conservative=True)
+            self.assertEqual(len(calls), 4)
+            self.assertFalse(output.exists())
+
+    def test_conservative_failed_program_cannot_reuse_stale_candidate(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "rejected"
+            fixture(origin, 1000)
+            calls = []
+
+            def fake_run(args, **kwargs):
+                calls.append(args)
+                if len(calls) == 1:
+                    fixture(Path(args[args.index("-o") + 1]), 900,
+                            malformed_edges=True)
+                    return subprocess.CompletedProcess(args, 0, "", "")
+                # An attempted command fails before writing an output.
+                return subprocess.CompletedProcess(args, 1, "", "failure")
+
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \\
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                with self.assertRaisesRegex(
+                    ValueError, "lod_no_valid_conservative_candidate_lod1"
+                ):
+                    generate_lods(origin, output, conservative=True)
+            self.assertFalse(output.exists())
+
     def test_no_gpu_or_download_when_binary_missing(self):
         with tempfile.TemporaryDirectory() as root:
             origin = Path(root) / "owner.glb"
