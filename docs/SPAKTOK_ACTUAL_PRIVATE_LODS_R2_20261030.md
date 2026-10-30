@@ -18,6 +18,45 @@ Post-upload GET and SHA-256 verification succeeded on all GLBs.
 Each GLB passed structural header / geometry count / PBR embedded WebP
 presence and byte-for-byte original WebP image retention checks.
 
+## Additional owner-R2 UV/surface audit (2026-10-30, executed)
+
+A new CPU-only `private_lod_uv_surface_audit.js` script was run against
+the **actual, private** GLB files in R2. Original SHA-256 was verified for
+each of all three inputs before saving anything. The independent report
+was saved and read back to verify byte-for-byte SHA-256 at:
+
+`studio/private/pilot-20261030/lods/uv-surface-audit-v1.json`
+
+The existing `pack.json` is updated with a private pointer and a
+`visualQA:false` restriction. No GPU inference or public links were used.
+
+| Measurement | Original LOD0 | Clustered LOD1 | Clustered LOD2 |
+| --- | ---: | ---: | ---: |
+| Triangles | 117,887 | 54,132 | 18,651 |
+| UV-degenerate triangles | 6 | 0 | 0 |
+| Tiny 3D-area triangles | 1 | 0 | 0 |
+| Absolute sum of triangle surface areas | 6.407537 | 5.544296 | 4.426835 |
+| Surface-area sum change vs original | 0% | **−13.4723%** | **−30.9121%** |
+| Sum of absolute UV triangle areas | 0.524898 | 0.774313 | 0.761587 |
+| UV triangle-area sum change | 0% | +47.5168% | +45.0923% |
+| Non-manifold index edges | 0 | **825** | **400** |
+
+**Interpretation:** zero collapsed UV triangles does NOT imply visually
+correct textures. Summed UV triangle area can legitimately overlap or
+contain mirrored islands and is **not** atlas occupancy or texture
+quality. Surface-area change is a geometric proxy, **not** true
+surface-to-surface Hausdorff error, rendering, cost, rigging or Android
+FPS. The non-manifold edges and surface loss warrant professional
+gltfpack/meshoptimizer replacement plus visual turntable QA before
+live, AR or paid-gift promotion.
+
+`lib/filter-engine/spaktok-first-gpu-lods.ts` pins the measured
+per-asset metadata, and the owner-only Spaktok AI preview/report only
+attributes these measurements to a matching **SHA256 and byte length**
+so a different file is never mislabeled with the same findings.
+The latest Preview code containing these refinements still needs its
+successful full build verified; the production app is unchanged.
+
 ## A strict gltfpack topology gate is now in source (not yet run on production assets)
 
 The CPU-only `services/forge-gpu/glb_topology.py` now audits actual
