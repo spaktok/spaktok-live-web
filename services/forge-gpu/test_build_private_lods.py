@@ -20,10 +20,16 @@ def fixture(path: Path, triangles: int, *, uv=True, normal=True,
         indices[:9] = [0, 1, 2, 1, 0, 3, 0, 1, 4]
     vertex_count = triangles * 3
     index_bytes = struct.pack("<" + "I"*len(indices), *indices)
-    positions = struct.pack("<" + "f"*(vertex_count*3),
-                            *([0.0, 0.0, 0.0]*vertex_count))
-    uvs = struct.pack("<" + "f"*(vertex_count*2),
-                      *([0.0, 0.0]*vertex_count))
+    # Genuine nonzero-area triangles. Fake gltfpack responses retain
+    # valid geometry and image views; no unbacked data or zero extents.
+    xyz, uv_values = [], []
+    for triangle in range(triangles):
+        x = (triangle % 50) * .01
+        y = (triangle // 50) * .01
+        xyz.extend([x, y, 0., x + .004, y, 0., x, y + .004, 0.])
+        uv_values.extend([0., 0., .75, 0., 0., .75])
+    positions = struct.pack("<" + "f"*len(xyz), *xyz)
+    uvs = struct.pack("<" + "f"*len(uv_values), *uv_values)
     normals = struct.pack("<" + "f"*(vertex_count*3),
                           *([0.0, 0.0, 1.0]*vertex_count))
     embedded_png = b"\x89PNG" + b"\x00"*12
@@ -139,6 +145,25 @@ class MultiLODTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "lod_did_not_reduce"):
                     generate_lods(origin, output)
             self.assertFalse(output.exists())
+
+    def test_records_uv_surface_metrics_without_claiming_visual_quality(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "private-lods"
+            fixture(origin, 1000)
+            def fake_run(args, **kwargs):
+                fixture(Path(args[args.index("-o") + 1]),
+                        480 if args[args.index("-si") + 1] == "0.50" else 190)
+                return subprocess.CompletedProcess(args, 0, "", "")
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                result = generate_lods(origin, output)
+            for name in ("lod0", "lod1", "lod2"):
+                audit = result["variants"][name]["uvSurface"]
+                self.assertGreater(audit["surface_area_sum"], 0)
+                self.assertEqual(audit["uv_collapsed_triangles"], 0)
+                self.assertFalse(audit["visual_quality_tested"])
+            self.assertTrue(result["review"]["surfaceAreaDriftRequiresHumanJudgment"])
 
     def test_rejects_nonmanifold_lod_and_never_exposes_pack(self):
         with tempfile.TemporaryDirectory() as root:
