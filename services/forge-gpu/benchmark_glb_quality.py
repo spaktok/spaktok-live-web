@@ -11,6 +11,8 @@ import json
 from pathlib import Path
 import struct
 
+from glb_topology import scan_glb_topology
+
 MAX_BYTES = 200 * 1024 * 1024
 
 
@@ -73,7 +75,18 @@ def inspect_glb(path: Path) -> dict:
         'occlusion': sum('occlusionTexture' in m for m in materials),
         'emissive': sum('emissiveTexture' in m for m in materials),
     }
+    # A GLB can be structurally readable but topologically invalid. Treat
+    # unsupported edge formats as UNKNOWN, never as a zero-defect success.
+    try:
+        topology = scan_glb_topology(path)
+    except (ValueError, KeyError, IndexError, TypeError, struct.error):
+        topology = {
+            'verified': False, 'nonmanifold_edges': None,
+            'boundary_edges': None, 'degenerate_index_triangles': None,
+            'publish_ready': False,
+        }
     return {
+        'topology': topology,
         'file': path.name, 'bytes': size,
         'sha256': hashlib.sha256(data).hexdigest(),
         'triangles': triangles, 'triangle_primitives': primitives,
