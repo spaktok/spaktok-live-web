@@ -20,9 +20,11 @@ import time
 import json
 
 import torch
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from typing import Optional
+
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from PIL import Image, ImageOps, UnidentifiedImageError
 from gpu_preflight import require_compatible_gpu
 from gpu_ticket import validate_gpu_ticket, InvalidGPUTicket
@@ -51,9 +53,28 @@ _remove_background_fn = None
 _resize_foreground_fn = None
 
 
+_job_queue = None
+JOB_PROFILES = ("studio-hd", "studio-ultra")
+
+
 @app.middleware("http")
 async def admission_guard(request: Request, call_next):
     """Authorize before multipart spooling and burn a short-lived grant once."""
+    if request.url.path.startswith("/v1/jobs"):
+        # Async jobs are operator-only (server-to-server), never browser tickets.
+        token = os.environ.get("FORGE_GPU_TOKEN", "")
+        if len(token) < 32:
+            return Response(status_code=503, content="gpu_secret_unconfigured")
+        if not secrets.compare_digest(request.headers.get("authorization", ""),
+                                      "Bearer " + token):
+            return Response(status_code=401, content="operator_token_required")
+        if request.method == "POST":
+            raw_length = request.headers.get("content-length", "")
+            if not raw_length.isdigit():
+                return Response(status_code=411, content="content_length_required")
+            if not 128 <= int(raw_length) <= MAX_MULTIPART:
+                return Response(status_code=413, content="request_too_large")
+        return await call_next(request)
     if request.url.path == "/v1/generate":
         # Browser CORS preflight contains no authorization token.
         if request.method == "OPTIONS":
@@ -135,12 +156,86 @@ def load_model_once():
     _rembg_session = rembg.new_session()
 
 
+@app.on_event("startup")
+async def start_job_queue():
+    global _job_queue
+    if _ENGINE_NAME != "trellis2":
+        return
+    from forge_jobs import JobQueue
+    _job_queue = JobQueue(
+        _model.make_glb_async_job,
+        workdir=os.environ.get("FORGE_GPU_JOB_DIR", "/tmp/spaktok-forge-jobs"),
+        gpu_lock=_gpu_lock,
+        max_queue=int(os.environ.get("FORGE_GPU_JOB_QUEUE", "8")),
+        ttl_seconds=int(os.environ.get("FORGE_GPU_JOB_TTL", "3600")),
+        on_event=lambda event: print(json.dumps({**event, "at": int(time.time())}),
+                                     flush=True),
+    )
+    _job_queue.start()
+
+
+@app.on_event("shutdown")
+async def stop_job_queue():
+    if _job_queue is not None:
+        await _job_queue.stop()
+
+
 @app.get("/health")
 async def health():
     return {"ready": _model is not None, "engine": _ENGINE_NAME,
             "hdConfigured": _ENGINE_NAME == "trellis2" and
                 os.environ.get("FORGE_GPU_HD_ENABLED") == "yes",
+            "asyncJobs": _job_queue is not None,
             "no_persistent_images": True}
+
+
+@app.post("/v1/jobs", status_code=202)
+async def submit_job(image: UploadFile = File(...), profile: str = Form("studio-hd"),
+                     poly_budget: Optional[int] = Form(None)):
+    if _job_queue is None:
+        raise HTTPException(status_code=503, detail="async_jobs_unavailable")
+    if profile not in JOB_PROFILES:
+        raise HTTPException(status_code=422, detail="unsupported_job_profile")
+    if os.environ.get("FORGE_GPU_HD_ENABLED") != "yes":
+        raise HTTPException(status_code=403, detail="gpu_hd_not_enabled")
+    from trellis2_quality import POLY_BUDGETS
+    if poly_budget is not None and poly_budget not in POLY_BUDGETS:
+        raise HTTPException(status_code=422, detail="unsupported_poly_budget")
+    if image.content_type not in ("image/png", "image/jpeg", "image/webp"):
+        raise HTTPException(status_code=415, detail="unsupported_image")
+    data = await image.read(MAX_PHOTO + 1)
+    await image.close()
+    if len(data) < 128 or len(data) > MAX_PHOTO:
+        raise HTTPException(status_code=413, detail="invalid_image_size")
+    try:
+        with Image.open(io.BytesIO(data)) as probe:
+            if probe.format not in ("PNG", "JPEG", "WEBP"):
+                raise ValueError("unsupported image encoding")
+    except (ValueError, UnidentifiedImageError):
+        raise HTTPException(status_code=422, detail="image_or_glb_invalid")
+    from forge_jobs import QueueFull
+    try:
+        return _job_queue.submit(data, profile, poly_budget)
+    except QueueFull:
+        raise HTTPException(status_code=429, detail="gpu_job_queue_full")
+
+
+@app.get("/v1/jobs/{job_id}")
+async def job_status(job_id: str):
+    status = _job_queue.status(job_id) if _job_queue else None
+    if status is None:
+        raise HTTPException(status_code=404, detail="job_not_found")
+    return status
+
+
+@app.get("/v1/jobs/{job_id}/glb")
+async def job_glb(job_id: str):
+    path = _job_queue.result_path(job_id) if _job_queue else None
+    if path is None:
+        raise HTTPException(status_code=404, detail="job_result_unavailable")
+    return FileResponse(path, media_type="model/gltf-binary",
+                        headers={"cache-control": "private, no-store",
+                                 "x-content-type-options": "nosniff"})
 
 
 def _make_glb(photo: bytes, profile: str = "mobile-preview",

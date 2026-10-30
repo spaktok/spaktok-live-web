@@ -38,3 +38,4 @@ next-env.d.ts
 # Editor / operating-system files
 .DS_Store
 Thumbs.db
+__pycache__/
