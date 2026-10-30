@@ -48,6 +48,20 @@ class StudioProductionTests(unittest.TestCase):
                 for d in result["departments"]
             ))
             self.assertEqual(result["optimization"]["status"], "not-requested")
+            self.assertEqual(
+                result["visualReview"]["status"],
+                "four-angle-wireframe-created-awaiting-human-review",
+            )
+            self.assertEqual(
+                {Path(p).name for p in result["visualReview"]["views"]},
+                {"front.svg", "back.svg", "left.svg", "right.svg"},
+            )
+            self.assertTrue(all(
+                (output / name).is_file()
+                for name in result["visualReview"]["views"]
+            ))
+            self.assertTrue(result["visualReview"]["sparseWireframeOnly"])
+            self.assertFalse(result["visualReview"]["pbrTurntableHumanReviewComplete"])
             self.assertFalse(result["release"]["published"])
             self.assertFalse(result["release"]["rigAndFacialTrackingApproved"])
             self.assertEqual(result, json.loads((output/"manifest.json").read_text()))
