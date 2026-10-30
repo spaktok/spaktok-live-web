@@ -31,7 +31,7 @@ jobs:
         working-directory: services/forge-gpu
         run: python3 -m unittest test_gpu_preflight test_gpu_ticket test_trellis_v1_engine test_trellis2_engine test_trellis2_open_rembg test_trellis2_dinov3_compat test_one_image_e2e -v
       - name: Validate Vast operator startup script syntax
-        run: bash -n services/forge-gpu/start-vast-trellis-v1.sh services/forge-gpu/start-vast-trellis2.sh
+        run: bash -n services/forge-gpu/start-vast-trellis-v1.sh services/forge-gpu/start-vast-trellis2.sh services/forge-gpu/start-preview-quick-tunnel.sh
   provider-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 10
