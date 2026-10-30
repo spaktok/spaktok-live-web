@@ -16,6 +16,64 @@ from glb_topology import scan_glb_topology
 MAX_BYTES = 200 * 1024 * 1024
 
 
+def _validate_embedded_texture_graph(obj: dict, bin_length: int) -> None:
+    """Fail closed on dangling embedded PBR image/texture references.
+
+    An image listed in glTF is not necessarily present in its BIN chunk,
+    and a material texture index alone does not prove that it can render.
+    This is a structural check; it does NOT measure texture appearance.
+    """
+    views = obj.get("bufferViews", [])
+    images = obj.get("images", [])
+    textures = obj.get("textures", [])
+
+    def is_ref(value: object, collection: list) -> bool:
+        return type(value) is int and 0 <= value < len(collection)
+
+    for image in images:
+        if "bufferView" in image:
+            if "uri" in image or not is_ref(image["bufferView"], views):
+                raise ValueError("glb_image_buffer_view_invalid")
+            view = views[image["bufferView"]]
+            offset, length = view.get("byteOffset", 0), view.get("byteLength")
+            if (view.get("buffer") != 0 or
+                    type(offset) is not int or type(length) is not int or
+                    offset < 0 or length <= 0 or
+                    offset + length > bin_length or
+                    not isinstance(image.get("mimeType"), str) or
+                    not image["mimeType"].startswith("image/")):
+                raise ValueError("glb_image_buffer_view_invalid")
+        else:
+            uri = image.get("uri")
+            if (not isinstance(uri, str) or not uri.startswith("data:image/") or
+                    ";base64," not in uri or not uri.split(";base64,", 1)[1]):
+                raise ValueError("glb_external_or_unbacked_image")
+
+    for texture in textures:
+        refs = []
+        if "source" in texture:
+            refs.append(texture["source"])
+        extensions = texture.get("extensions") or {}
+        for name in ("EXT_texture_webp", "KHR_texture_basisu"):
+            if name in extensions:
+                refs.append(extensions[name].get("source"))
+        if not refs or any(not is_ref(ref, images) for ref in refs):
+            raise ValueError("glb_texture_image_reference_invalid")
+
+    for material in obj.get("materials", []):
+        pbr = material.get("pbrMetallicRoughness") or {}
+        slots = (pbr.get("baseColorTexture"),
+                 pbr.get("metallicRoughnessTexture"),
+                 material.get("normalTexture"),
+                 material.get("occlusionTexture"),
+                 material.get("emissiveTexture"))
+        for slot in slots:
+            if slot is not None and (
+                    not isinstance(slot, dict) or
+                    not is_ref(slot.get("index"), textures)):
+                raise ValueError("glb_material_texture_index_invalid")
+
+
 def inspect_glb(path: Path) -> dict:
     size = path.stat().st_size
     if not 28 <= size <= MAX_BYTES:
@@ -41,8 +99,7 @@ def inspect_glb(path: Path) -> dict:
     if buffers and (not has_bin or buffers[0].get('byteLength', 0) > bin_length):
         raise ValueError('unbacked_binary')
     images = obj.get('images', [])
-    if any(im.get('uri') and not im['uri'].startswith('data:') for im in images):
-        raise ValueError('external_image_reference')
+    _validate_embedded_texture_graph(obj, buffers[0]['byteLength'] if buffers else 0)
     acc = obj.get('accessors', [])
     triangles = primitives = uvs = normals = morphs = 0
     for mesh in obj.get('meshes', []):
