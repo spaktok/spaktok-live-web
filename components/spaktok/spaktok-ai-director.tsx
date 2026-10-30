@@ -461,7 +461,7 @@ export default function SpaktokAIDirector({
  }
  const downloadQualityReport=()=>{
   if(!manifest)return
-  const report=buildSpaktokQualityEvidence(manifest)
+  const report=buildSpaktokQualityEvidence(manifest,topology)
   const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'})
   const url=URL.createObjectURL(blob)
   const a=document.createElement('a')
