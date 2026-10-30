@@ -224,8 +224,8 @@ def generate_lods(source_file: Path, output_dir: Path,
                     "triangleTargetMet": (
                         actual_ratios[name] <= value["ratioRequested"]
                     ),
-                    "maxSimplificationErrorUsed": value["maxErrorUsed"],
-                    "optimizationAttempts": value["trials"],
+                    "maxSimplificationErrorUsed": value.get("maxErrorUsed"),
+                    "optimizationAttempts": value.get("trials", []),
                     "triangles": value["meta"]["triangles"],
                     "bytes": value["meta"]["bytes"],
                     "sha256": value["meta"]["sha256"],
