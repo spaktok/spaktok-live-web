@@ -1,3 +1,8 @@
+> **DEPRECATED 2026-10-30:** The creator opted out of DINOv3. Do not
+> follow these TRELLIS.2 operator instructions; this entrypoint is disabled.
+> Use [the original TRELLIS / DINOv2 guide](SPAKTOK_VAST_NO_DINOV3_TRELLIS_V1_20261030.md).
+> Older text below is retained only for historical audit, NOT an active plan.
+
 # Vast.ai-only GPU bridge for Spaktok Forge / TRELLIS.2
 
 Status: **code-only experimental integration**. Created 2026-10-29.
