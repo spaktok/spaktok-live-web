@@ -18,6 +18,26 @@ Post-upload GET and SHA-256 verification succeeded on all GLBs.
 Each GLB passed structural header / geometry count / PBR embedded WebP
 presence and byte-for-byte original WebP image retention checks.
 
+## Additional topology audit (performed after creating the assets)
+
+The Cloudflare R2 file hashes were reverified. A second pass counted
+undirected triangle edge incidence across each actual GLB:
+
+| Variant | Boundary edges | Non-manifold edges (incident to >2 faces) |
+| --- | ---: | ---: |
+| LOD0 (source) | 80,771 | 0 |
+| LOD1 (prototype clustering) | 42,048 | **825** |
+| LOD2 (prototype clustering) | 19,627 | **400** |
+
+These edges confirm the experimental simplifier introduced geometry defects.
+The Cloudflare R2 `pack.json` was updated with these exact values and
+`requiresProfessionalRetopology: true`. The Spaktok AI import now
+forces **needs-optimization** across ALL five private Studio targets for
+LOD1/LOD2. No downstream system may call these live-ready assets.
+Remediation: run real gltfpack/meshoptimizer or rig-aware retopology on
+authorized hardware, then repeat structural, PBR, edge and visual checks
+before replacing versions. Retain the originals until successful.
+
 ## Technique and limitations — do not misrepresent as gltfpack
 
 The remote-generated LOD1/LOD2 came from the repository's private
