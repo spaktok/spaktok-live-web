@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node scripts/build-couture-glb.mjs && npm run test:word:gate && npm run test:studio:worker && next build",
+    "build": "npm run test:cloudflare-only && node scripts/build-couture-glb.mjs && npm run test:word:gate && npm run test:studio:worker && next build",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
@@ -17,7 +17,8 @@
     "test:d1": "vitest run --config vitest.config.ts lib/cloudflare/d1-repository.test.ts",
     "test:cloudflare": "vitest run --config vitest.config.ts lib/cloudflare",
     "asset:crown": "node scripts/build-couture-glb.mjs",
-    "test:studio:worker": "node --test cloudflare/workers/spaktok-private-studio-asset.test.mjs"
+    "test:studio:worker": "node --test cloudflare/workers/spaktok-private-studio-asset.test.mjs",
+    "test:cloudflare-only": "node scripts/assert-cloudflare-only.mjs"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
@@ -50,8 +51,6 @@
     "@radix-ui/react-toggle": "1.1.1",
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
-    "@supabase/ssr": "latest",
-    "@supabase/supabase-js": "latest",
     "@vercel/analytics": "1.3.1",
     "ai": "^7.0.127",
     "autoprefixer": "^10.4.20",
