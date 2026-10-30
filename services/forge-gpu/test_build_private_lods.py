@@ -165,6 +165,20 @@ class MultiLODTests(unittest.TestCase):
                 self.assertFalse(audit["visual_quality_tested"])
             self.assertTrue(result["review"]["surfaceAreaDriftRequiresHumanJudgment"])
 
+    def test_refuses_lod_with_collapsed_uv_rate(self):
+        from build_private_lods import _check_quality, _check_file
+        from copy import deepcopy
+        with tempfile.TemporaryDirectory() as root:
+            owner = Path(root) / "original.glb"
+            fixture(owner, 1000)
+            original = _check_file(owner)
+            failed = deepcopy(original)
+            failed["triangles"] = 450
+            failed["uvSurface"]["uv_collapsed_fraction"] = 0.95
+            with self.assertRaisesRegex(ValueError,
+                                        "lod_uv_collapse_fraction_too_high"):
+                _check_quality(original, failed, original)
+
     def test_rejects_nonmanifold_lod_and_never_exposes_pack(self):
         with tempfile.TemporaryDirectory() as root:
             origin = Path(root) / "owner.glb"
