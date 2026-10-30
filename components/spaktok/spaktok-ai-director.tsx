@@ -55,7 +55,7 @@ const STAGE_NAMES:Readonly<Record<string,string>>={
 const isImage=(file:File)=>/\.(png|jpe?g|webp)$/i.test(file.name)
 const isGlb=(file:File)=>/\.glb$/i.test(file.name)
 type GPUHealth=Readonly<{
- enabled:boolean;globalDailyCap:number|null;provider:string|null;engine:string|null
+ enabled:boolean;authConfigured?:boolean;globalDailyCap:number|null;provider:string|null;engine:string|null
  readiness?:'ready'|'operator_not_configured'|'gpu_loading_or_unreachable'
 }>
 export default function SpaktokAIDirector({
@@ -101,6 +101,7 @@ export default function SpaktokAIDirector({
    .then(r=>r.ok?r.json():Promise.reject(Error('forge_gpu_health')))
    .then(x=>{if(active)setHealth({
     enabled:x.enabled===true,
+    authConfigured:x.authConfigured===true,
     globalDailyCap:typeof x.globalDailyCap==='number'?x.globalDailyCap:null,
     provider:typeof x.provider==='string'?x.provider:null,
     engine:typeof x.engine==='string'?x.engine:null,
@@ -554,7 +555,9 @@ export default function SpaktokAIDirector({
       <p className="font-semibold">خطة الإنتاج المبدئية</p>
       {sourceKind==='image'&&imageMode==='gpu-360'&&
        <p role="status" className="mt-2 text-amber-200">
-        حالة الاتصال: {health?.readiness==='ready'?'جاهز لاختبار صورة واحدة':
+        حالة الاتصال: {health?.authConfigured===false?
+          'نظام تسجيل الدخول بقاعدة بيانات المعاينة لم يُضبط بعد؛ لا ترسل صورة مدفوعة':
+         health?.readiness==='ready'?'جاهز لاختبار صورة واحدة':
          health?.readiness==='gpu_loading_or_unreachable'?
           'الخادم المحدد لا يستجيب أو ما زال يحمّل النموذج':
          'لم يكتمل إعداد خادم GPU في هذه النسخة بعد'}
