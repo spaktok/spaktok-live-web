@@ -72,6 +72,30 @@ export default function SpaktokAIDirector({
  const [imageMode,setImageMode]=useState<'local-2.5d'|'gpu-360'>('local-2.5d')
  const [transferConsent,setTransferConsent]=useState(false)
  const [health,setHealth]=useState<GPUHealth|null>(null)
+ const [healthBusy,setHealthBusy]=useState(false)
+ const refreshGpuHealth=async()=>{
+  if(healthBusy)return
+  setHealthBusy(true)
+  try{
+   const r=await fetch('/api/spaktok-forge/gpu-ticket',{
+    cache:'no-store',credentials:'same-origin',
+   })
+   if(!r.ok)throw Error('gpu_health_http_'+r.status)
+   const x=await r.json()
+   setHealth({
+    enabled:x.enabled===true,
+    authConfigured:x.authConfigured===true,
+    globalDailyCap:typeof x.globalDailyCap==='number'?x.globalDailyCap:null,
+    provider:typeof x.provider==='string'?x.provider:null,
+    engine:typeof x.engine==='string'?x.engine:null,
+    readiness:['ready','operator_not_configured','gpu_loading_or_unreachable'].includes(x.readiness)?
+     x.readiness:undefined,
+   })
+  }catch{
+   setHealth({enabled:false,authConfigured:false,globalDailyCap:null,
+    provider:null,engine:null,readiness:'operator_not_configured'})
+  }finally{setHealthBusy(false)}
+ }
  const [busy,setBusy]=useState(false)
  const [asset,setAsset]=useState<File|null>(null)
  const [qa,setQA]=useState<DirectorAssetQA|null>(null)
@@ -552,7 +576,14 @@ export default function SpaktokAIDirector({
     </div>
     <div className="space-y-3">
      <div className="rounded-xl border border-white/15 bg-slate-950/60 p-3 text-xs">
-      <p className="font-semibold">خطة الإنتاج المبدئية</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+       <p className="font-semibold">خطة الإنتاج المبدئية</p>
+       <button type="button" disabled={healthBusy||busy}
+        onClick={()=>void refreshGpuHealth()}
+        className="rounded-lg border border-cyan-300/40 px-3 py-1 text-cyan-100 disabled:opacity-40">
+        {healthBusy?'فحص الاتصال…':'إعادة فحص اتصال GPU'}
+       </button>
+      </div>
       {sourceKind==='image'&&imageMode==='gpu-360'&&
        <p role="status" className="mt-2 text-amber-200">
         حالة الاتصال: {health?.authConfigured===false?
