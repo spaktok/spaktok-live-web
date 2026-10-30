@@ -6,6 +6,10 @@ import {
 } from '@/lib/filter-engine/spaktok-ai-director'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
 import {isFirstGpuAsset,SPAKTOK_FIRST_GPU_ASSET} from '@/lib/filter-engine/spaktok-first-gpu-asset'
+import {
+ SPAKTOK_FIRST_GPU_LODS,SPAKTOK_FIRST_GPU_LOD_IDS,
+ type SpaktokFirstLodId,
+} from '@/lib/filter-engine/spaktok-first-gpu-lods'
 import {generateForgeGpuDirect,type ForgeGpuProfile} from '@/lib/filter-engine/spaktok-forge-direct-client'
 import {planForgeGpuGeneration} from '@/lib/filter-engine/spaktok-forge-gpu-plan'
 import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-local-relief'
@@ -75,6 +79,7 @@ export default function SpaktokAIDirector({
  const [transferConsent,setTransferConsent]=useState(false)
  const [health,setHealth]=useState<GPUHealth|null>(null)
  const [healthBusy,setHealthBusy]=useState(false)
+ const [cloudLod,setCloudLod]=useState<SpaktokFirstLodId>('lod1')
  const refreshGpuHealth=async()=>{
   if(healthBusy)return
   setHealthBusy(true)
@@ -317,19 +322,22 @@ export default function SpaktokAIDirector({
  }
  const importFirstGpuFromCloud=async()=>{
   if(busy||!rightsApproved)return
+  const chosen=SPAKTOK_FIRST_GPU_LODS[cloudLod]
   setBusy(true)
   try{
    const permission=await fetch('/api/spaktok-studio/pilot-ticket',{
     method:'POST',credentials:'same-origin',cache:'no-store',
-    headers:{'content-type':'application/json'},body:'{}',
+    headers:{'content-type':'application/json'},
+    body:JSON.stringify({lod:cloudLod}),
    })
    if(!permission.ok)throw Error('cloud_pilot_ticket_'+permission.status)
    const ticket:unknown=await permission.json()
    if(!ticket||typeof ticket!=='object')throw Error('cloud_pilot_invalid_ticket')
    const t=ticket as Record<string,unknown>
-   const expectedUrl='https://spaktok-private-studio-asset.spaktok.workers.dev/v1/pilot/first.glb'
-   if(t.url!==expectedUrl||t.bytes!==SPAKTOK_FIRST_GPU_ASSET.bytes||
-      t.sha256!==SPAKTOK_FIRST_GPU_ASSET.sha256||
+   const expectedUrl='https://spaktok-private-studio-asset.spaktok.workers.dev/v1/pilot/'+cloudLod+'.glb'
+   if(t.url!==expectedUrl||t.lod!==cloudLod||
+      t.bytes!==chosen.bytes||t.sha256!==chosen.sha256||
+      t.fileName!==chosen.fileName||
       !t.headers||typeof t.headers!=='object')
     throw Error('cloud_pilot_wrong_server_or_hash')
    const headers=t.headers as Record<string,unknown>
@@ -354,22 +362,23 @@ export default function SpaktokAIDirector({
    if(response.headers.get('content-type')?.split(';')[0]!=='model/gltf-binary')
     throw Error('cloud_pilot_wrong_media_type')
    const declared=Number(response.headers.get('content-length'))
-   if(declared!==SPAKTOK_FIRST_GPU_ASSET.bytes)
+   if(declared!==chosen.bytes)
     throw Error('cloud_pilot_wrong_length')
    const blob=await response.blob()
-   if(blob.size!==SPAKTOK_FIRST_GPU_ASSET.bytes)
+   if(blob.size!==chosen.bytes)
     throw Error('cloud_pilot_wrong_size')
-   const file=new File([blob],SPAKTOK_FIRST_GPU_ASSET.fileName,{
+   const file=new File([blob],chosen.fileName,{
     type:'model/gltf-binary',
    })
    const buf=await file.arrayBuffer()
    const digest=Array.from(new Uint8Array(
     await crypto.subtle.digest('SHA-256',buf)
    )).map(b=>b.toString(16).padStart(2,'0')).join('')
-   if(!isFirstGpuAsset(digest,buf.byteLength))
-    throw Error('cloud_pilot_digest_mismatch')
+   if(digest!==chosen.sha256||buf.byteLength!==chosen.bytes)
+    throw Error('cloud_pilot_lod_sha256_mismatch')
    const destinations=[...DIRECTOR_TARGETS]
-   const desc='Spaktok AI: مسودة GPU الأولى للأفاتار واللايف والفلاتر والهدايا والعالم'
+   const desc='Spaktok AI: '+chosen.id+
+    ' معاينة خاصة من المجسم الأول — لا يوجد Rig أو اختبار AR معتمد'
    await commitGlb(file,0,'existing-glb',{
     targets:destinations,description:desc,save:true,fromCloud:true,
    })
@@ -541,15 +550,28 @@ export default function SpaktokAIDirector({
      <div className="rounded-xl border border-cyan-400/30 bg-slate-950/70 p-3 text-xs">
       <p className="font-semibold text-cyan-200">استيراد مجسم Spaktok من Cloudflare R2 الخاص</p>
       <p className="mt-2 leading-5 text-slate-200">
-       نزّل ملف spaktok-first.glb مباشرةً من التخزين الخاص بحساب Spaktok
-       بعد تسجيل الدخول كمشغّل مُصرّح به. لن تمر بيانات المجسم عبر وظيفة Vercel
-       ولن تُشغّل مهمة GPU جديدة. سيجري التحقق من SHA-256 وإنشاء خمس
-       مسودات معاينة غير منشورة في هذا المتصفح.
+       توجد ثلاث نسخ GLB فعلية من المجسم الأول محفوظة في Cloudflare R2
+       الخاص. اختر دقة المعاينة لتنزيل نسخة واحدة بتصريح قصير العمر،
+       ثم تحقق من SHA-256 واحفظ مسودات غير منشورة للأقسام الخمسة
+       بدون مهمة GPU جديدة. نسخ LOD مخففة تجريبيًا وليست معتمدة لللايف.
       </p>
+      <label className="mt-3 block text-slate-100">
+       نسخة المجسم الخاصة
+       <select value={cloudLod}
+        disabled={busy}
+        onChange={e=>setCloudLod(e.target.value as SpaktokFirstLodId)}
+        className="mt-2 w-full rounded-lg border border-cyan-200/40 bg-slate-950 p-2">
+        {SPAKTOK_FIRST_GPU_LOD_IDS.map(lod=>
+         <option key={lod} value={lod}>
+          {SPAKTOK_FIRST_GPU_LODS[lod].description}
+         </option>
+        )}
+       </select>
+      </label>
       <button type="button" onClick={()=>void importFirstGpuFromCloud()}
        disabled={busy||!rightsApproved}
        className="mt-3 w-full rounded-lg bg-violet-700 px-3 py-3 font-bold text-white disabled:opacity-40">
-       استيراد GLB الخاص من R2 وتوزيعه على الأقسام الخمسة
+       استيراد LOD من R2 إلى Spaktok Studio (خاص)
       </button>
       <p className="mt-2 text-slate-400">
        يعمل هذا المسار بعد نشر Worker القراءة الموقّع وتفعيل حساب المشغّل.
