@@ -1,5 +1,10 @@
 import type {StudioGlbAudit} from './reality-production-glb-audit'
 import type {ForgeGpuProfile} from './spaktok-forge-gpu-plan'
+import {SPAKTOK_FIRST_GPU_LODS} from './spaktok-first-gpu-lods'
+const INSECURE_PREVIEW_LOD_SHA256=new Set([
+ SPAKTOK_FIRST_GPU_LODS.lod1.sha256,
+ SPAKTOK_FIRST_GPU_LODS.lod2.sha256,
+])
 import {
  DIRECTOR_TARGETS,type DirectorTarget,
 } from './spaktok-ai-director'
@@ -99,6 +104,8 @@ export function createStudioFanoutManifest(input:Readonly<{
    (!['mobile-preview','detail-preview','studio-hd'].includes(input.gpuProfile)||
     input.sourceEngine!=='ai-360-gpu')))
   throw Error('studio_fanout_project_invalid')
+ const knownInvalidTopology=INSECURE_PREVIEW_LOD_SHA256.has(input.sha256)
+ const topologyBlocked=Boolean(input.previewTopologyBlocked||knownInvalidTopology)
  const mobileBlocked=input.bytes>15*1024*1024||
   input.audit.triangles>150000||input.audit.textures>12||
   !input.audit.hasUV||!input.audit.hasNormals||
@@ -113,7 +120,7 @@ export function createStudioFanoutManifest(input:Readonly<{
  ]
  const outputs:StudioOutputProfile[]=targets.map(target=>{
   const blockers=[...technicalReasons]
-  if(input.previewTopologyBlocked)
+  if(topologyBlocked)
    blockers.push('non_manifold_lod_requires_professional_retopology_and_visual_qa')
   const avatar=target==='avatar'||target==='live'
   if(input.sourceEngine==='browser-2.5d')
@@ -128,7 +135,7 @@ export function createStudioFanoutManifest(input:Readonly<{
   blockers.push('human_rights_and_publication_review_required')
   return {
    target,destination:DESTINATIONS[target],
-   state:mobileBlocked||input.previewTopologyBlocked?
+   state:mobileBlocked||topologyBlocked?
     'needs-optimization':'private-preview',
    visualScale:'auto-fit-preview',
    anchor:avatar?'head':target==='filter'?'nose_bridge':
@@ -204,6 +211,7 @@ export function assertStudioFanoutManifest(value:unknown):
    t=>DIRECTOR_TARGETS.includes(t))||
   new Set(v.project.outputTargets).size!==v.outputs.length)
   throw Error('studio_fanout_manifest_invalid')
+ const knownTopologyDefect=INSECURE_PREVIEW_LOD_SHA256.has(v.source.sha256)
  for(let i=0;i<v.outputs.length;i++){
   // Array.isArray narrows a readonly tuple/array to any[] in TS.
   // Reassert the already validated schema before indexed access.
@@ -213,7 +221,11 @@ export function assertStudioFanoutManifest(value:unknown):
    out.destination!==DESTINATIONS[out.target as DirectorTarget]||
    !['private-preview','needs-optimization'].includes(out.state)||
    out.published!==false||!Array.isArray(out.blockers)||
-   !out.blockers.includes('human_rights_and_publication_review_required'))
+   !out.blockers.includes('human_rights_and_publication_review_required')||
+   (knownTopologyDefect&&(
+    out.state!=='needs-optimization'||
+    !out.blockers.includes('non_manifold_lod_requires_professional_retopology_and_visual_qa')
+   )))
    throw Error('studio_fanout_output_invalid')
  }
  if(v.review?.publicReleaseApproved!==false||
