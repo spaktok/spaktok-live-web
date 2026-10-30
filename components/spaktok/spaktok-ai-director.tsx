@@ -65,6 +65,12 @@ const STAGE_NAMES:Readonly<Record<string,string>>={
 }
 const isImage=(file:File)=>/\.(png|jpe?g|webp)$/i.test(file.name)
 const isGlb=(file:File)=>/\.glb$/i.test(file.name)
+type StudioPilotHealth=Readonly<{
+ enabled:boolean
+ reason:'pilot_operator_not_configured'|'pilot_sign_in_required'|
+  'pilot_owner_only'|'server_signer_configured'|'unavailable'
+ workerVerified:false
+}>
 type GPUHealth=Readonly<{
  enabled:boolean;authConfigured?:boolean;hdAvailable?:boolean;globalDailyCap:number|null;provider:string|null;engine:string|null
  readiness?:'ready'|'operator_not_configured'|'gpu_loading_or_unreachable'
@@ -86,6 +92,33 @@ export default function SpaktokAIDirector({
  const [health,setHealth]=useState<GPUHealth|null>(null)
  const [healthBusy,setHealthBusy]=useState(false)
  const [cloudLod,setCloudLod]=useState<SpaktokFirstLodId>('lod1c')
+ const [studioPilot,setStudioPilot]=useState<StudioPilotHealth>({
+  enabled:false,reason:'unavailable',workerVerified:false,
+ })
+ useEffect(()=>{
+  let active=true
+  fetch('/api/spaktok-studio/pilot-ticket',{
+   method:'GET',credentials:'same-origin',cache:'no-store',
+  }).then(r=>r.ok?r.json():Promise.reject(Error('studio_pilot_unreachable')))
+   .then((value:unknown)=>{
+    if(!active)return
+    const v=value as Partial<StudioPilotHealth>|null
+    const ready=v?.enabled===true&&v.reason==='server_signer_configured'
+    setStudioPilot({
+     enabled:ready,
+     reason:ready?'server_signer_configured':
+      v?.reason==='pilot_sign_in_required'?'pilot_sign_in_required':
+      v?.reason==='pilot_owner_only'?'pilot_owner_only':
+      'pilot_operator_not_configured',
+     workerVerified:false,
+    })
+   }).catch(()=>{
+    if(active)setStudioPilot({
+     enabled:false,reason:'unavailable',workerVerified:false,
+    })
+   })
+  return()=>{active=false}
+ },[])
  const refreshGpuHealth=async()=>{
   if(healthBusy)return
   setHealthBusy(true)
@@ -335,7 +368,7 @@ export default function SpaktokAIDirector({
   }finally{setBusy(false)}
  }
  const importFirstGpuFromCloud=async()=>{
-  if(busy||!rightsApproved)return
+  if(busy||!rightsApproved||!studioPilot.enabled)return
   const chosen=SPAKTOK_FIRST_GPU_LODS[cloudLod]
   setBusy(true)
   try{
@@ -621,8 +654,19 @@ export default function SpaktokAIDirector({
          واختبار Android قبل نقلها لأي قسم.
         </p>}
       </div>
+      <p role="status" className="mt-2 text-amber-200">
+       {studioPilot.enabled?
+        'توقيع الموقع مهيأ لحساب المالك؛ اتصال Cloudflare الفعلي لم يُختبر بعد.':
+        studioPilot.reason==='pilot_sign_in_required'?
+         'سجّل الدخول بحساب المشغّل لتجربة الاستيراد الخاص.':
+        studioPilot.reason==='pilot_owner_only'?
+         'هذا الاستيراد متاح لحساب مالك الاستوديو فقط.':
+        studioPilot.reason==='pilot_operator_not_configured'?
+         'الاستيراد الخاص غير مُفعّل؛ إعدادات المشغّل والتوقيع لم تكتمل.':
+         'تعذّر التأكد من حالة الاستيراد الخاص حاليًا.'}
+      </p>
       <button type="button" onClick={()=>void importFirstGpuFromCloud()}
-       disabled={busy||!rightsApproved}
+       disabled={busy||!rightsApproved||!studioPilot.enabled}
        className="mt-3 w-full rounded-lg bg-violet-700 px-3 py-3 font-bold text-white disabled:opacity-40">
        استيراد LOD من R2 إلى Spaktok Studio (خاص)
       </button>
