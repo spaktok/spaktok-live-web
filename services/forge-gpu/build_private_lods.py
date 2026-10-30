@@ -18,6 +18,7 @@ import sys
 import tempfile
 from benchmark_glb_quality import inspect_glb
 from glb_topology import scan_glb_topology
+from glb_position_weld_audit import scan_glb_position_weld
 from glb_uv_surface import inspect_glb_uv_surface
 
 MAX_SOURCE_BYTES = 35 * 1024 * 1024
@@ -46,6 +47,7 @@ def _check_file(path: Path) -> dict:
     # Fail closed: a structurally readable GLB can still contain dangerous
     # non-manifold or degenerate triangle indices.
     meta["topology"] = scan_glb_topology(path)
+    meta["positionWeldTopology"] = scan_glb_position_weld(path)
     # The existing source/target UV slot gates below retain their own
     # precise failures; valid UV-bearing output gets a full area audit.
     meta["uvSurface"] = (
@@ -205,12 +207,23 @@ def generate_lods(source_file: Path, output_dir: Path,
             actual_ratios[name] <= float(ratio)
             for name, ratio in LOD_RATIOS
         )
+        # Index-only manifold counts can hide overlapping POSITION edges
+        # across UV/material seams. Conservatively flag any incidence >2
+        # after positional welding for human review, not auto-repair.
+        weld_review_required = any(
+            asset["meta"]["positionWeldTopology"][
+                "nonmanifold_edges_after_position_weld"
+            ] > 0 or asset["meta"]["positionWeldTopology"][
+                "degenerate_triangles_after_position_weld"
+            ] > 0 for asset in assets.values()
+        )
         pack = {
             "schema": PACK_SCHEMA,
             "optimizationMode": ("bounded-conservative-cpu"
                                   if conservative else "fixed-target-cpu"),
             "triangleTargetsMet": targets_met,
-            "needsOptimization": not targets_met,
+            "needsOptimization": not targets_met or weld_review_required,
+            "positionWeldGeometryReviewRequired": weld_review_required,
             "source": {
                 "filename": source_file.name,
                 "sha256": source_meta["sha256"],
@@ -232,6 +245,7 @@ def generate_lods(source_file: Path, output_dir: Path,
                     "embeddedTextureImages": value["meta"]["embedded_image_count"],
                     "pbrMaterialCount": value["meta"]["pbr_material_count"],
                     "topology": value["meta"]["topology"],
+                    "positionWeldTopology": value["meta"]["positionWeldTopology"],
                     "uvSurface": value["meta"].get("uvSurface"),
                     "surfaceAreaChangePercentVsOriginal": (
                         100 * (value["meta"]["uvSurface"]["surface_area_sum"] /
@@ -245,7 +259,7 @@ def generate_lods(source_file: Path, output_dir: Path,
             # Never infer live/AR suitability from a conservative LOD that
             # did not actually reach its intended triangle budget.
             "privateStudioRecommendations": (
-                TARGET_LODS if targets_met else {}
+                TARGET_LODS if targets_met and not weld_review_required else {}
             ),
             "published": False,
             "rigged": False,
@@ -255,6 +269,8 @@ def generate_lods(source_file: Path, output_dir: Path,
                 "androidFPS": "not-tested",
                 "automaticDistributionBlocked": True,
                 "requiresVisualReview": True,
+                "indexManifoldAloneDoesNotProveSurfaceManifold": True,
+                "positionWeldGeometryReviewRequired": weld_review_required,
                 "simplificationTargetsAchieved": targets_met,
                 "nonManifoldEdges": "zero-required-and-verified",
                 "visualSeamArtifacts": "not-tested",
