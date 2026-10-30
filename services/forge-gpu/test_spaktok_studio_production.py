@@ -79,7 +79,7 @@ class StudioProductionTests(unittest.TestCase):
             photo.write_bytes(b"photo-test-no-identifiers"*64)
             output = Path(root)/"private"
             token = "x"*48
-            with patch.dict(studio.os.environ, {"FORGE_GPU_TOKEN": token}), \\
+            with patch.dict(studio.os.environ, {"FORGE_GPU_TOKEN": token}), \
                  patch.object(studio, "post_one_image",
                               return_value=source.read_bytes()) as post:
                 done = studio.produce_private_draft(
@@ -101,7 +101,7 @@ class StudioProductionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             photo = Path(root)/"creator.png"
             photo.write_bytes(b"z"*512)
-            with patch.dict(studio.os.environ, {"FORGE_GPU_TOKEN": ""}), \\
+            with patch.dict(studio.os.environ, {"FORGE_GPU_TOKEN": ""}), \
                  patch.object(studio, "post_one_image") as post:
                 with self.assertRaisesRegex(PermissionError, "secret_missing"):
                     studio.produce_private_draft(
@@ -115,7 +115,7 @@ class StudioProductionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             source = self.make_source(root)
             output = Path(root)/"private"
-            with patch.object(studio.shutil, "which", return_value="/usr/bin/gltfpack"), \\
+            with patch.object(studio.shutil, "which", return_value="/usr/bin/gltfpack"), \
                  patch.object(studio, "generate_lods",
                               side_effect=ValueError("lod_topology_invalid")) as lod:
                 manifest = studio.produce_private_draft(
@@ -137,7 +137,7 @@ class StudioProductionTests(unittest.TestCase):
                 count = 480 if args[args.index("-si")+1] == "0.50" else 190
                 fixture(Path(args[args.index("-o")+1]), count)
                 return subprocess.CompletedProcess(args, 0, "", "")
-            with patch.object(studio.shutil, "which", return_value="/bin/true"), \\
+            with patch.object(studio.shutil, "which", return_value="/bin/true"), \
                  patch("build_private_lods.subprocess.run", side_effect=fake_gltfpack):
                 result = studio.produce_private_draft(
                     output_dir=output, glb=source, rights_confirmed=True,
