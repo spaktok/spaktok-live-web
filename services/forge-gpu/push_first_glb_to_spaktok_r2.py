@@ -3,8 +3,11 @@
 
 Reads the existing GLB from Vast.ai and uploads to the existing Spaktok account
 ONLY when operator explicitly approves. Prompts for a temporary scoped Cloudflare
-API token without echoing it or saving it to disk/shell history. No public link.
-The token should have short expiry and R2 object write permissions for Spaktok.
+REST API Bearer token without echoing it or saving it to disk/shell history.
+NO S3 Access Key ID/Secret Access Key token; no public link.
+Create a temporary Cloudflare custom API token with Account > Workers R2
+Storage > Edit permission, restricted to the Spaktok account, then revoke
+after verification. This account-wide permission is broader than one bucket.
 """
 from __future__ import annotations
 
@@ -69,7 +72,7 @@ def main() -> int:
     if consent != "UPLOAD":
         print("Cancelled; no upload")
         return 0
-    token = getpass("Paste temporary Cloudflare R2-write API token (not echoed): ").strip()
+    token = getpass("Paste temporary Cloudflare REST Bearer token, not an R2 S3 secret (hidden): ").strip()
     if len(token) < 20:
         print("ERROR: missing operator token")
         return 2
