@@ -1,7 +1,7 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {createHmac} from 'node:crypto'
 import {resolveForgeGpuBackend,type ForgeGpuBackend} from '@/lib/server/spaktok-forge-provider'
-import {getNativeUser,rateLimit} from '@/lib/native/auth'
+import {getNativeUser,rateLimit,nativeAuthReady} from '@/lib/native/auth'
 import {queryD1} from '@/lib/native/d1'
 import {FORGE_QUOTA_CLAIM_SQL} from '@/lib/server/spaktok-forge-budget'
 
@@ -52,6 +52,7 @@ export async function GET(request:NextRequest){
  const online=cfg?await gpuHealthy(cfg):false
  return json({
   enabled:online,delivery:'direct-private-ticket',
+  authConfigured:nativeAuthReady(),
   readiness:!cfg?'operator_not_configured':
    online?'ready':'gpu_loading_or_unreachable',
   previewQuickTunnel:Boolean(cfg?.provider==='vast'&&
