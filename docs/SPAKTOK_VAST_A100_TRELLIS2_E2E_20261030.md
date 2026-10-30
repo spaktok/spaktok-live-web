@@ -2,6 +2,45 @@
 
 Status on 2026-10-30: **source implementation on GitHub; REAL GPU generation is NOT verified**.
 
+## DINOv3 encoder mismatch found 2026-10-30
+
+The user ran two expensive whole-model GPU tests. Both reached
+`dinov3_conditioning_and_generation_started` then returned the generic 503.
+The next low-cost diagnostic produced the actual exception:
+
+    AttributeError: 'DINOv3ViTModel' object has no attribute 'layer'
+
+Official Microsoft TRELLIS.2 code expected `self.model.layer`; in the
+installed Transformers version, the blocks live at `self.model.model.layer`.
+The corresponding upstream Microsoft compatibility proposal is:
+https://github.com/microsoft/TRELLIS.2/pull/156
+
+Spaktok now installs a scoped, idempotent `DinoV3FeatureExtractor` method
+wrapper that keeps the older encoder path but supports the nested newer
+path, without editing Microsoft's local checkout:
+`services/forge-gpu/trellis2_dinov3_compat.py`.
+
+The diagnostic's own error reporter was also fixed:
+`event("diagnostic_failed", failed_stage=stage, ...)`.
+
+**Do NOT launch whole-image `one_click_vast_a100.py --execute` until the
+partial DINOv3 test passes.** On the existing Vast server run:
+
+    conda activate /workspace/trellis2-env
+    export HF_HOME=/workspace/hf-cache
+    cd /workspace/spaktok-live-web
+    git pull --ff-only
+    python -m unittest discover -s services/forge-gpu -p test_trellis2_dinov3_compat.py -v
+    python services/forge-gpu/diagnose_trellis2_conditioning.py --execute
+
+Pass requires BOTH `background_segmentation_ok` and
+`dinov3_image_conditioning_ok` followed by
+`partial_diagnostic_passed`. This does not generate a mesh or GLB;
+it still loads model weights on rented GPU. If it errors again,
+investigate the reported stage/error; no automatic retry. GitHub CI
+has not yet shown a green check, so independent runtime verification
+remains mandatory.
+
 ## Restricted BRIA RMBG-2.0 model (403) and the open alternative
 The owner's first E2E attempt failed with **403** for `briaai/RMBG-2.0`, not for DINOv3.
 The `microsoft/TRELLIS.2-4B/pipeline.json` explicitly selects `rembg_model.name=BiRefNet` and `rembg_model.args.model_name=briaai/RMBG-2.0`.
