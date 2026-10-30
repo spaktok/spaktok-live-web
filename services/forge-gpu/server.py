@@ -205,12 +205,33 @@ async def generate(request: Request, image: UploadFile = File(...)):
               "job":job_id,"stage":"image_received","at":int(time.time())}),
               flush=True)
             result = await asyncio.to_thread(_make_glb, data, profile, job_id)
-    except (ValueError, UnidentifiedImageError):
-        raise HTTPException(status_code=422, detail="image_or_glb_invalid")
-    except Exception:
+    except (ValueError, UnidentifiedImageError) as exc:
+        # Only operator-terminal safe metadata. Never log image bytes, token,
+        # model URLs, exception messages or full paths in public HTTP responses.
         print(json.dumps({"event":"spaktok_gpu_stage",
-            "stage":"inference_failed","at":int(time.time())}),flush=True)
-        # Never leak model stack traces, local paths or source content.
+            "stage":"image_or_glb_invalid","at":int(time.time()),
+            "error_type":type(exc).__name__}),flush=True)
+        raise HTTPException(status_code=422, detail="image_or_glb_invalid")
+    except Exception as exc:
+        # A previous blanket 503 masked the failing component completely.
+        # The final traceback *location*, without its message / path / args,
+        # lets operators distinguish rembg vs DINOv3 vs CUDA errors safely.
+        import traceback
+        frames=traceback.extract_tb(exc.__traceback__)
+        last=frames[-1] if frames else None
+        message=str(exc).lower()
+        category=("cuda_out_of_memory" if "out of memory" in message
+                  else "model_access_denied" if any(x in message for x in
+                  ("gated repo","403 client error","401 client error"))
+                  else "cuda_runtime_error" if any(x in message for x in
+                  ("cuda error","cublas","cudnn")) else "inference_exception")
+        print(json.dumps({"event":"spaktok_gpu_stage",
+            "stage":"inference_failed","at":int(time.time()),
+            "error_type":type(exc).__name__,"category":category,
+            "source_file":os.path.basename(last.filename) if last else None,
+            "source_function":last.name if last else None,
+            "source_line":last.lineno if last else None}),flush=True)
+        # Never leak model stack traces, local paths or source content to clients.
         raise HTTPException(status_code=503, detail="inference_unavailable")
     print(json.dumps({"event":"spaktok_gpu_stage",
         "stage":"private_glb_delivered","at":int(time.time()),
