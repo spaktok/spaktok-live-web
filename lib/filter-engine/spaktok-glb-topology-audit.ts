@@ -80,11 +80,13 @@ export function inspectStudioGlbTopology(bytes:ArrayBuffer):StudioTopologyReport
  let triangles=0,edges=0,boundaryEdges=0,nonManifoldEdges=0,
      degenerateIndexTriangles=0,checkedPrimitives=0
  for(const primitive of primitives){
-  if((primitive.mode??4)!==4||!validIndex(primitive.indices,accessors.length)||
-    !validIndex(primitive.attributes?.POSITION,accessors.length))
+  const indexId=primitive.indices
+  const positionId=primitive.attributes?.POSITION
+  if((primitive.mode??4)!==4||!validIndex(indexId,accessors.length)||
+    !validIndex(positionId,accessors.length))
    return noReport('unsupported_nonindexed_or_nonstriangle_primitive')
-  const accessor=accessors[primitive.indices]
-  const positionAccessor=accessors[primitive.attributes.POSITION]
+  const accessor=accessors[indexId]
+  const positionAccessor=accessors[positionId]
   const count=accessor.count
   const vertices=positionAccessor.count
   if(accessor.type!=='SCALAR'||![5121,5123,5125].includes(accessor.componentType??0)||
