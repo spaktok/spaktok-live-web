@@ -39,6 +39,7 @@ from benchmark_glb_quality import report as technical_comparison
 from build_private_lods import generate_lods, _check_file
 from glb_position_weld_audit import scan_glb_position_weld
 from one_image_e2e import MAX_IMAGE, MAX_GLB, post_one_image
+from wireframe_review_views import create_wireframe_review
 
 DEPARTMENTS = ("avatar", "live", "filter", "gift", "world")
 TARGET_LODS = {"avatar": "lod1", "live": "lod2", "filter": "lod2",
@@ -143,6 +144,7 @@ def produce_private_draft(
     description: str = "", rodin: Path | None = None,
     same_reference_confirmed: bool = False,
     gltfpack: str = "gltfpack", make_lods: bool = True,
+    make_wireframe_views: bool = True,
 ) -> dict:
     """Produce an atomic, owner-private package; no network except explicit GPU.
 
@@ -219,6 +221,17 @@ def produce_private_draft(
                     lod_status = "rejected-by-quality-gate"
                     lods = None
 
+        views = None
+        views_status = "not-requested" if not make_wireframe_views else "failed"
+        if make_wireframe_views:
+            try:
+                views = create_wireframe_review(
+                    result, work / "review-views"
+                )
+                views_status = "four-angle-wireframe-created-awaiting-human-review"
+            except (ValueError, OSError, KeyError, IndexError):
+                views = None
+                views_status = "wireframe-render-unavailable"
         comparison = None
         if rodin is not None:
             candidate = rodin.resolve(strict=True)
@@ -264,6 +277,14 @@ def produce_private_draft(
                 "lodManifest": "lods/pack.json" if lods else None,
                 "targetsMet": bool(lods and lods["triangleTargetsMet"]),
                 "needsOptimization": not bool(lods and not lods["needsOptimization"]),
+            },
+            "visualReview": {
+                "status": views_status,
+                "views": ["review-views/" + x for x in views["files"]]
+                    if views is not None else [],
+                "sparseWireframeOnly": True,
+                "pbrTurntableHumanReviewComplete": False,
+                "blindLikenessJudged": False,
             },
             "comparison": {
                 "matchedReference": bool(comparison),
@@ -314,6 +335,7 @@ def main() -> int:
     parser.add_argument("--rodin", type=Path)
     parser.add_argument("--same-reference-confirmed", action="store_true")
     parser.add_argument("--no-lods", action="store_true")
+    parser.add_argument("--no-views", action="store_true")
     parser.add_argument("--gltfpack", default="gltfpack")
     args = parser.parse_args()
     try:
@@ -326,6 +348,7 @@ def main() -> int:
             description=args.description, rodin=args.rodin,
             same_reference_confirmed=args.same_reference_confirmed,
             gltfpack=args.gltfpack, make_lods=not args.no_lods,
+            make_wireframe_views=not args.no_views,
         )
     except (OSError, ValueError, PermissionError, RuntimeError) as exc:
         # Avoid printing user-supplied paths or remote response bodies.
@@ -337,6 +360,7 @@ def main() -> int:
         "hash": result["source"]["sha256"],
         "triangles": result["source"]["triangles"],
         "lodStatus": result["optimization"]["status"],
+        "wireframeReview": result["visualReview"]["status"],
         "departments": [d["target"] for d in result["departments"]],
         "published": False,
     }, indent=2))
