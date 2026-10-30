@@ -1,13 +1,13 @@
 import type {DirectorTarget} from './spaktok-ai-director'
 
 /** Safe finite commands for GPU execution. Text is for routing departments;
- * Original TRELLIS is image-conditioned, NOT text-conditioned. No shell commands.
+ * TRELLIS.2 is image-conditioned, NOT text-conditioned. No shell commands.
  */
 export type ForgeGpuProfile='mobile-preview'|'detail-preview'
 export type ForgeGpuPlan=Readonly<{
  version:1
  task:'image-to-3d'
- engine:'trellis-v1'
+ engine:'trellis2'
  profile:ForgeGpuProfile
  destinations:readonly DirectorTarget[]
  publicRelease:false
