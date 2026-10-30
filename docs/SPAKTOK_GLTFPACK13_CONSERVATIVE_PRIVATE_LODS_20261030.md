@@ -77,3 +77,32 @@ The experimental R2 LOD1/LOD2 files in `studio/private/pilot-20261030/lods/` rem
 3. Investigate topological defects created by aggressive simplification and consider component-aware retopology/mesh-splitting with explicit welded-position diagnostics (never merely duplicate indices to mask defects).
 4. Build truthful LOD registry metadata from actual SHA-256, sizes and **achieved** triangle counts; keep conservative candidates marked `needs-optimization` until the target reduction and visual QA pass.
 5. Verify signed owner-only R2 import, WebGL/Android FPS and thermals before any feature-flag change or PR merge.
+
+
+## Verified automated conservative replay — actual private source (2026-10-30)
+
+This follow-up was **executed**, not merely proposed.
+
+- Added opt-in `--conservative` to `services/forge-gpu/build_private_lods.py`.
+- Repeatedly runs real `gltfpack v1.3` with bounded `-se` caps per LOD, testing every GLB for triangle ordering, index-manifold edges, UV, normals, PBR, and existing material slots before accepting one.
+- An unsafe attempt is discarded from scratch before retrying. A fully failed pack never becomes visible.
+- Every variant records `requestedTriangleRatio`, `achievedTriangleRatio`, `triangleTargetMet`, `maxSimplificationErrorUsed`, and sanitized `optimizationAttempts`.
+- The package records `triangleTargetsMet:false`, `needsOptimization:true`, `published:false`, `review.automaticDistributionBlocked:true`, `review.requiresVisualReview:true`, and **empty** `privateStudioRecommendations` if target ratios are not reached.
+- Fresh EU Frankfurt `fra1` CPU-only sandbox cloned exact GitHub commit `9a9ab3f6d35c1a322960c10d506d61626cd1e83e`; **27/27 Python contract tests passed**, including 3 new conservative tests.
+- The actual owner-private `lod0.glb` was fetched with temporary 120-second authenticated, single-object, read-only Worker, and its SHA-256 verified before running the new CLI.
+- **Real command succeeded:** `build_private_lods.py --source /vercel/source-private.glb --output /vercel/conservative-pack --gltfpack /vercel/gltfpack-bin/gltfpack --conservative`.
+- Reproduced the **same exact SHA-256 files** as saved earlier:
+  - LOD1: 109,406 triangles, 5,087,128 bytes, `765011185736c0d2f53e9252b51346b10f4107d3128934ccbbbee7b1f9cd3bbd` (accepted cap `0.0014`, 1 attempt).
+  - LOD2: 106,428 triangles, 4,992,732 bytes, `6b434a87299c2ad653efe10969cffb11b14c9608fb5574eb40b0228d2444ca23` (accepted cap `0.00165`, 6 attempts).
+- Real `pack.json` explicitly reported `triangleTargetsMet:false` and `needsOptimization:true`.
+- **The temporary Worker subdomain was disabled and Worker was deleted; sandbox session was stopped.** No new GPU job, no public GLB exposure or credentials in GitHub.
+
+## Draft Studio integration — gated and unmerged
+
+The separate preview-only registry `lib/filter-engine/spaktok-first-gpu-lods.ts` now has five SHA-256-pinned entries: original LOD0, two previous **defective** clustering prototypes LOD1/LOD2, and professionally simplified but **budget-unmet** `lod1c`/`lod2c`. Unknown drift/UV area comparisons remain `null`, not fabricated zeros.
+
+The existing operator-only pilot signing route and read-only R2 Worker **source** now recognize exact `lod1c`/`lod2c` object keys and byte sizes. The Spaktok AI UI labels their measured status, performs byte-length+SHA-256 checks, and can load their private turntable viewer **once a properly authenticated signed Worker pilot is actually deployed**.
+
+`spaktok-studio-fanout.ts` independently recognizes those candidate file hashes. Regardless of caller flags, all five private handoffs stay `needs-optimization` with `conservative_lod_triangle_budget_unmet_requires_qa`, and the manifest validator rejects forged ready states. Existing prototype LODs remain blocked as non-manifold. Unit tests reproduce both failure categories.
+
+**This is not an active released feature.** The owner-pilot Worker remains undeployed and the signing/auth Preview configuration is not verified; no feature flags or public routes enabled. A successful full Vercel build and authenticated owner-only signed read canary must precede any limited pilot. Visual turntables on real Android/WebGL, UV seams, welded-position topology, rights and FPS still require testing.
