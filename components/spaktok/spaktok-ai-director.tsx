@@ -784,6 +784,10 @@ export default function SpaktokAIDirector({
       <p key={id} className="rounded-lg border border-amber-300/30 p-2 text-xs text-amber-100">
        {id.toUpperCase()} · {candidate.triangles.toLocaleString()} مثلث
        {' · '}حواف Non-manifold: {candidate.nonManifoldEdges.toLocaleString()}
+       {' · '}مثلثات UV منهارة: {candidate.uvCollapsedTriangles}
+       {' · '}فرق مجموع المساحة السطحية: {candidate.surfaceAreaChangePercent.toFixed(1)}%
+       {' · '}فرق مجموع مساحات UV: {candidate.uvAreaSumChangePercent.toFixed(1)}%
+       {' · '}هذه قياسات هندسية لا تثبت جودة العرض.
        {' · '}المجسم خاص وغير معتمد للنشر
       </p>
     })}
