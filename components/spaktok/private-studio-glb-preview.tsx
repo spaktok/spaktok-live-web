@@ -3,6 +3,7 @@
 import {useEffect,useRef,useState} from 'react'
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
+import {centeredPreviewTransform} from '@/lib/filter-engine/spaktok-glb-preview-transform'
 
 /**
  * Strictly local, unpublished 360° private GLB visual inspection.
@@ -37,6 +38,7 @@ export default function PrivateStudioGlbPreview({
   let disposed=false,scene:THREE.Scene|null=null,renderer:THREE.WebGLRenderer|null=null
   let observer:ResizeObserver|null=null,frame=0
   let loaded:THREE.Object3D|null=null
+  let displayRoot:THREE.Group|null=null
   let last=0,lastAngle=0,manualDrag=false,xPrev=0
   const disposables=new Set<THREE.BufferGeometry>()
   const materials=new Set<THREE.Material>()
@@ -124,13 +126,15 @@ export default function PrivateStudioGlbPreview({
     if(box.isEmpty())throw Error('private_preview_empty_geometry')
     const size=box.getSize(new THREE.Vector3())
     const center=box.getCenter(new THREE.Vector3())
-    const scale=Math.max(size.x,size.y,size.z)
-    if(!Number.isFinite(scale)||scale<=1e-8||scale>1000)
-     throw Error('private_preview_geometry_invalid')
-    loaded.position.sub(center)
-    loaded.scale.multiplyScalar(2/scale)
+    const transform=centeredPreviewTransform(center,size)
+    displayRoot=new THREE.Group()
+    displayRoot.scale.setScalar(transform.scale)
+    displayRoot.position.set(
+     transform.offset.x,transform.offset.y,transform.offset.z,
+    )
+    displayRoot.add(loaded)
     root.current=loaded
-    scene.add(loaded)
+    scene.add(displayRoot)
     camera.position.set(0,0,4.5)
     camera.lookAt(0,0,0)
     const redraw=()=>{
@@ -149,7 +153,14 @@ export default function PrivateStudioGlbPreview({
      const dt=last?Math.min((timestamp-last)/1000,0.15):0
      last=timestamp
      if(turnRef.current&&!manualDrag)lastAngle+=dt*.33
-     if(loaded)loaded.rotation.y=lastAngle
+     if(displayRoot){
+      // The model origin can be off-center; adjust translation as the
+      // centered, scaled object rotates so its geometric center stays put.
+      displayRoot.rotation.y=lastAngle
+      const pivot=center.clone().multiplyScalar(transform.scale)
+      pivot.applyAxisAngle(new THREE.Vector3(0,1,0),lastAngle)
+      displayRoot.position.set(-pivot.x,-pivot.y,-pivot.z)
+     }
      renderer.render(scene,camera)
     }
     frame=requestAnimationFrame(loop)
