@@ -25,6 +25,34 @@ describe('Spaktok Forge GPU provider pinning',()=>{
    provider:'vast',engine:'trellis2',
   })
  })
+ it('allows only an operator-pinned expiring quick tunnel for ONE preview GPU job',()=>{
+  const host='testing-trellis-gpu.trycloudflare.com'
+  const preview={...base,
+   VERCEL_ENV:'preview',
+   SPAKTOK_FORGE_GPU_ALLOW_PREVIEW_QUICK_TUNNEL:'true',
+   SPAKTOK_FORGE_GPU_QUICK_TUNNEL_EXPIRES_AT:String(Math.floor(Date.now()/1000)+1800),
+   SPAKTOK_FORGE_GPU_DAILY_LIMIT:'1',
+   SPAKTOK_FORGE_GPU_ENGINE:'trellis2',
+   SPAKTOK_FORGE_GPU_HOST:host,
+   SPAKTOK_FORGE_GPU_VAST_HOSTNAME:host,
+   SPAKTOK_FORGE_GPU_URL:'https://'+host+'/v1/generate',
+  }
+  expect(resolveForgeGpuBackend(preview,origin)).toMatchObject({
+   provider:'vast',engine:'trellis2',globalCap:1,
+  })
+  for(const change of [
+   {VERCEL_ENV:'production'},
+   {SPAKTOK_FORGE_GPU_ALLOW_PREVIEW_QUICK_TUNNEL:'false'},
+   {SPAKTOK_FORGE_GPU_DAILY_LIMIT:'2'},
+   {SPAKTOK_FORGE_GPU_ENGINE:'trellis-v1'},
+   {SPAKTOK_FORGE_GPU_QUICK_TUNNEL_EXPIRES_AT:String(Math.floor(Date.now()/1000)-2)},
+   {SPAKTOK_FORGE_GPU_QUICK_TUNNEL_EXPIRES_AT:String(Math.floor(Date.now()/1000)+7200)},
+   {SPAKTOK_FORGE_GPU_URL:'http://'+host+'/v1/generate'},
+   {SPAKTOK_FORGE_GPU_VAST_HOSTNAME:'not-the-same.trycloudflare.com'},
+  ]){
+   expect(resolveForgeGpuBackend({...preview,...change},origin)).toBeNull()
+  }
+ })
  it('refuses unapproved or insecure Vast endpoints',()=>{
   const bad=[
    {SPAKTOK_FORGE_GPU_VAST_HOSTNAME:'elsewhere.example.org'},
