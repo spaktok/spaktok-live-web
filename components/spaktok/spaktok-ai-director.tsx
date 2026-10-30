@@ -85,7 +85,7 @@ export default function SpaktokAIDirector({
  const [transferConsent,setTransferConsent]=useState(false)
  const [health,setHealth]=useState<GPUHealth|null>(null)
  const [healthBusy,setHealthBusy]=useState(false)
- const [cloudLod,setCloudLod]=useState<SpaktokFirstLodId>('lod1')
+ const [cloudLod,setCloudLod]=useState<SpaktokFirstLodId>('lod1c')
  const refreshGpuHealth=async()=>{
   if(healthBusy)return
   setHealthBusy(true)
@@ -395,7 +395,7 @@ export default function SpaktokAIDirector({
     ' معاينة خاصة من المجسم الأول — لا يوجد Rig أو اختبار AR معتمد'
    await commitGlb(file,0,'existing-glb',{
     targets:destinations,description:desc,save:true,fromCloud:true,
-    previewTopologyBlocked:cloudLod!=='lod0',
+    previewTopologyBlocked:chosen.nonManifoldEdges>0,
    })
    setOwnFile(file)
    setManualTargets(destinations)
@@ -569,11 +569,13 @@ export default function SpaktokAIDirector({
      <div className="rounded-xl border border-cyan-400/30 bg-slate-950/70 p-3 text-xs">
       <p className="font-semibold text-cyan-200">استيراد مجسم Spaktok من Cloudflare R2 الخاص</p>
       <p className="mt-2 leading-5 text-slate-200">
-       توجد ثلاث نسخ GLB فعلية من المجسم الأول محفوظة في Cloudflare R2
-       الخاص. اختر دقة المعاينة لتنزيل نسخة واحدة بتصريح قصير العمر،
-       ثم تحقق من SHA-256 واحفظ مسودات غير منشورة للأقسام الخمسة
-       بدون مهمة GPU جديدة. نسخ LOD1 وLOD2 تحتوي حوافًا غير منتظمة
-       وتُعرض كمسودات تحتاج إعادة تبسيط وفحص بصري، وليست معتمدة لللايف أو AR.
+       توجد خمس نسخ GLB فعلية من المجسم الأول محفوظة في Cloudflare R2
+       الخاص، بينها نسختان احترافيتان محافظتان أنتجناهما باستخدام gltfpack.
+       يتم الاستيراد بتصريح قصير العمر والتحقق من SHA-256 دون GPU جديد.
+       النسختان التجريبيتان LOD1 وLOD2 لديهما حواف غير منتظمة؛
+       النسختان LOD1c وLOD2c اجتازتا فحص الحواف المفهرسة لكن لم
+       تصلا إلى مستوى التخفيض المطلوب. الجميع للمراجعة الخاصة فقط،
+       ولا توجد نسخة معتمدة للايف أو AR أو الهدايا المدفوعة.
       </p>
       <label className="mt-3 block text-slate-100">
        نسخة المجسم الخاصة
@@ -596,13 +598,21 @@ export default function SpaktokAIDirector({
         {' · '}حواف غير منتظمة: {SPAKTOK_FIRST_GPU_LODS[cloudLod].nonManifoldEdges.toLocaleString('en-US')}
        </p>
        <p className="mt-1 text-cyan-200">
-        متوسط اختلاف مواقع الرؤوس عن الأصل:
-        {' '}{SPAKTOK_FIRST_GPU_LODS[cloudLod].meanVertexDriftPercent.toFixed(2)}%
-        {' '}من قطر المجسم (مقياس تقريبي، لا يمثل جودة الصورة)
+        اختلاف مواقع الرؤوس عن الأصل:
+        {' '}{SPAKTOK_FIRST_GPU_LODS[cloudLod].meanVertexDriftPercent===null?
+         'لم يُقَس بعد':
+         SPAKTOK_FIRST_GPU_LODS[cloudLod].meanVertexDriftPercent.toFixed(2)+'% من قطر المجسم'}
+        {' '}— ليس قياسًا لجودة الصورة.
        </p>
        {SPAKTOK_FIRST_GPU_LODS[cloudLod].nonManifoldEdges>0&&
         <p className="mt-1 text-amber-200">
          مسودة فحص فقط؛ يلزم إصلاح الشبكة قبل أي استخدام مباشر.
+        </p>}
+       {(cloudLod==='lod1c'||cloudLod==='lod2c')&&
+        <p className="mt-1 text-amber-200">
+         نسخة محافظة: صفر حواف غير منتظمة حسب فحص الفهارس فقط،
+         لكنها لم تحقق نسبة LOD المستهدفة. تحتاج مراجعة بصرية
+         واختبار Android قبل نقلها لأي قسم.
         </p>}
       </div>
       <button type="button" onClick={()=>void importFirstGpuFromCloud()}
@@ -786,7 +796,8 @@ export default function SpaktokAIDirector({
        {' · '}حواف Non-manifold: {candidate.nonManifoldEdges.toLocaleString()}
        {' · '}مثلثات UV منهارة: {candidate.uvCollapsedTriangles}
        {' · '}فرق مجموع المساحة السطحية: {candidate.surfaceAreaChangePercent.toFixed(1)}%
-       {' · '}فرق مجموع مساحات UV: {candidate.uvAreaSumChangePercent.toFixed(1)}%
+       {' · '}فرق مجموع مساحات UV: {candidate.uvAreaSumChangePercent===null?
+        'لم يُقَس بعد':candidate.uvAreaSumChangePercent.toFixed(1)+'%'}
        {' · '}هذه قياسات هندسية لا تثبت جودة العرض.
        {' · '}المجسم خاص وغير معتمد للنشر
       </p>
