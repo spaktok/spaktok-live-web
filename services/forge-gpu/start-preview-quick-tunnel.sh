@@ -4,6 +4,30 @@
 # Never checks secrets into git or sends them to ChatGPT.
 set -euo pipefail
 umask 077
+if [[ "${1:-}" == --preflight ]]; then
+  echo "SPAKTOK_PREVIEW_PREFLIGHT — NO GPU INFERENCE"
+  echo "INSTANCE: Vast rental may continue billing even without inference"
+  if [[ "${CONDA_PREFIX:-}" == /workspace/trellis2-env ]];then echo "CONDA=OK";else echo "CONDA=MISSING";fi
+  if [[ -f /workspace/TRELLIS.2/trellis2/pipelines/trellis2_image_to_3d.py ]];then echo "TRELLIS2_SOURCE=OK";else echo "TRELLIS2_SOURCE=MISSING";fi
+  if [[ -n "${HF_HOME:-}" && -d "${HF_HOME}" ]];then echo "HF_HOME=OK";else echo "HF_HOME=MISSING";fi
+  if [[ "${FORGE_GPU_ALLOWED_ORIGIN:-}" =~ ^https://[a-zA-Z0-9.-]+\.vercel\.app$ ]];then
+    echo "BROWSER_ORIGIN=VALID_PREVIEW_FORMAT"
+  else echo "BROWSER_ORIGIN=MISSING_OR_INVALID";fi
+  if command -v cloudflared >/dev/null 2>&1;then
+    echo "CLOUDFLARED=OK"
+  else
+    echo "CLOUDFLARED=MISSING"
+    echo "Install only the official Cloudflare client: https://developers.cloudflare.com/tunnel/downloads/"
+  fi
+  if command -v curl >/dev/null 2>&1;then echo "CURL=OK";else echo "CURL=MISSING";fi
+  if [[ -f /workspace/spaktok-first.glb ]];then echo "PRIOR_SUCCESSFUL_GLB=PRESENT";else echo "PRIOR_SUCCESSFUL_GLB=NOT_ON_INSTANCE";fi
+  if command -v nvidia-smi >/dev/null 2>&1;then
+    nvidia-smi --query-gpu=name,memory.total --format=csv,noheader 2>/dev/null ||
+     echo "GPU_INFO=NOT_AVAILABLE"
+  else echo "NVIDIA_SMI=NOT_AVAILABLE";fi
+  echo "NO_TOKENS_PRINTED; NO_MODEL_LOADED; NO_FILES_UPLOADED"
+  exit 0
+fi
 if [[ "${1:-}" != --run ]]; then
   echo "DRY_RUN_ONLY; use --run explicitly for rented GPU inference service"
   exit 0
