@@ -59,7 +59,10 @@ def make_glb(photo: bytes, profile: str = "mobile-preview",
     """Produce a private GLB; do not execute any user-provided shell commands."""
     if _pipeline is None:
         raise RuntimeError("trellis2_model_not_ready")
-    from trellis2_quality import select_trellis2_quality
+    from trellis2_quality import PRESETS, select_trellis2_quality
+    # Reject malformed profile before even importing torch or touching CUDA.
+    if profile not in PRESETS:
+        raise ValueError("unsupported_trellis2_profile")
     import torch
     quality = select_trellis2_quality(
         profile,
