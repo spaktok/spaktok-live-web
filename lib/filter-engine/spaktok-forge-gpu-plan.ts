@@ -1,14 +1,13 @@
 import type {DirectorTarget} from './spaktok-ai-director'
 
 /** Safe finite commands for GPU execution. Text is for routing departments;
- * TRELLIS.2 is image-conditioned, NOT text-conditioned. No shell commands.
+ * Original TRELLIS is image-conditioned, NOT text-conditioned. No shell commands.
  */
 export type ForgeGpuProfile='mobile-preview'|'detail-preview'
 export type ForgeGpuPlan=Readonly<{
  version:1
  task:'image-to-3d'
- engine:'trellis2'
- pipelineType:'512'
+ engine:'trellis-v1'
  profile:ForgeGpuProfile
  destinations:readonly DirectorTarget[]
  publicRelease:false
@@ -28,7 +27,7 @@ export function planForgeGpuGeneration(input:Readonly<{
  // Prioritize mobile budgets for real-time face tracking and live use.
  const mobile=targets.some(t=>t==='avatar'||t==='live'||t==='filter')
  return {
-  version:1,task:'image-to-3d',engine:'trellis2',pipelineType:'512',
+  version:1,task:'image-to-3d',engine:'trellis-v1',
   profile:mobile?'mobile-preview':'detail-preview',
   destinations:targets,publicRelease:false,
  }
