@@ -193,9 +193,15 @@ export default function SpaktokAIDirector({
    rights,targets:special?.targets??plan.targets,
    gpuJobsUsed,sourceEngine,
   })
-  // One successful generation yields a durable 24-hour browser draft shared
-  // by every Studio screen; users must not need five manual imports.
-  await saveStudioFanoutBundle(file,draft)
+  // GPU has already been billed once the GLB exists. A full browser
+  // IndexedDB quota must NOT discard an otherwise valid successful result.
+  let browserSaved=false
+  try{
+   await saveStudioFanoutBundle(file,draft)
+   browserSaved=true
+  }catch{
+   // Retain GLB in memory and expose "Download GLB" as an emergency path.
+  }
   setAsset(file);setQA(checked);setManifest(draft)
   if(sourceEngine!=='existing-glb')onGeneratedGlb?.(file)
   setStatus((special?.fromCloud?
@@ -208,7 +214,8 @@ export default function SpaktokAIDirector({
    'نجح إنشاء GLB بارز 2.5D محليًا مجانًا دون رفع الصورة. '+
    'هذا ليس نموذج وجه/جسم 360° ولا تصلح حركاته تلقائيًا. ':
    'تم حفظ مسودة إنتاج للأقسام المختارة من GLB واحد في هذا المتصفح لمدة 24 ساعة. ')+
-   'تم إنشاء خطة لكل قسم، لكن Rig والحركات واختبارات Android والنشر غير مكتملة.')
+   'تم إنشاء خطة لكل قسم، لكن Rig والحركات واختبارات Android والنشر غير مكتملة.')+
+   (browserSaved?'':' تعذّر الحفظ الدائم في المتصفح؛ نزّل GLB فورًا قبل إغلاق الصفحة.')
  }
  const generate=async()=>{
   if(busy||!source||!rightsApproved||!plan.targets.length)return
