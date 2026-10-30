@@ -29,6 +29,8 @@ class TicketTests(unittest.TestCase):
         self.assertEqual(self.ok(c)['profile'],'mobile-preview')
         c['profile']='detail-preview'
         self.assertEqual(self.ok(c)['profile'],'detail-preview')
+        c['profile']='studio-hd'
+        self.assertEqual(self.ok(c)['profile'],'studio-hd')
     def test_untrusted_profile_is_rejected(self):
         c={**self.claim,'profile':'execute_shell'}
         with self.assertRaisesRegex(InvalidGPUTicket,'invalid_profile'):
