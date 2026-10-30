@@ -6,7 +6,7 @@ const MAX_UPLOAD=8*1024*1024
 const MAX_OUTPUT=35*1024*1024
 export type ForgeGpuProfile='mobile-preview'|'detail-preview'
 type DirectTicket=Readonly<{
- url:string;host:string;provider:'vast'|'runpod';engine:'trellis-v1'|'stable-fast-3d'
+ url:string;host:string;provider:'vast'|'runpod';engine:'trellis-v1'|'trellis2'|'stable-fast-3d'
  ticket:string;jobId:string;expiresAt:string
 }>
 export type ForgeDirectResult=Readonly<{
@@ -55,7 +55,7 @@ export async function generateForgeGpuDirect(
  const destination=new URL(obj.url)
  // The authenticated server has pinned the exact host independently
  // from the URL. Reject all browser-supplied or transient tunnel endpoints.
- const vast=obj.provider==='vast'&&obj.engine==='trellis-v1'&&
+ const vast=obj.provider==='vast'&&(obj.engine==='trellis2'||obj.engine==='trellis-v1')&&
   obj.host===destination.hostname&&
   /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(obj.host)&&
   !obj.host.endsWith('.trycloudflare.com')&&
