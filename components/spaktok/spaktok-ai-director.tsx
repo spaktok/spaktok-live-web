@@ -56,6 +56,7 @@ const isImage=(file:File)=>/\.(png|jpe?g|webp)$/i.test(file.name)
 const isGlb=(file:File)=>/\.glb$/i.test(file.name)
 type GPUHealth=Readonly<{
  enabled:boolean;globalDailyCap:number|null;provider:string|null;engine:string|null
+ readiness?:'ready'|'operator_not_configured'|'gpu_loading_or_unreachable'
 }>
 export default function SpaktokAIDirector({
  sourceFile,onGeneratedGlb,
@@ -103,6 +104,8 @@ export default function SpaktokAIDirector({
     globalDailyCap:typeof x.globalDailyCap==='number'?x.globalDailyCap:null,
     provider:typeof x.provider==='string'?x.provider:null,
     engine:typeof x.engine==='string'?x.engine:null,
+    readiness:['ready','operator_not_configured','gpu_loading_or_unreachable'].includes(x.readiness)?
+     x.readiness:undefined,
    })})
    .catch(()=>{if(active)setHealth({enabled:false,globalDailyCap:null,provider:null,engine:null})})
   return()=>{active=false}
@@ -549,6 +552,13 @@ export default function SpaktokAIDirector({
     <div className="space-y-3">
      <div className="rounded-xl border border-white/15 bg-slate-950/60 p-3 text-xs">
       <p className="font-semibold">خطة الإنتاج المبدئية</p>
+      {sourceKind==='image'&&imageMode==='gpu-360'&&
+       <p role="status" className="mt-2 text-amber-200">
+        حالة الاتصال: {health?.readiness==='ready'?'جاهز لاختبار صورة واحدة':
+         health?.readiness==='gpu_loading_or_unreachable'?
+          'الخادم المحدد لا يستجيب أو ما زال يحمّل النموذج':
+         'لم يكتمل إعداد خادم GPU في هذه النسخة بعد'}
+       </p>}
       <p className="mt-2 text-cyan-200">
        GPU: {plan.estimatedGpuJobs} مهمة ·
        {sourceKind==='glb'?' إعادة استعمال GLB':
