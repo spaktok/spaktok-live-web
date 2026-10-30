@@ -105,13 +105,13 @@ def load_model_once():
         raise RuntimeError("FORGE_GPU_TOKEN must be set to >=32 characters")
     # This catches Blackwell sm_120 with CUDA 12.1/PyTorch 2.4 before
     # downloading gated weights or burning paid compute on a broken kernel.
-    if _ENGINE_NAME not in ("stable-fast-3d", "trellis2"):
+    if _ENGINE_NAME not in ("stable-fast-3d", "trellis-v1"):
         raise RuntimeError("unsupported_forge_gpu_engine")
     require_compatible_gpu(torch)
-    if _ENGINE_NAME == "trellis2":
-        import trellis2_engine
-        trellis2_engine.load_model_once(torch)
-        _model = trellis2_engine
+    if _ENGINE_NAME == "trellis-v1":
+        import trellis_v1_engine
+        trellis_v1_engine.load_model_once(torch)
+        _model = trellis_v1_engine
         return
     import rembg
     # Loading custom SF3D CUDA modules before the architecture preflight
@@ -137,7 +137,7 @@ async def health():
 
 def _make_glb(photo: bytes, profile: str = "mobile-preview") -> bytes:
     """Inference is serialized to avoid OOM and uncontrolled GPU concurrency."""
-    if _ENGINE_NAME == "trellis2":
+    if _ENGINE_NAME == "trellis-v1":
         return _model.make_glb(photo, profile=profile)
     with Image.open(io.BytesIO(photo)) as source:
         if source.width < 64 or source.height < 64 or (
