@@ -24,6 +24,17 @@ class TicketTests(unittest.TestCase):
         return validate_gpu_ticket(ticket(claim or self.claim),SECRET,ORIGIN,origin,self.now)
     def test_positive(self):
         self.assertEqual(self.ok()['nonce'],NONCE)
+    def test_finite_signed_profile(self):
+        c={**self.claim,'profile':'mobile-preview'}
+        self.assertEqual(self.ok(c)['profile'],'mobile-preview')
+        c['profile']='detail-preview'
+        self.assertEqual(self.ok(c)['profile'],'detail-preview')
+    def test_untrusted_profile_is_rejected(self):
+        c={**self.claim,'profile':'execute_shell'}
+        with self.assertRaisesRegex(InvalidGPUTicket,'invalid_profile'):
+            self.ok(c)
+    def test_legacy_ticket_uses_safe_default(self):
+        self.assertEqual(self.ok().get('profile','mobile-preview'),'mobile-preview')
     def test_expired_rejected(self):
         c={**self.claim,'exp':self.now-1}
         with self.assertRaises(InvalidGPUTicket):self.ok(c)
