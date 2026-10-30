@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node scripts/build-couture-glb.mjs && npm run test:word:gate && next build",
+    "build": "node scripts/build-couture-glb.mjs && npm run test:word:gate && npm run test:studio:worker && next build",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
@@ -16,7 +16,8 @@
     "test:forge:providers": "vitest run --config vitest.config.ts lib/server/spaktok-forge-provider.test.ts lib/filter-engine/spaktok-forge-gpu-plan.test.ts",
     "test:d1": "vitest run --config vitest.config.ts lib/cloudflare/d1-repository.test.ts",
     "test:cloudflare": "vitest run --config vitest.config.ts lib/cloudflare",
-    "asset:crown": "node scripts/build-couture-glb.mjs"
+    "asset:crown": "node scripts/build-couture-glb.mjs",
+    "test:studio:worker": "node --test cloudflare/workers/spaktok-private-studio-asset.test.mjs"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
