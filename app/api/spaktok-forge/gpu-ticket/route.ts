@@ -115,6 +115,7 @@ export async function POST(request:NextRequest){
   url:cfg.url,host:new URL(cfg.url).hostname,
   provider:cfg.provider,engine:cfg.engine,
   ticket:'st1.'+base+'.'+signature,
+  quickTunnelPreview:cfg.provider==='vast'&&new URL(cfg.url).hostname.endsWith('.trycloudflare.com'),
   jobId:nonce,expiresAt:new Date((iat+120)*1000).toISOString(),
   note:'This one-use grant consumed an operator daily job reservation. No automatic retry; never share the temporary ticket.',
  })
