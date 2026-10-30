@@ -9,6 +9,7 @@ import {isFirstGpuAsset,SPAKTOK_FIRST_GPU_ASSET} from '@/lib/filter-engine/spakt
 import {generateForgeGpuDirect,type ForgeGpuProfile} from '@/lib/filter-engine/spaktok-forge-direct-client'
 import {planForgeGpuGeneration} from '@/lib/filter-engine/spaktok-forge-gpu-plan'
 import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-local-relief'
+import {buildSpaktokQualityEvidence} from '@/lib/filter-engine/spaktok-forge-quality-evidence'
 import {
  createStudioFanoutManifest,type StudioFanoutManifest,
 } from '@/lib/filter-engine/spaktok-studio-fanout'
@@ -431,6 +432,17 @@ export default function SpaktokAIDirector({
    setBusy(false)
   }
  }
+ const downloadQualityReport=()=>{
+  if(!manifest)return
+  const report=buildSpaktokQualityEvidence(manifest)
+  const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'})
+  const url=URL.createObjectURL(blob)
+  const a=document.createElement('a')
+  a.href=url
+  a.download='spaktok-3d-quality-evidence.json'
+  a.click()
+  window.setTimeout(()=>URL.revokeObjectURL(url),1000)
+ }
  const downloadManifest=()=>{
   if(!manifest)return
   const blob=new Blob([JSON.stringify(manifest,null,2)],{
@@ -702,6 +714,11 @@ export default function SpaktokAIDirector({
      <button type="button" onClick={download}
       className="rounded-lg border border-white/25 px-3 py-2 text-xs">
       تنزيل GLB
+     </button>
+     <button type="button" disabled={!manifest}
+      onClick={downloadQualityReport}
+      className="rounded-lg border border-cyan-300/35 px-3 py-2 text-xs disabled:opacity-40">
+      تنزيل تقرير فحص جودة 3D
      </button>
      <button type="button" disabled={!manifest}
       onClick={downloadManifest}
