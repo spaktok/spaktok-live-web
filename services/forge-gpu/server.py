@@ -17,6 +17,7 @@ import os
 import secrets
 import hashlib
 import time
+import json
 
 import torch
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
@@ -140,9 +141,12 @@ async def health():
             "no_persistent_images": True}
 
 
-def _make_glb(photo: bytes, profile: str = "mobile-preview") -> bytes:
+def _make_glb(photo: bytes, profile: str = "mobile-preview",
+              job_id: str = "operator-direct") -> bytes:
     """Inference is serialized to avoid OOM and uncontrolled GPU concurrency."""
-    if _ENGINE_NAME in ("trellis2", "trellis-v1"):
+    if _ENGINE_NAME == "trellis2":
+        return _model.make_glb(photo, profile=profile, job_id=job_id)
+    if _ENGINE_NAME == "trellis-v1":
         return _model.make_glb(photo, profile=profile)
     with Image.open(io.BytesIO(photo)) as source:
         if source.width < 64 or source.height < 64 or (
@@ -196,12 +200,21 @@ async def generate(request: Request, image: UploadFile = File(...)):
         # One GPU job at a time, no queue of parallel GPU allocations.
         async with _gpu_lock:
             profile = ticket.get("profile", "mobile-preview") if ticket else "mobile-preview"
-            result = await asyncio.to_thread(_make_glb, data, profile)
+            job_id = ticket["nonce"] if ticket else "operator-direct"
+            print(json.dumps({"event":"spaktok_gpu_stage",
+              "job":job_id,"stage":"image_received","at":int(time.time())}),
+              flush=True)
+            result = await asyncio.to_thread(_make_glb, data, profile, job_id)
     except (ValueError, UnidentifiedImageError):
         raise HTTPException(status_code=422, detail="image_or_glb_invalid")
     except Exception:
+        print(json.dumps({"event":"spaktok_gpu_stage",
+            "stage":"inference_failed","at":int(time.time())}),flush=True)
         # Never leak model stack traces, local paths or source content.
         raise HTTPException(status_code=503, detail="inference_unavailable")
+    print(json.dumps({"event":"spaktok_gpu_stage",
+        "stage":"private_glb_delivered","at":int(time.time()),
+        "bytes":len(result)}),flush=True)
     return Response(
         content=result,
         media_type="model/gltf-binary",
