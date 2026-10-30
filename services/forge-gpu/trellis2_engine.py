@@ -32,6 +32,10 @@ def load_model_once(torch_module) -> None:
     check_trellis_capacity(torch_module)
     from trellis2.pipelines import Trellis2ImageTo3DPipeline, rembg
     from trellis2_open_rembg import use_open_background_model, OPEN_REMBG_MODEL
+    from trellis2_dinov3_compat import install_for_trellis2
+    # Backward compatible with transformers encoder nesting and official
+    # TRELLIS.2 class behavior; does not modify the Microsoft checkout.
+    install_for_trellis2()
     _stage("loading_trellis2_weights_and_dinov3", "startup",
            background_model=OPEN_REMBG_MODEL)
     # Upstream pipeline.json explicitly selects briaai/RMBG-2.0.
