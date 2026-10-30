@@ -24,8 +24,16 @@ const OBJECTS=Object.freeze({
   key:"studio/private/pilot-20261030/lods/lod2.glb",
   bytes:1448404,
  }),
+ lod1c:Object.freeze({
+  key:"studio/private/pilot-20261030/professional-candidates-v1/lod1-conservative.glb",
+  bytes:5087128,
+ }),
+ lod2c:Object.freeze({
+  key:"studio/private/pilot-20261030/professional-candidates-v1/lod2-conservative.glb",
+  bytes:4992732,
+ }),
 });
-const LOD_PATH=/^\/v1\/pilot\/(first|lod0|lod1|lod2)\.glb$/;
+const LOD_PATH=/^\/v1\/pilot\/(first|lod0|lod1|lod2|lod1c|lod2c)\.glb$/;
 const b64=s=>Uint8Array.from(atob(s),x=>x.charCodeAt(0));
 
 const deny=(status=404)=>new Response(JSON.stringify({error:status===401?"unauthorized":"not_found"}),{
