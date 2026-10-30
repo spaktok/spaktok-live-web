@@ -6,7 +6,7 @@ import {
 } from '@/lib/filter-engine/spaktok-ai-director'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
 import {isFirstGpuAsset,SPAKTOK_FIRST_GPU_ASSET} from '@/lib/filter-engine/spaktok-first-gpu-asset'
-import {generateForgeGpuDirect} from '@/lib/filter-engine/spaktok-forge-direct-client'
+import {generateForgeGpuDirect,type ForgeGpuProfile} from '@/lib/filter-engine/spaktok-forge-direct-client'
 import {planForgeGpuGeneration} from '@/lib/filter-engine/spaktok-forge-gpu-plan'
 import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-local-relief'
 import {
@@ -55,7 +55,7 @@ const STAGE_NAMES:Readonly<Record<string,string>>={
 const isImage=(file:File)=>/\.(png|jpe?g|webp)$/i.test(file.name)
 const isGlb=(file:File)=>/\.glb$/i.test(file.name)
 type GPUHealth=Readonly<{
- enabled:boolean;authConfigured?:boolean;globalDailyCap:number|null;provider:string|null;engine:string|null
+ enabled:boolean;authConfigured?:boolean;hdAvailable?:boolean;globalDailyCap:number|null;provider:string|null;engine:string|null
  readiness?:'ready'|'operator_not_configured'|'gpu_loading_or_unreachable'
 }>
 export default function SpaktokAIDirector({
@@ -70,6 +70,7 @@ export default function SpaktokAIDirector({
  const [rightsApproved,setRightsApproved]=useState(false)
  const [gpuConsent,setGpuConsent]=useState(false)
  const [imageMode,setImageMode]=useState<'local-2.5d'|'gpu-360'>('local-2.5d')
+ const [qualityPreference,setQualityPreference]=useState<'auto'|ForgeGpuProfile>('auto')
  const [transferConsent,setTransferConsent]=useState(false)
  const [health,setHealth]=useState<GPUHealth|null>(null)
  const [healthBusy,setHealthBusy]=useState(false)
@@ -85,6 +86,7 @@ export default function SpaktokAIDirector({
    setHealth({
     enabled:x.enabled===true,
     authConfigured:x.authConfigured===true,
+    hdAvailable:x.hdAvailable===true,
     globalDailyCap:typeof x.globalDailyCap==='number'?x.globalDailyCap:null,
     provider:typeof x.provider==='string'?x.provider:null,
     engine:typeof x.engine==='string'?x.engine:null,
@@ -118,6 +120,7 @@ export default function SpaktokAIDirector({
   setTransferConsent(false)
   setGpuConsent(false)
   setImageMode('local-2.5d')
+  setQualityPreference('auto')
  },[sourceFile])
  useEffect(()=>{
   let active=true
@@ -126,6 +129,7 @@ export default function SpaktokAIDirector({
    .then(x=>{if(active)setHealth({
     enabled:x.enabled===true,
     authConfigured:x.authConfigured===true,
+    hdAvailable:x.hdAvailable===true,
     globalDailyCap:typeof x.globalDailyCap==='number'?x.globalDailyCap:null,
     provider:typeof x.provider==='string'?x.provider:null,
     engine:typeof x.engine==='string'?x.engine:null,
@@ -149,6 +153,7 @@ export default function SpaktokAIDirector({
   setOwnFile(file);setAsset(null);setQA(null);setManifest(null)
   setRightsApproved(false);setTransferConsent(false);setGpuConsent(false)
   setImageMode('local-2.5d')
+  setQualityPreference('auto')
   setStatus(file?'المصدر جاهز للتخطيط، لم يتم رفعه إلى أي خادم.':'')
  }
  const storeRodin=async()=>{
@@ -268,7 +273,11 @@ export default function SpaktokAIDirector({
     throw Error('director_explicit_gpu_and_image_transfer_consent_required')
    if(source.size<128||source.size>8*1024*1024)
     throw Error('director_invalid_image_size')
-   const gpuPlan=planForgeGpuGeneration({description,targets:plan.targets})
+   if(qualityPreference==='studio-hd'&&!health?.hdAvailable)
+    throw Error('studio_hd_requires_explicit_operator_and_gpu_approval')
+   const gpuPlan=planForgeGpuGeneration({description,targets:plan.targets,
+    preferredProfile:qualityPreference==='auto'?undefined:qualityPreference,
+   })
    setStatus('إرسال مهمة GPU آمنة إلى TRELLIS.2 على Vast.ai بملف واحد…')
    // The Arabic prompt selects private destinations and safe output profile;
    // TRELLIS.2 itself is image-conditioned, not arbitrary text/terminal control.
@@ -483,7 +492,30 @@ export default function SpaktokAIDirector({
         <option value="gpu-360">AI 360°: يحتاج GPU مرخصًا وموافقات</option>
        </select>
       </label>
-      {imageMode==='local-2.5d'&&<p className="mt-2 leading-5 text-amber-200">
+      {imageMode==='gpu-360'&&<div className="mt-3 rounded-lg border border-violet-300/25 p-3">
+      <label className="block font-semibold">
+       جودة توليد TRELLIS.2 — كل اختيار مدفوع بمهمة واحدة
+       <select value={qualityPreference}
+        onChange={e=>{
+         setQualityPreference(e.target.value as typeof qualityPreference)
+         setGpuConsent(false)
+        }}
+        className="mt-2 block w-full rounded-lg border border-white/20 bg-slate-950 p-2">
+        <option value="auto">تلقائي: 512³ للهاتف، خامات مناسبة للقسم</option>
+        <option value="mobile-preview">الهاتف 512³ — 1K PBR و120 ألف وجه مستهدف</option>
+        <option value="detail-preview">تفصيلي 512³ — 2K PBR و200 ألف وجه مستهدف</option>
+        <option value="studio-hd" disabled={!health?.hdAvailable}>
+         Studio HD 1024³ — 2K PBR و300 ألف وجه (اختباري)
+        </option>
+       </select>
+      </label>
+      <p className="mt-2 leading-5 text-amber-100">
+       HD يُسمح به فقط بعد تفعيله من الخادم والمشغّل وبذاكرة GPU كافية؛
+       لم نثبت بعد تفوّقه على Rodin أو صلاحيته للأفاتار المتحرك.
+       قد يتطلب وقتًا أعلى ويُخصم من حصة المهمة الواحدة.
+      </p>
+     </div>}
+     {imageMode==='local-2.5d'&&<p className="mt-2 leading-5 text-amber-200">
        هذا اختبار مجاني للخط الإنتاج فقط. يحفظ سطح الصورة وخلفية مبسطة،
        ولا يعيد بناء الرأس أو الجسم ثلاثي الأبعاد بجودة Rodin.
       </p>}
@@ -644,7 +676,8 @@ export default function SpaktokAIDirector({
      <button type="button" onClick={()=>void generate()}
       disabled={busy||!rightsApproved||!source||!plan.targets.length||
        (sourceKind==='image'&&imageMode==='gpu-360'&&
-        (!health?.enabled||!health?.authConfigured||!gpuConsent||!transferConsent))||
+        (!health?.enabled||!health?.authConfigured||!gpuConsent||!transferConsent||
+         (qualityPreference==='studio-hd'&&!health?.hdAvailable)))||
        sourceKind==='none'}
       className="w-full rounded-xl bg-violet-500 px-4 py-3 font-bold text-white disabled:opacity-40">
       {busy?'يتم العمل…':sourceKind==='glb'?
