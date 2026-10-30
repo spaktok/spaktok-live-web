@@ -226,7 +226,7 @@ class MultiLODTests(unittest.TestCase):
                             malformed_edges=(cap == "0.0025"))
                 return subprocess.CompletedProcess(args, 0, "", "")
 
-            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \\
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
                  patch("build_private_lods.subprocess.run", side_effect=fake_run):
                 manifest = generate_lods(origin, output, conservative=True)
             self.assertEqual(len(calls), 4)
@@ -271,7 +271,7 @@ class MultiLODTests(unittest.TestCase):
                         malformed_edges=True)
                 return subprocess.CompletedProcess(args, 0, "", "")
 
-            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \\
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
                  patch("build_private_lods.subprocess.run", side_effect=fake_run):
                 with self.assertRaisesRegex(
                     ValueError, "lod_no_valid_conservative_candidate_lod1"
@@ -296,7 +296,7 @@ class MultiLODTests(unittest.TestCase):
                 # An attempted command fails before writing an output.
                 return subprocess.CompletedProcess(args, 1, "", "failure")
 
-            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \\
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
                  patch("build_private_lods.subprocess.run", side_effect=fake_run):
                 with self.assertRaisesRegex(
                     ValueError, "lod_no_valid_conservative_candidate_lod1"
