@@ -44,6 +44,32 @@ available. For testing only, the repo accepts an explicit operator-pinned
 5. The owner is responsible for rented GPU cost and shutdown.
    Do not enable public user access or run more than one image test.
 
+## One-command setup variant (recommended)
+
+The repository also provides
+`services/forge-gpu/start-preview-quick-tunnel.sh`, an explicit
+`--run` helper that checks readiness, starts the existing local
+`start-vast-trellis2.sh` process, then opens the temporary
+Cloudflare Tunnel. It saves the randomly generated API token in
+`/workspace/spaktok-preview-gpu-token.txt` with mode `0600` for
+direct transfer to **Vercel Preview secrets only**. The file is deleted
+when the script exits. It prints the expiry and exact temporary URL.
+It will **not** run if `cloudflared` is missing. Once the script exits,
+the operator must also stop the Vast GPU rental separately.
+
+```bash
+conda activate /workspace/trellis2-env
+export HF_HOME=/workspace/hf-cache
+export FORGE_GPU_ALLOWED_ORIGIN='https://v0-spaktok-elite-app-git-feat-forge-bbc71f-danialmq3s-projects.vercel.app'
+cd /workspace/spaktok-live-web
+git pull --ff-only
+bash services/forge-gpu/start-preview-quick-tunnel.sh --run
+```
+
+For the owner: share only the random hostname and expiry with collaborators.
+Never share the token file, API tokens, screenshots containing clipboard
+secrets, or Hugging Face gated model tokens in chat.
+
 ## On the same Vast instance (operator action, not a ChatGPT remote login)
 
 ```bash
