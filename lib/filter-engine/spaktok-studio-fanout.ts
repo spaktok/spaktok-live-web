@@ -78,6 +78,8 @@ export function createStudioFanoutManifest(input:Readonly<{
  targets:readonly DirectorTarget[]
  gpuJobsUsed?:0|1;createdAt?:string
  gpuProfile?:ForgeGpuProfile
+ // Explicit QA blocker for prototype cluster LODs with non-manifold edges.
+ previewTopologyBlocked?:boolean
  sourceEngine?:'existing-glb'|'ai-360-gpu'|'browser-2.5d'
 }>):StudioFanoutManifest{
  if(!safeFile(input.fileName)||!validHash(input.sha256)||
@@ -111,6 +113,8 @@ export function createStudioFanoutManifest(input:Readonly<{
  ]
  const outputs:StudioOutputProfile[]=targets.map(target=>{
   const blockers=[...technicalReasons]
+  if(input.previewTopologyBlocked)
+   blockers.push('non_manifold_lod_requires_professional_retopology_and_visual_qa')
   const avatar=target==='avatar'||target==='live'
   if(input.sourceEngine==='browser-2.5d')
    blockers.push('local_relief_is_not_a_full_360_reconstruction')
@@ -124,7 +128,8 @@ export function createStudioFanoutManifest(input:Readonly<{
   blockers.push('human_rights_and_publication_review_required')
   return {
    target,destination:DESTINATIONS[target],
-   state:mobileBlocked?'needs-optimization':'private-preview',
+   state:mobileBlocked||input.previewTopologyBlocked?
+    'needs-optimization':'private-preview',
    visualScale:'auto-fit-preview',
    anchor:avatar?'head':target==='filter'?'nose_bridge':
     target==='world'?'ground':'object-center',
