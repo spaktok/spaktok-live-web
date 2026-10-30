@@ -31,9 +31,11 @@ def load_model_once(torch_module) -> None:
     global _pipeline
     check_trellis_capacity(torch_module)
     from trellis2.pipelines import Trellis2ImageTo3DPipeline
+    _stage("loading_trellis2_weights_and_dinov3", "startup")
     pipeline = Trellis2ImageTo3DPipeline.from_pretrained(MODEL_ID)
     pipeline.cuda()
     _pipeline = pipeline
+    _stage("model_ready", "startup")
 
 
 def _stage(name: str, job_id: str, **detail) -> None:
