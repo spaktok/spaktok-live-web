@@ -4,7 +4,7 @@ import {
 
 const MAX_UPLOAD=8*1024*1024
 const MAX_OUTPUT=35*1024*1024
-export type ForgeGpuProfile='mobile-preview'|'detail-preview'
+export type ForgeGpuProfile='mobile-preview'|'detail-preview'|'studio-hd'
 type DirectTicket=Readonly<{
  url:string;host:string;provider:'vast'|'runpod';engine:'trellis-v1'|'trellis2'|'stable-fast-3d'
  ticket:string;jobId:string;expiresAt:string;quickTunnelPreview?:boolean
@@ -20,7 +20,7 @@ export async function generateForgeGpuDirect(
  file:File,rights:'original'|'licensed',
  profile:ForgeGpuProfile='mobile-preview',
 ):Promise<ForgeDirectResult>{
- if(!['mobile-preview','detail-preview'].includes(profile))
+ if(!['mobile-preview','detail-preview','studio-hd'].includes(profile))
   throw Error('forge_direct_invalid_profile')
  if(file.size<128||file.size>MAX_UPLOAD||
   !['image/png','image/jpeg','image/webp'].includes(file.type))
@@ -84,7 +84,7 @@ export async function generateForgeGpuDirect(
    headers:{authorization:'Bearer '+obj.ticket},
    mode:'cors',credentials:'omit',
    cache:'no-store',redirect:'error',
-   signal:AbortSignal.timeout(115000),
+   signal:AbortSignal.timeout(profile==='studio-hd'?240000:115000),
   })
  }catch{
   throw Error('forge_direct_network_or_cors_failed_ticket_consumed')
