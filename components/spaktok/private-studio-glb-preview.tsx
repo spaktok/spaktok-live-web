@@ -113,6 +113,13 @@ export default function PrivateStudioGlbPreview({
      return
     }
     loaded=gltf.scene
+    // Apply controls toggled while the WebP textures were decoding.
+    loaded.traverse(node=>{
+     if(!(node instanceof THREE.Mesh))return
+     const mats=Array.isArray(node.material)?node.material:[node.material]
+     for(const mat of mats)if(mat instanceof THREE.MeshStandardMaterial)
+      mat.wireframe=wireRef.current
+    })
     const box=new THREE.Box3().setFromObject(loaded)
     if(box.isEmpty())throw Error('private_preview_empty_geometry')
     const size=box.getSize(new THREE.Vector3())
