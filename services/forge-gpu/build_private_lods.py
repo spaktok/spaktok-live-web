@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 from benchmark_glb_quality import inspect_glb
+from glb_topology import scan_glb_topology
 
 MAX_SOURCE_BYTES = 35 * 1024 * 1024
 MAX_OUTPUT_BYTES = 35 * 1024 * 1024
@@ -32,6 +33,9 @@ TARGET_LODS = {
 
 def _check_file(path: Path) -> dict:
     meta = inspect_glb(path)
+    # Fail closed: a structurally readable GLB can still contain dangerous
+    # non-manifold or degenerate triangle indices.
+    meta["topology"] = scan_glb_topology(path)
     if not 28 <= meta["bytes"] <= MAX_OUTPUT_BYTES:
         raise ValueError("lod_output_size_invalid")
     if meta["triangles"] < 1 or meta["triangle_primitives"] < 1:
@@ -42,6 +46,9 @@ def _check_file(path: Path) -> dict:
 def _check_quality(source: dict, candidate: dict, previous: dict) -> None:
     if candidate["triangles"] >= previous["triangles"]:
         raise ValueError("lod_did_not_reduce_triangles")
+    if (candidate["topology"]["nonmanifold_edges"] or
+            candidate["topology"]["degenerate_index_triangles"]):
+        raise ValueError("lod_topology_nonmanifold_or_degenerate")
     if candidate["primitives_with_uv0"] != candidate["triangle_primitives"]:
         raise ValueError("lod_uvs_missing")
     if candidate["primitives_with_normals"] != candidate["triangle_primitives"]:
@@ -84,6 +91,9 @@ def generate_lods(source_file: Path, output_dir: Path,
         raise ValueError("lod_source_too_large")
     if source_meta["triangles"] < 100:
         raise ValueError("lod_source_too_small_for_decimation")
+    if (source_meta["topology"]["nonmanifold_edges"] or
+            source_meta["topology"]["degenerate_index_triangles"]):
+        raise ValueError("lod_source_topology_requires_repair")
     if source_meta["primitives_with_uv0"] != source_meta["triangle_primitives"]:
         raise ValueError("lod_source_has_missing_uvs")
     if source_meta["primitives_with_normals"] != source_meta["triangle_primitives"]:
@@ -109,7 +119,8 @@ def generate_lods(source_file: Path, output_dir: Path,
             # existing Three.js/native preview code. -noq avoids quantization
             # and synthetic dequantization nodes; keep mesh/material names.
             command = [program, "-i", str(source_file), "-o", str(target),
-                       "-si", ratio, "-noq", "-kn", "-km", "-ke"]
+                       "-si", ratio, "-noq", "-kn", "-km", "-ke",
+                       "-slb", "-sv"]
             try:
                 result = subprocess.run(
                     command, capture_output=True, text=True, timeout=90,
@@ -142,6 +153,7 @@ def generate_lods(source_file: Path, output_dir: Path,
                     "sha256": value["meta"]["sha256"],
                     "embeddedTextureImages": value["meta"]["embedded_image_count"],
                     "pbrMaterialCount": value["meta"]["pbr_material_count"],
+                    "topology": value["meta"]["topology"],
                 }
                 for name, value in assets.items()
             },
@@ -152,6 +164,8 @@ def generate_lods(source_file: Path, output_dir: Path,
             "cameraTracked": False,
             "review": {
                 "androidFPS": "not-tested",
+                "nonManifoldEdges": "zero-required-and-verified",
+                "visualSeamArtifacts": "not-tested",
                 "visualError": "not-tested",
                 "sourceRights": "must-be-attested-by-owner",
             },
