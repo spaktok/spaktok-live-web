@@ -19,6 +19,10 @@ export function centeredPreviewTransform(
  const scale=displayExtent/longest
  return {
   scale,
-  offset:{x:-center.x*scale,y:-center.y*scale,z:-center.z*scale},
+  offset:{
+   x:center.x===0?0:-center.x*scale,
+   y:center.y===0?0:-center.y*scale,
+   z:center.z===0?0:-center.z*scale,
+  },
  }
 }
