@@ -45,9 +45,24 @@ export function resolveForgeGpuBackend(
    // tunnel hostname, pinned independently from the endpoint URL.
    // No raw mapped HTTP IP:port, quick tunnel URL or user URL allowed.
    const pinned=env.SPAKTOK_FORGE_GPU_VAST_HOSTNAME??''
-   if(!['trellis-v1','trellis2'].includes(engine)||pinned!==host||host.endsWith('.proxy.runpod.net')||
-    host.endsWith('.trycloudflare.com')||host==='trycloudflare.com')
-    return null
+   if(!['trellis-v1','trellis2'].includes(engine)||pinned!==host||
+    host.endsWith('.proxy.runpod.net'))return null
+   const quick=host.endsWith('.trycloudflare.com')
+   if(quick){
+    // PREVIEW ONLY: short-lived experimental transport, never production.
+    // The operator still needs the exact pinned host, per-owner D1 quota,
+    // HMAC one-use GPU grants, HTTPS and active origin-locked CORS.
+    // This is NOT a production tunnel replacement.
+    const expiry=Number(env.SPAKTOK_FORGE_GPU_QUICK_TUNNEL_EXPIRES_AT??0)
+    const remaining=expiry-Math.floor(Date.now()/1000)
+    if(env.VERCEL_ENV!=='preview'||
+     env.SPAKTOK_FORGE_GPU_ALLOW_PREVIEW_QUICK_TUNNEL!=='true'||
+     provider!=='vast'||engine!=='trellis2'||
+     !/^[a-z0-9-]{6,80}\.trycloudflare\.com$/i.test(host)||
+     !Number.isSafeInteger(expiry)||remaining<=0||remaining>3600||
+     globalCap!==1)
+      return null
+   }else if(host==='trycloudflare.com')return null
   }
   return {url:url.toString(),token,globalCap,provider,engine}
  }catch{return null}
