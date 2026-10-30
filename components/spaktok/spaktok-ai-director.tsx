@@ -236,6 +236,7 @@ export default function SpaktokAIDirector({
   const mustRepairTopology=topologyAudit.status==='checked'&&(
    topologyAudit.nonManifoldEdges>0||
    topologyAudit.degenerateIndexTriangles>0)
+  const topologyUnknown=topologyAudit.status!=='checked'
   const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))
   const hash=Array.from(digest).map(b=>b.toString(16).padStart(2,'0')).join('')
   const draft=createStudioFanoutManifest({
@@ -244,6 +245,7 @@ export default function SpaktokAIDirector({
    rights,targets:special?.targets??plan.targets,
    gpuJobsUsed,sourceEngine,gpuProfile,
    previewTopologyBlocked:special?.previewTopologyBlocked===true||mustRepairTopology,
+   topologyScanUnverified:topologyUnknown,
   })
   // GPU has already been billed once the GLB exists. A full browser
   // IndexedDB quota must NOT discard an otherwise valid successful result.
@@ -445,8 +447,8 @@ export default function SpaktokAIDirector({
  }
  const send=(target:DirectorTarget)=>async()=>{
   if(!asset||!manifest||!qa?.previewReady||busy||
-   (topology?.status==='checked'&&(
-    topology.nonManifoldEdges>0||topology.degenerateIndexTriangles>0))||
+   (topology?.status!=='checked'||
+    topology.nonManifoldEdges>0||topology.degenerateIndexTriangles>0)||
    !manifest.project.outputTargets.includes(target)||
    manifest.outputs.find(out=>out.target===target)?.state!=='private-preview')return
   setBusy(true)
@@ -790,8 +792,8 @@ export default function SpaktokAIDirector({
      </button>
      {manifest?.project.outputTargets.map(target=><button key={target} type="button"
       disabled={!qa.previewReady||busy||!manifest||
-       (topology?.status==='checked'&&(
-        topology.nonManifoldEdges>0||topology.degenerateIndexTriangles>0))||
+       (topology?.status!=='checked'||
+        topology.nonManifoldEdges>0||topology.degenerateIndexTriangles>0)||
        manifest.outputs.find(o=>o.target===target)?.state!=='private-preview'}
       onClick={()=>void send(target)()}
       className="rounded-lg bg-indigo-600 px-3 py-2 text-xs disabled:opacity-40">
