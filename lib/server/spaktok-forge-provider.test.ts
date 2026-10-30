@@ -20,6 +20,11 @@ describe('Spaktok Forge GPU provider pinning',()=>{
    provider:'vast',engine:'trellis-v1',globalCap:1,
   })
  })
+ it('allows original TRELLIS.2 only with the same pinned Vast HTTPS hostname',()=>{
+  expect(resolveForgeGpuBackend({...base,SPAKTOK_FORGE_GPU_ENGINE:'trellis2'},origin)).toMatchObject({
+   provider:'vast',engine:'trellis2',
+  })
+ })
  it('refuses unapproved or insecure Vast endpoints',()=>{
   const bad=[
    {SPAKTOK_FORGE_GPU_VAST_HOSTNAME:'elsewhere.example.org'},
@@ -32,7 +37,7 @@ describe('Spaktok Forge GPU provider pinning',()=>{
     SPAKTOK_FORGE_GPU_VAST_HOSTNAME:'gpu.trycloudflare.com',
     SPAKTOK_FORGE_GPU_URL:'https://gpu.trycloudflare.com/v1/generate'},
    {SPAKTOK_FORGE_GPU_ENGINE:'untrusted-shell'},
-   {SPAKTOK_FORGE_GPU_ENGINE:'trellis2'},
+   {SPAKTOK_FORGE_GPU_ENGINE:'shell-runner'},
    {SPAKTOK_FORGE_GPU_PROVIDER:'random'},
    {SPAKTOK_FORGE_GPU_ENABLED:'false'},
   ]
