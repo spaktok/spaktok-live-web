@@ -135,10 +135,10 @@ async def health():
             "no_persistent_images": True}
 
 
-def _make_glb(photo: bytes) -> bytes:
+def _make_glb(photo: bytes, profile: str = "mobile-preview") -> bytes:
     """Inference is serialized to avoid OOM and uncontrolled GPU concurrency."""
     if _ENGINE_NAME == "trellis2":
-        return _model.make_glb(photo)
+        return _model.make_glb(photo, profile=profile)
     with Image.open(io.BytesIO(photo)) as source:
         if source.width < 64 or source.height < 64 or (
             source.width * source.height > 4096 * 4096
@@ -190,7 +190,8 @@ async def generate(request: Request, image: UploadFile = File(...)):
                 raise ValueError("unsupported image encoding")
         # One GPU job at a time, no queue of parallel GPU allocations.
         async with _gpu_lock:
-            result = await asyncio.to_thread(_make_glb, data)
+            profile = ticket.get("profile", "mobile-preview") if ticket else "mobile-preview"
+            result = await asyncio.to_thread(_make_glb, data, profile)
     except (ValueError, UnidentifiedImageError):
         raise HTTPException(status_code=422, detail="image_or_glb_invalid")
     except Exception:
