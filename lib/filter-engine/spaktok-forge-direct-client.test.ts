@@ -102,6 +102,19 @@ describe('Spaktok AI image → signed GPU → GLB browser contract',()=>{
   expect(generated.inspection.audit.selfContained).toBe(true)
   expect(generated.inspection.audit.meshCount).toBe(1)
  })
+ it('sends a studio-hd quality grant ONLY when explicitly selected',async()=>{
+  const call=vi.fn(async (url:string,init:RequestInit)=>{
+   if(url.startsWith('/api/')){
+    expect(JSON.parse(String(init.body)).profile).toBe('studio-hd')
+    return Response.json(ticket())
+   }
+   return result(glbFixture())
+  })
+  vi.stubGlobal('fetch',call)
+  const returned=await generateForgeGpuDirect(image(),'licensed','studio-hd')
+  expect(returned.inspection.audit.valid).toBe(true)
+  expect(call).toHaveBeenCalledTimes(2)
+ })
  it('rejects an expired ticket without sending the image to GPU',async()=>{
   const call=vi.fn(async()=>Response.json(ticket({
    expiresAt:new Date(Date.now()-5000).toISOString(),
