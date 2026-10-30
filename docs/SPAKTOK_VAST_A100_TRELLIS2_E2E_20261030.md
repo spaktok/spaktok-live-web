@@ -1,6 +1,28 @@
 # Spaktok AI → Vast A100 80GB → TRELLIS.2 + DINOv3 → private GLB → Studio
 
 Status on 2026-10-30: **source implementation on GitHub; REAL GPU generation is NOT verified**.
+
+## Restricted BRIA RMBG-2.0 model (403) and the open alternative
+The owner's first E2E attempt failed with **403** for `briaai/RMBG-2.0`, not for DINOv3.
+The `microsoft/TRELLIS.2-4B/pipeline.json` explicitly selects `rembg_model.name=BiRefNet` and `rembg_model.args.model_name=briaai/RMBG-2.0`.
+The **ZhengPeng7/BiRefNet** official Hugging Face model has `license: mit`, pretrained weights, and the same `AutoModelForImageSegmentation` interface. `trellis2_open_rembg.py` safely intercepts only the named upstream BRIA model during pipeline loading, substitutes `ZhengPeng7/BiRefNet` and restores the original `rembg.BiRefNet` class on success or failure. The vendor's model code uses `trust_remote_code=True`; review and pin trusted revisions before production. No BRIA license acceptance or access is necessary for the substitute.
+
+From Vast terminal update the checked-out branch, then check open-model download:
+
+    cd /workspace/spaktok-live-web
+    git switch feat/forge-vast-trellis2-adapter-20261029
+    git pull --ff-only
+    conda activate /workspace/trellis2-env
+    export HF_HOME=/workspace/hf-cache
+    hf download ZhengPeng7/BiRefNet config.json
+    python -m unittest discover -s services/forge-gpu -p test_trellis2_open_rembg.py -v
+
+Then rerun ONE job only after reviewing the previous 403 failure:
+
+    python services/forge-gpu/one_click_vast_a100.py --execute
+
+This still may encounter another unverified runtime error; screenshots confirming GLB are required before claiming success. Official model page: https://huggingface.co/ZhengPeng7/BiRefNet.
+
 Existing Vast.ai instance shown by owner: **58332583**.
 
 ## What was verified by user terminal screenshots
