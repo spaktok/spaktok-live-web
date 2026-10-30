@@ -18,6 +18,15 @@ const INCOMPLETE_LOD_BUDGET_SHA256=new Set<string>([
  SPAKTOK_FIRST_GPU_LODS.lod1c.sha256,
  SPAKTOK_FIRST_GPU_LODS.lod2c.sha256,
 ])
+// Position-welded (tolerance = 1e-6 of bounding diagonal) seam/overlap
+// incidence >2 was measured in R2 for the actual source and two candidates.
+// This is diagnostic: UV seams or overlapping shells can explain it. Block
+// automatic department handoff pending visual/surface interpretation.
+const POSITION_WELD_REVIEW_SHA256=new Set<string>([
+ SPAKTOK_FIRST_GPU_LODS.lod0.sha256,
+ SPAKTOK_FIRST_GPU_LODS.lod1c.sha256,
+ SPAKTOK_FIRST_GPU_LODS.lod2c.sha256,
+])
 
 /** A small, safe, versioned build manifest. Contains NO image or GLB bytes,
  * access tokens, signed URLs or authorization to publish. The real asset
@@ -114,6 +123,7 @@ export function createStudioFanoutManifest(input:Readonly<{
   throw Error('studio_fanout_project_invalid')
  const knownInvalidTopology=INSECURE_PREVIEW_LOD_SHA256.has(input.sha256)
  const incompleteLodBudget=INCOMPLETE_LOD_BUDGET_SHA256.has(input.sha256)
+ const positionWeldReview=POSITION_WELD_REVIEW_SHA256.has(input.sha256)
  const topologyBlocked=Boolean(input.previewTopologyBlocked||knownInvalidTopology)
  const topologyUnknown=input.topologyScanUnverified===true
  const mobileBlocked=input.bytes>15*1024*1024||
@@ -136,6 +146,8 @@ export function createStudioFanoutManifest(input:Readonly<{
    blockers.push('glb_topology_scan_unverified_requires_professional_review')
   if(incompleteLodBudget)
    blockers.push('conservative_lod_triangle_budget_unmet_requires_qa')
+  if(positionWeldReview)
+   blockers.push('position_welded_edges_require_visual_surface_review')
   const avatar=target==='avatar'||target==='live'
   if(input.sourceEngine==='browser-2.5d')
    blockers.push('local_relief_is_not_a_full_360_reconstruction')
@@ -150,7 +162,7 @@ export function createStudioFanoutManifest(input:Readonly<{
   return {
    target,destination:DESTINATIONS[target],
    state:mobileBlocked||topologyBlocked||topologyUnknown||
-    incompleteLodBudget?'needs-optimization':'private-preview',
+    incompleteLodBudget||positionWeldReview?'needs-optimization':'private-preview',
    visualScale:'auto-fit-preview',
    anchor:avatar?'head':target==='filter'?'nose_bridge':
     target==='world'?'ground':'object-center',
@@ -227,6 +239,7 @@ export function assertStudioFanoutManifest(value:unknown):
   throw Error('studio_fanout_manifest_invalid')
  const knownTopologyDefect=INSECURE_PREVIEW_LOD_SHA256.has(v.source.sha256)
  const knownIncompleteBudget=INCOMPLETE_LOD_BUDGET_SHA256.has(v.source.sha256)
+ const knownWeldReview=POSITION_WELD_REVIEW_SHA256.has(v.source.sha256)
  for(let i=0;i<v.outputs.length;i++){
   // Array.isArray narrows a readonly tuple/array to any[] in TS.
   // Reassert the already validated schema before indexed access.
@@ -244,6 +257,10 @@ export function assertStudioFanoutManifest(value:unknown):
    (knownIncompleteBudget&&(
     out.state!=='needs-optimization'||
     !out.blockers.includes('conservative_lod_triangle_budget_unmet_requires_qa')
+   ))||
+   (knownWeldReview&&(
+    out.state!=='needs-optimization'||
+    !out.blockers.includes('position_welded_edges_require_visual_surface_review')
    )))
    throw Error('studio_fanout_output_invalid')
  }
