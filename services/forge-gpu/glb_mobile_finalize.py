@@ -36,10 +36,26 @@ def finalize_mobile_glb(source: Path, output: Path) -> dict:
     for mesh in meshes:
         if not len(mesh.faces) or not len(mesh.vertices):
             raise ValueError("source_mesh_empty")
-        normals = np.asarray(mesh.vertex_normals)
-        if normals.shape != (len(mesh.vertices), 3) or not np.isfinite(normals).all():
+        # Trimesh's vertex_normals property indirectly needs SciPy sparse
+        # matrices on this version. Compute area-weighted normals directly
+        # with NumPy for the CPU-only operator path, without SciPy.
+        points = np.asarray(mesh.vertices, dtype=np.float64)
+        faces = np.asarray(mesh.faces, dtype=np.int64)
+        if faces.ndim != 2 or faces.shape[1] != 3:
             raise ValueError("computed_normals_invalid")
-        mesh.vertex_normals = normals.copy()
+        e1 = points[faces[:, 1]] - points[faces[:, 0]]
+        e2 = points[faces[:, 2]] - points[faces[:, 0]]
+        face_cross = np.cross(e1, e2)
+        normals = np.zeros_like(points, dtype=np.float64)
+        for column in range(3):
+            np.add.at(normals, faces[:, column], face_cross)
+        magnitude = np.linalg.norm(normals, axis=1)
+        if (normals.shape != (len(mesh.vertices), 3)
+                or not np.isfinite(normals).all()
+                or not np.isfinite(magnitude).all()
+                or np.any(magnitude < 1e-12)):
+            raise ValueError("computed_normals_invalid")
+        mesh.vertex_normals = (normals / magnitude[:, None]).copy()
 
     updated = scene.export(file_type="glb")
     after = inspect_glb_bytes(updated)
