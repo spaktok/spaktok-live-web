@@ -7,7 +7,7 @@ const MAX_OUTPUT=35*1024*1024
 export type ForgeGpuProfile='mobile-preview'|'detail-preview'
 type DirectTicket=Readonly<{
  url:string;host:string;provider:'vast'|'runpod';engine:'trellis-v1'|'trellis2'|'stable-fast-3d'
- ticket:string;jobId:string;expiresAt:string
+ ticket:string;jobId:string;expiresAt:string;quickTunnelPreview?:boolean
 }>
 export type ForgeDirectResult=Readonly<{
  file:File;inspection:WordGeneratedInspection
@@ -55,10 +55,14 @@ export async function generateForgeGpuDirect(
  const destination=new URL(obj.url)
  // The authenticated server has pinned the exact host independently
  // from the URL. Reject all browser-supplied or transient tunnel endpoints.
+ const quick=obj.host.endsWith('.trycloudflare.com')
+ const previewTunnel=quick&&obj.quickTunnelPreview===true&&
+  obj.engine==='trellis2'&&
+  /^[a-z0-9-]{6,80}\.trycloudflare\.com$/i.test(obj.host)
  const vast=obj.provider==='vast'&&(obj.engine==='trellis2'||obj.engine==='trellis-v1')&&
   obj.host===destination.hostname&&
   /^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(obj.host)&&
-  !obj.host.endsWith('.trycloudflare.com')&&
+  (!quick||previewTunnel)&&
   !obj.host.endsWith('.proxy.runpod.net')&&
   !/\.(?:localhost|local|internal|test|invalid|example|onion)$/i.test(obj.host)
  const runpod=obj.provider==='runpod'&&
