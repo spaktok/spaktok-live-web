@@ -4,13 +4,14 @@
 // set to the exact reviewed HTTPS Spaktok web origin.
 // GET requires a short-lived ED25519 signature produced by the
 // authenticated, operator-only Next.js ticket route. No public key URL.
-const KEY="MCowBQYDK2VwAyEAN/tgkUKQRZ7J3fpryNYw3JFrK8OqQOxPpZDp05LcsLw=";
+// Exact public half of SPAKTOK_D1_BRIDGE_SIGNING_KEY must be bound as secret
+// SPAKTOK_STUDIO_ED25519_PUBLIC_KEY (base64 DER SPKI), never checked in.
 const DOMAIN="spaktok-studio-pilot-read-v1";
 const URI="/v1/pilot/first.glb";
 const OBJECT="studio/private/pilot-20261030/33be391ce222f90d00316b26b5ff6c3f21b30f230122d8e87f94b26992f619aa.glb";
 const EXPECTED_BYTES=5343540;
 const b64=s=>Uint8Array.from(atob(s),x=>x.charCodeAt(0));
-const KEY_PROMISE=crypto.subtle.importKey("spki",b64(KEY),{name:"Ed25519"},false,["verify"]);
+
 const deny=(status=404)=>new Response(JSON.stringify({error:status===401?"unauthorized":"not_found"}),{
  status,headers:{"content-type":"application/json","cache-control":"private,no-store","x-content-type-options":"nosniff"},
 });
@@ -24,7 +25,7 @@ function corsHeaders(origin){
   "access-control-allow-headers":"X-Spaktok-Studio-Signature, X-Spaktok-Studio-Expires, X-Spaktok-Studio-User",
   "access-control-max-age":"60","vary":"Origin"};
 }
-async function authorized(request,origin){
+async function authorized(request,origin,env){
  const user=request.headers.get("x-spaktok-studio-user")??"";
  const expires=request.headers.get("x-spaktok-studio-expires")??"";
  const signature=request.headers.get("x-spaktok-studio-signature")??"";
@@ -35,7 +36,8 @@ async function authorized(request,origin){
  if(Number(expires)<now||Number(expires)>now+90)return false;
  const payload=[DOMAIN,"GET",user,"first",expires,origin].join("\n");
  try{
-  const key=await KEY_PROMISE;
+  if(typeof env.SPAKTOK_STUDIO_ED25519_PUBLIC_KEY!=="string")return false;
+  const key=await crypto.subtle.importKey("spki",b64(env.SPAKTOK_STUDIO_ED25519_PUBLIC_KEY),{name:"Ed25519"},false,["verify"]);
   const raw=signature.replace(/-/g,"+").replace(/_/g,"/")+"==";
   return await crypto.subtle.verify("Ed25519",key,b64(raw),
    new TextEncoder().encode(payload));
@@ -49,7 +51,7 @@ export default {
   if(!allowedOrigin(origin,env))return deny(403);
   if(req.method==="OPTIONS")
    return new Response(null,{status:204,headers:corsHeaders(origin)});
-  if(req.method!=="GET"||!await authorized(req,origin))return deny(401);
+  if(req.method!=="GET"||!await authorized(req,origin,env))return deny(401);
   if(!env.STUDIO_ASSETS)return deny(503);
   try{
    const glb=await env.STUDIO_ASSETS.get(OBJECT);
