@@ -5,6 +5,7 @@ import { VideoCard } from './video-card'
 import { Clapperboard, Compass, RefreshCw } from 'lucide-react'
 import type { Video, FeedType } from '@/lib/types'
 import { summarizePlayback, type PlaybackMetric } from '@/lib/video/playback-qa'
+import {parseDevicePreferences,shouldPrecacheVideo,SPAKTOK_PREFERENCES_KEY,SPAKTOK_PREFERENCES_EVENT} from '@/lib/video/user-playback-preferences'
 
 interface VideoFeedProps {
   onUserClick: (userId: string) => void
@@ -45,16 +46,25 @@ export function VideoFeed({ onUserClick, feedType, initialVideoId, onCreate, onD
       connection?: { saveData?: boolean; effectiveType?: string; addEventListener?: (type: string, callback: () => void) => void; removeEventListener?: (type: string, callback: () => void) => void }
     }).connection
     const updatePolicy = () => {
-      setCanPrecache(!connection?.saveData && !['slow-2g', '2g', '3g'].includes(connection?.effectiveType ?? ''))
+      let raw:string|null=null
+      try{raw=window.localStorage.getItem(SPAKTOK_PREFERENCES_KEY)}catch{/* Disabled storage */ }
+      setCanPrecache(shouldPrecacheVideo(parseDevicePreferences(raw),connection??null))
     }
     const updateVisibility = () => setIsVisible(!document.hidden)
     updatePolicy()
     updateVisibility()
     connection?.addEventListener?.('change', updatePolicy)
     document.addEventListener('visibilitychange', updateVisibility)
+    window.addEventListener(SPAKTOK_PREFERENCES_EVENT,updatePolicy)
+    const storageHandler=(event:StorageEvent)=>{
+      if(event.key===SPAKTOK_PREFERENCES_KEY)updatePolicy()
+    }
+    window.addEventListener('storage',storageHandler)
     return () => {
       connection?.removeEventListener?.('change', updatePolicy)
       document.removeEventListener('visibilitychange', updateVisibility)
+      window.removeEventListener(SPAKTOK_PREFERENCES_EVENT,updatePolicy)
+      window.removeEventListener('storage',storageHandler)
       loadMoreAbortRef.current?.abort()
     }
   }, [])
