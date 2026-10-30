@@ -5,6 +5,7 @@ import {
  planSpaktokDirector,type DirectorTarget,type DirectorAssetQA,
 } from '@/lib/filter-engine/spaktok-ai-director'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
+import {isFirstGpuAsset} from '@/lib/filter-engine/spaktok-first-gpu-asset'
 import {generateForgeGpuDirect} from '@/lib/filter-engine/spaktok-forge-direct-client'
 import {planForgeGpuGeneration} from '@/lib/filter-engine/spaktok-forge-gpu-plan'
 import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-local-relief'
@@ -177,22 +178,28 @@ export default function SpaktokAIDirector({
   })
  }
  const commitGlb=async(file:File,gpuJobsUsed:0|1,
-  sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d')=>{
+  sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d',
+  special?:{targets:DirectorTarget[];description:string;save:boolean})=>{
   const bytes=await file.arrayBuffer()
   const inspection=inspectWordGeneratedGlb(bytes,file.name)
   const checked=evaluateDirectorAsset(inspection.audit,bytes.byteLength,
-   plan.targets)
+   special?.targets??plan.targets)
   if(!checked.valid)throw Error('director_failed_glb_qa')
   const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))
   const hash=Array.from(digest).map(b=>b.toString(16).padStart(2,'0')).join('')
   const draft=createStudioFanoutManifest({
    fileName:file.name,sha256:hash,bytes:bytes.byteLength,
-   audit:inspection.audit,description,rights,targets:plan.targets,
+   audit:inspection.audit,description:special?.description??description,
+   rights,targets:special?.targets??plan.targets,
    gpuJobsUsed,sourceEngine,
   })
+  if(special?.save)await saveStudioFanoutBundle(file,draft)
   setAsset(file);setQA(checked);setManifest(draft)
   if(sourceEngine!=='existing-glb')onGeneratedGlb?.(file)
-  setStatus((sourceEngine==='browser-2.5d'?
+  setStatus((special?.save?
+   'تم التحقق من بصمة المجسم المولّد على Vast.ai وحفظه كمسودة خاصة في هذا المتصفح. '+
+   'تم تجهيز مخطط جميع الأقسام الخمسة؛ لم يُرفع إلى Cloudflare R2 ولم يُنشر للجمهور. ':
+   sourceEngine==='browser-2.5d'?
    'نجح إنشاء GLB بارز 2.5D محليًا مجانًا دون رفع الصورة. '+
    'هذا ليس نموذج وجه/جسم 360° ولا تصلح حركاته تلقائيًا. ':
    'أنشأنا مسودة إنتاج للأقسام المختارة من GLB واحد. ')+
@@ -230,6 +237,31 @@ export default function SpaktokAIDirector({
   }catch(error){
    setStatus('لم تكتمل المهمة: '+(error instanceof Error?error.message:String(error))+
     '. إذا بدأ تشغيل GPU فالمحاولة قد تُحتسب؛ لا تعاود الإرسال دون فحص الحالة.')
+  }finally{setBusy(false)}
+ }
+ const importFirstGpuAsset=async()=>{
+  // No GPU, no external network upload: verify the exact known private
+  // TRELLIS.2 artifact and save one local manifest for all five studios.
+  if(busy||!source||sourceKind!=='glb'||!rightsApproved)return
+  setBusy(true)
+  try{
+   const raw=await source.arrayBuffer()
+   const hash=Array.from(new Uint8Array(
+    await crypto.subtle.digest('SHA-256',raw)
+   )).map(byte=>byte.toString(16).padStart(2,'0')).join('')
+   if(!isFirstGpuAsset(hash,raw.byteLength))
+    throw Error('glb_does_not_match_vast_first_successful_asset')
+   const requested=[...DIRECTOR_TARGETS]
+   const firstDescription='المجسم الأول من Spaktok GPU: أفاتار، لايف، فلتر، هدية، وعالم'
+   await commitGlb(source,0,'existing-glb',{
+    targets:requested,description:firstDescription,save:true,
+   })
+   setManualTargets(requested)
+   setDescription(firstDescription)
+  }catch(error){
+   setStatus('تعذّر استيراد مجسم GPU الأول: '+
+    (error instanceof Error?error.message:String(error))+
+    '. تأكد أنك اخترت ملف GLB الأصلي الذي أنشأناه على Vast.ai.')
   }finally{setBusy(false)}
  }
  const persistDraft=async()=>{
@@ -354,6 +386,21 @@ export default function SpaktokAIDirector({
       {sourceKind==='glb'?' إعادة استخدام دون GPU':
        imageMode==='local-2.5d'?' نمط بارز 2.5D مجاني':' يتطلب GPU لتوليد 360°'}
      </p>}
+     {sourceKind==='glb'&&<div className="rounded-xl border border-indigo-300/30 bg-indigo-950/40 p-3 text-xs">
+      <p className="font-semibold text-cyan-200">استيراد أول مجسم Spaktok GPU</p>
+      <p className="mt-2 leading-5 text-slate-200">
+       بعد تنزيل spaktok-first.glb من Vast.ai اختره أعلاه، وأكد حقوق
+       الاستخدام، ثم احفظه مرة واحدة كمسودة للأفاتار واللايف والفلاتر
+       والهدايا والعالم. نفحص SHA-256 والحجم المطابقين لنتيجة GPU الناجحة.
+       التخزين محلي وخاص؛ هذا ليس رفعًا إلى Cloudflare R2 أو نشرًا مباشرًا.
+      </p>
+      <button type="button"
+       onClick={()=>void importFirstGpuAsset()}
+       disabled={busy||!rightsApproved}
+       className="mt-3 w-full rounded-lg bg-cyan-700 px-3 py-3 font-bold text-white disabled:opacity-40">
+       استيراد مجسم Vast.ai وتجهيزه للأقسام الخمسة دون GPU
+      </button>
+     </div>}
      <div className="flex flex-wrap gap-2 text-xs">
       <button type="button" onClick={()=>void deleteSavedDraft()}
        disabled={busy}
