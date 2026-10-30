@@ -27,7 +27,7 @@ export function planForgeGpuGeneration(input:Readonly<{
  // Prioritize mobile budgets for real-time face tracking and live use.
  const mobile=targets.some(t=>t==='avatar'||t==='live'||t==='filter')
  return {
-  version:1,task:'image-to-3d',engine:'trellis-v1',
+  version:1,task:'image-to-3d',engine:'trellis2',
   profile:mobile?'mobile-preview':'detail-preview',
   destinations:targets,publicRelease:false,
  }
