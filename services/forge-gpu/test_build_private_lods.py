@@ -26,14 +26,14 @@ def fixture(path: Path, triangles: int, *, uv=True, normal=True,
                       *([0.0, 0.0]*vertex_count))
     normals = struct.pack("<" + "f"*(vertex_count*3),
                           *([0.0, 0.0, 1.0]*vertex_count))
-    embedded_png = b"\\x89PNG" + b"\\x00"*12
+    embedded_png = b"\x89PNG" + b"\x00"*12
     views = []
     binary = bytearray()
     for block in (index_bytes, positions, uvs, normals, embedded_png):
         views.append({"buffer": 0, "byteOffset": len(binary),
                       "byteLength": len(block)})
         binary.extend(block)
-        binary.extend(b"\\0" * (-len(binary) % 4))
+        binary.extend(b"\0" * (-len(binary) % 4))
     attrs = {"POSITION": 1}
     if uv:
         attrs["TEXCOORD_0"] = 2
@@ -69,7 +69,7 @@ def fixture(path: Path, triangles: int, *, uv=True, normal=True,
                     20 + len(raw) + 8 + len(binary))
         + struct.pack("<I4s", len(raw), b"JSON")
         + raw
-        + struct.pack("<I4s", len(binary), b"BIN\\x00")
+        + struct.pack("<I4s", len(binary), b"BIN\x00")
         + binary
     )
 
@@ -149,7 +149,7 @@ class MultiLODTests(unittest.TestCase):
                 fixture(Path(args[args.index("-o") + 1]), 450,
                         malformed_edges=True)
                 return subprocess.CompletedProcess(args, 0, "", "")
-            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \\
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
                  patch("build_private_lods.subprocess.run", side_effect=fake_run):
                 with self.assertRaisesRegex(ValueError, "lod_topology_nonmanifold"):
                     generate_lods(origin, output)
@@ -159,7 +159,7 @@ class MultiLODTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             origin = Path(root) / "broken.glb"
             fixture(origin, 1000, malformed_edges=True)
-            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \\
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
                  patch("build_private_lods.subprocess.run") as process:
                 with self.assertRaisesRegex(ValueError, "lod_source_topology_requires_repair"):
                     generate_lods(origin, Path(root) / "lod")
