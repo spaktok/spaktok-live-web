@@ -1,8 +1,8 @@
 import 'server-only'
 import {NextRequest,NextResponse} from 'next/server'
-import {createPrivateKey,sign} from 'node:crypto'
+import {sign} from 'node:crypto'
 import {getNativeUser} from '@/lib/native/auth'
-import {validId} from '@/lib/native/d1'
+import {studioPilotReadiness,studioPilotSigner} from '@/lib/server/spaktok-studio-pilot-config'
 import {
  SPAKTOK_FIRST_GPU_LODS,isSpaktokFirstLodId,
 } from '@/lib/filter-engine/spaktok-first-gpu-lods'
@@ -14,16 +14,31 @@ const WORKER='spaktok-private-studio-asset.spaktok.workers.dev'
 const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{
  'cache-control':'private,no-store','x-content-type-options':'nosniff',
 }})
-const configured=()=>
- process.env.SPAKTOK_STUDIO_PILOT_ENABLED==='true' &&
- validId(process.env.SPAKTOK_STUDIO_PILOT_OWNER_ID??'') &&
- Boolean(process.env.SPAKTOK_D1_BRIDGE_SIGNING_KEY)
+/** Browser-side readiness distinguishes a configured signer from a
+ * fully verified, deployed Cloudflare delivery route. Never expose
+ * owner IDs, private keys or signed URLs through this endpoint.
+ */
+export async function GET(){
+ const readiness=studioPilotReadiness(process.env)
+ if(readiness!=='server_preconditions_met')
+  return json({enabled:false,reason:'pilot_operator_not_configured',
+   workerVerified:false,private:true})
+ const user=await getNativeUser().catch(()=>null)
+ if(!user)return json({enabled:false,reason:'pilot_sign_in_required',
+  workerVerified:false,private:true})
+ if(user.id!==process.env.SPAKTOK_STUDIO_PILOT_OWNER_ID)
+  return json({enabled:false,reason:'pilot_owner_only',
+   workerVerified:false,private:true})
+ return json({enabled:true,reason:'server_signer_configured',
+  workerVerified:false,private:true})
+}
 
 export async function POST(req:NextRequest){
  if(req.headers.get('origin')!==req.nextUrl.origin||
     req.headers.get('sec-fetch-site')==='cross-site')
   return json({error:'invalid_origin'},403)
- if(!configured())return json({error:'pilot_not_configured'},503)
+ if(studioPilotReadiness(process.env)!=='server_preconditions_met')
+  return json({error:'pilot_not_configured'},503)
  const user=await getNativeUser().catch(()=>null)
  if(!user)return json({error:'unauthorized'},401)
  if(user.id!==process.env.SPAKTOK_STUDIO_PILOT_OWNER_ID)
@@ -39,11 +54,9 @@ export async function POST(req:NextRequest){
  const variant=SPAKTOK_FIRST_GPU_LODS[assetId]
  const origin=req.nextUrl.origin
  if(!origin.startsWith('https://'))return json({error:'https_required'},403)
- const key64=process.env.SPAKTOK_D1_BRIDGE_SIGNING_KEY
- if(!key64)return json({error:'pilot_not_configured'},503)
  try{
   const expiry=String(Math.floor(Date.now()/1000)+60)
-  const privateKey=createPrivateKey(Buffer.from(key64,'base64').toString('utf8'))
+  const privateKey=studioPilotSigner(process.env)
   const claim=[DOMAIN,'GET',user.id,assetId,expiry,origin].join('\n')
   const signature=sign(null,Buffer.from(claim),privateKey).toString('base64url')
   return json({
