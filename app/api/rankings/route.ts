@@ -1,5 +1,6 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {queryD1} from '@/lib/native/d1'
+import {parseRankWindow,type CreatorRankWindow} from '@/lib/rankings/rank-period'
 
 /** An honest creator leaderboard from real PUBLISHED clips only.
  * This is NOT a LIVE gifting / paid battle ranking.
@@ -7,8 +8,6 @@ import {queryD1} from '@/lib/native/d1'
  */
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
-export const CREATOR_RANK_WINDOWS=['week','month','all'] as const
-export type CreatorRankWindow=(typeof CREATOR_RANK_WINDOWS)[number]
 type DbRow={
  id:string;username:string;display_name:string;avatar_url:string|null
  is_verified:number;posts:number;likes:number;views:number
@@ -17,11 +16,6 @@ const WINDOW_SQL:Record<CreatorRankWindow,string>={
  week:"AND v.created_at >= datetime('now','-7 days')",
  month:"AND v.created_at >= datetime('now','-30 days')",
  all:'',
-}
-export function parseRankWindow(value:string|null):CreatorRankWindow|null{
- const window=value??'week'
- return CREATOR_RANK_WINDOWS.includes(window as CreatorRankWindow)?
-   window as CreatorRankWindow:null
 }
 const json=(value:unknown,status=200)=>NextResponse.json(value,{
  status,headers:{'Cache-Control':'private,no-store','X-Content-Type-Options':'nosniff'},
