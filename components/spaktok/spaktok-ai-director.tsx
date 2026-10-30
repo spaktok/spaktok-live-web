@@ -83,7 +83,7 @@ export default function SpaktokAIDirector({
  const sourceKind=source?(isGlb(source)?'glb':isImage(source)?'image':'none'):'none'
  const plan=useMemo(()=>planSpaktokDirector({
   description,targets,source:sourceKind,
-  rightsApproved,gpuAvailable:health?.enabled===true,
+  rightsApproved,gpuAvailable:health?.enabled===true&&health?.authConfigured===true,
   computeApproved:gpuConsent,transferApproved:transferConsent,
   localReliefSelected:sourceKind==='image'&&imageMode==='local-2.5d',
  }),[description,targets,sourceKind,rightsApproved,health,gpuConsent,transferConsent,imageMode])
@@ -237,7 +237,7 @@ export default function SpaktokAIDirector({
     await commitGlb(relief.file,0,'browser-2.5d')
     return
    }
-   if(!health?.enabled)throw Error('director_gpu_disabled')
+   if(!health?.enabled||!health?.authConfigured)throw Error('director_gpu_or_auth_disabled')
    if(health.provider!=='vast'||health.engine!=='trellis2')
     throw Error('director_requires_operator_vast_trellis2')
    if(!gpuConsent||!transferConsent)
@@ -566,7 +566,7 @@ export default function SpaktokAIDirector({
        GPU: {plan.estimatedGpuJobs} مهمة ·
        {sourceKind==='glb'?' إعادة استعمال GLB':
         imageMode==='local-2.5d'?' Forge المحلي المجاني 2.5D':
-        health?.enabled&&health.provider==='vast'&&health.engine==='trellis2'?
+        health?.enabled&&health.authConfigured&&health.provider==='vast'&&health.engine==='trellis2'?
         ' Vast.ai TRELLIS.2 متصل':' GPU متوقف'}
       </p>
       {plan.stages.map(step=><div key={step.id}
@@ -593,11 +593,11 @@ export default function SpaktokAIDirector({
      </label>
      {sourceKind==='image'&&imageMode==='gpu-360'&&<div className="space-y-2 rounded-lg border border-amber-400/30 bg-amber-950/20 p-3">
       <p className="text-xs text-amber-100">
-       {health?.enabled&&health.provider==='vast'&&health.engine==='trellis2'?
+       {health?.enabled&&health.authConfigured&&health.provider==='vast'&&health.engine==='trellis2'?
         'محرك TRELLIS.2 على Vast.ai متصل؛ GPU مدفوع للمشغّل.':
         'محرك AI 360° غير متصل بعد؛ يمكن إنشاء خطة أو استيراد GLB مجاني الآن.'}
       </p>
-      {health?.enabled&&<>
+      {health?.enabled&&health.authConfigured&&<>
        <label className="flex items-start gap-2 text-xs">
         <input type="checkbox" checked={transferConsent}
          onChange={e=>setTransferConsent(e.target.checked)}/>
@@ -613,7 +613,7 @@ export default function SpaktokAIDirector({
      <button type="button" onClick={()=>void generate()}
       disabled={busy||!rightsApproved||!source||!plan.targets.length||
        (sourceKind==='image'&&imageMode==='gpu-360'&&
-        (!health?.enabled||!gpuConsent||!transferConsent))||
+        (!health?.enabled||!health?.authConfigured||!gpuConsent||!transferConsent))||
        sourceKind==='none'}
       className="w-full rounded-xl bg-violet-500 px-4 py-3 font-bold text-white disabled:opacity-40">
       {busy?'يتم العمل…':sourceKind==='glb'?
