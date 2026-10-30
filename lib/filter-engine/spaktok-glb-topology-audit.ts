@@ -97,24 +97,25 @@ export function inspectStudioGlbTopology(bytes:ArrayBuffer):StudioTopologyReport
    return noReport('unsupported_sparse_indices')
   if(!validIndex(accessor.bufferView,views.length))
    return noReport('invalid_index_buffer_view')
-  if(!Number.isSafeInteger(count)||count!<3||count!%3)
+  if(typeof count!=='number'||!Number.isSafeInteger(count)||count<3||count%3!==0)
    return noReport('invalid_index_count')
-  if(!Number.isSafeInteger(vertices)||vertices!<3)
+  if(typeof vertices!=='number'||!Number.isSafeInteger(vertices)||vertices<3)
    return noReport('invalid_position_count')
-  const nTriangles=count!/3
+  const nTriangles=count/3
   if(triangles+nTriangles>MAX_TRIANGLES)
    return noReport('topology_scan_triangle_limit')
   const source=views[accessor.bufferView!]
   const size=accessor.componentType===5125?4:
    accessor.componentType===5123?2:1
   const offset=(source.byteOffset??0)+(accessor.byteOffset??0)
+  const viewLength=source.byteLength
   if(source.buffer!==0||
     !Number.isSafeInteger(offset)||offset<0||
-    !Number.isSafeInteger(source.byteLength)||source.byteLength!<=0||
+    typeof viewLength!=='number'||!Number.isSafeInteger(viewLength)||viewLength<=0||
     source.byteStride!==undefined||
     !Number.isSafeInteger(accessor.byteOffset??0)||
-    (accessor.byteOffset??0)+count!*size>source.byteLength!||
-    offset+count!*size>bufferLength||
+    (accessor.byteOffset??0)+count*size>viewLength||
+    offset+count*size>bufferLength||
     offset%size)
    return noReport('unsupported_index_buffer_view')
   const absolute=binHeader+8+offset
@@ -127,9 +128,9 @@ export function inspectStudioGlbTopology(bytes:ArrayBuffer):StudioTopologyReport
    const key=(a<b?a+':'+b:b+':'+a)
    incidences.set(key,(incidences.get(key)??0)+1)
   }
-  for(let i=0;i<count!;i+=3){
+  for(let i=0;i<count;i+=3){
    const a=indexAt(i),b=indexAt(i+1),c=indexAt(i+2)
-   if(a>=vertices!||b>=vertices!||c>=vertices!)
+   if(a>=vertices||b>=vertices||c>=vertices)
     return noReport('invalid_vertex_index')
    if(a===b||a===c||b===c){degenerateIndexTriangles++;continue}
    add(a,b);add(b,c);add(c,a)
