@@ -2,6 +2,7 @@ import {describe,it,expect} from 'vitest'
 import {createStudioFanoutManifest,assertStudioFanoutManifest}
  from './spaktok-studio-fanout'
 import {RODIN_HEAD_CALIBRATED_SHA256} from './rodin-owner-head'
+import {SPAKTOK_FIRST_GPU_LODS} from './spaktok-first-gpu-lods'
 import type {StudioGlbAudit} from './reality-production-glb-audit'
 const audit:StudioGlbAudit={
  valid:true,selfContained:true,triangles:117657,
@@ -65,6 +66,25 @@ describe('Studio fan-out manifest GPU-free production contract',()=>{
   expect(result.outputs.every(x=>x.state==='needs-optimization')).toBe(true)
   expect(result.outputs[0].blockers).toContain('mobile_triangle_limit')
   expect(result.outputs[0].blockers).toContain('over_15mb_delivery_limit')
+ })
+ it('cannot mislabel either defective private LOD as Studio-ready, even by reimporting GLB',()=>{
+  for(const lod of [SPAKTOK_FIRST_GPU_LODS.lod1,SPAKTOK_FIRST_GPU_LODS.lod2]){
+   const result=make({
+    fileName:lod.fileName,sha256:lod.sha256,bytes:lod.bytes,
+    audit:{...audit,triangles:lod.triangles,textures:2},
+   })
+   expect(result.outputs.every(o=>o.state==='needs-optimization')).toBe(true)
+   const required='non_manifold_lod_requires_professional_retopology_and_visual_qa'
+   expect(result.outputs.every(o=>o.blockers.includes(required))).toBe(true)
+   const bypass={
+    ...result,
+    outputs:result.outputs.map(o=>({
+     ...o,state:'private-preview' as const,
+     blockers:o.blockers.filter(reason=>reason!==required),
+    })),
+   }
+   expect(()=>assertStudioFanoutManifest(bypass)).toThrow('studio_fanout_output_invalid')
+  }
  })
  it('cannot mix another asset, duplicate targets or unverifiable approvals',()=>{
   expect(()=>make({sha256:'invalid'})).toThrow()
