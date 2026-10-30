@@ -4,7 +4,7 @@
 // set to the exact reviewed HTTPS Spaktok web origin.
 // GET requires a short-lived ED25519 signature produced by the
 // authenticated, operator-only Next.js ticket route. No public key URL.
-// Exact public half of SPAKTOK_D1_BRIDGE_SIGNING_KEY must be bound as secret
+// Exact public half of SPAKTOK_STUDIO_PILOT_SIGNING_KEY must be bound as secret
 // SPAKTOK_STUDIO_ED25519_PUBLIC_KEY (base64 DER SPKI), never checked in.
 const DOMAIN="spaktok-studio-pilot-read-v1";
 const OBJECTS=Object.freeze({
