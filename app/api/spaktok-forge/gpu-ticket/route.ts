@@ -52,6 +52,10 @@ export async function GET(request:NextRequest){
  const online=cfg?await gpuHealthy(cfg):false
  return json({
   enabled:online,delivery:'direct-private-ticket',
+  readiness:!cfg?'operator_not_configured':
+   online?'ready':'gpu_loading_or_unreachable',
+  previewQuickTunnel:Boolean(cfg?.provider==='vast'&&
+   new URL(cfg.url).hostname.endsWith('.trycloudflare.com')),
   engine:cfg?.engine??null,provider:cfg?.provider??null,
   full360:true,dailyCapPerOwner:1,
   globalDailyCap:cfg?.globalCap??null,maxImageMB:8,
