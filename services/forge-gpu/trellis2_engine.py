@@ -59,26 +59,27 @@ def make_glb(photo: bytes, profile: str = "mobile-preview",
     """Produce a private GLB; do not execute any user-provided shell commands."""
     if _pipeline is None:
         raise RuntimeError("trellis2_model_not_ready")
-    if profile not in ("mobile-preview", "detail-preview"):
-        raise ValueError("unsupported_trellis2_profile")
-    decimation_target = 120000 if profile == "mobile-preview" else 200000
-    texture_size = 1024 if profile == "mobile-preview" else 2048
-    from PIL import Image, ImageOps
+    from trellis2_quality import select_trellis2_quality
     import torch
+    quality = select_trellis2_quality(
+        profile,
+        vram_bytes=torch.cuda.get_device_properties(0).total_memory,
+        hd_authorized=os.environ.get("FORGE_GPU_HD_ENABLED") == "yes",
+    )
+    from PIL import Image, ImageOps
     import o_voxel
 
     with Image.open(io.BytesIO(photo)) as src:
         if src.width < 64 or src.height < 64 or src.width * src.height > 4096**2:
             raise ValueError("unsupported_dimensions")
         image = ImageOps.exif_transpose(src).convert("RGBA")
-    _stage("image_validated", job_id, profile=profile, bytes=len(photo))
+    _stage("image_validated", job_id, profile=profile,
+           resolution=quality.pipeline_type, bytes=len(photo))
 
-    # Official inference shape (microsoft/TRELLIS.2 README, Oct 2026).
-    # Use official default resolution for this first experimental bridge.
-    # Higher resolutions require measured VRAM, runtime and size gates.
+    # Official TRELLIS.2 pipeline names: 512 / 1024_cascade.
+    # A100 HD remains opt-in and UNBENCHMARKED. Never auto-upgrade a job.
     with torch.inference_mode():
-        # The upstream default is 1024_cascade; start this A100 80GB
-        # validation at 512 before attempting higher resolutions.
+        # Preserve signed, finite quality selection throughout inference.
         _stage("background_segmentation_started", job_id)
         # Identical official preprocessing, but split from generation so
         # operator can locate 503 causes before resubmitting expensive jobs.
@@ -86,7 +87,8 @@ def make_glb(photo: bytes, profile: str = "mobile-preview",
         _stage("background_segmentation_completed", job_id)
         _stage("dinov3_conditioning_and_generation_started", job_id)
         mesh = _pipeline.run(
-            prepared, pipeline_type="512", preprocess_image=False
+            prepared, pipeline_type=quality.pipeline_type,
+            preprocess_image=False
         )[0]
         _stage("geometry_and_pbr_generated", job_id)
         mesh.simplify(16777216)
@@ -99,8 +101,8 @@ def make_glb(photo: bytes, profile: str = "mobile-preview",
             attr_layout=mesh.layout,
             voxel_size=mesh.voxel_size,
             aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-            decimation_target=decimation_target,
-            texture_size=texture_size,
+            decimation_target=quality.decimation_target,
+            texture_size=quality.texture_size,
             remesh=True,
             remesh_band=1,
             remesh_project=0,
@@ -122,5 +124,6 @@ def make_glb(photo: bytes, profile: str = "mobile-preview",
             int.from_bytes(result[4:8], "little") != 2 or
             int.from_bytes(result[8:12], "little") != len(result)):
         raise ValueError("invalid_glb_header_or_size")
-    _stage("glb_ready_for_private_import", job_id, bytes=len(result))
+    _stage("glb_ready_for_private_import", job_id,
+           profile=quality.profile, bytes=len(result))
     return result
