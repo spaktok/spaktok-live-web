@@ -23,6 +23,7 @@ describe('Spaktok objective Rodin-comparison evidence',()=>{
  it('reports real structural metrics but never invents an image-fidelity winner',()=>{
   const value=buildSpaktokQualityEvidence(fixture())
   expect(value.measured.triangleCount).toBe(100_000)
+  expect(value.verifiedPilotUvAudit).toBeNull()
   expect(value.measured.embeddedTextureImageCount).toBe(2)
   expect(value.measured.hasPBRMaterial).toBe(true)
   expect(value.fidelity.referenceImageSimilarityMeasured).toBe(false)
@@ -55,7 +56,16 @@ describe('Spaktok objective Rodin-comparison evidence',()=>{
    expect(out.blockers).toContain('non_manifold_lod_requires_professional_retopology_and_visual_qa')
    expect(out.published).toBe(false)
   }
-  expect(buildSpaktokQualityEvidence(manifest).publicReleaseApproved).toBe(false)
+  const evidence=buildSpaktokQualityEvidence(manifest)
+  expect(evidence.verifiedPilotUvAudit?.lodId).toBe('lod1')
+  expect(evidence.verifiedPilotUvAudit?.uvCollapsedTriangles).toBe(0)
+  expect(evidence.verifiedPilotUvAudit?.triangleSurfaceAreaChangePercent)
+   .toBeCloseTo(-13.4723,4)
+  expect(evidence.verifiedPilotUvAudit?.triangleUvAreaSumChangePercent)
+   .toBeCloseTo(47.5168,4)
+  expect(evidence.verifiedPilotUvAudit?.visualInspectionCompleted).toBe(false)
+  expect(evidence.verifiedPilotUvAudit?.approvedForLive).toBe(false)
+  expect(evidence.publicReleaseApproved).toBe(false)
  })
  it('includes measured edge defects without claiming mesh integrity',()=>{
   const evidence=buildSpaktokQualityEvidence(fixture(),{
