@@ -18,6 +18,7 @@ import sys
 import tempfile
 from benchmark_glb_quality import inspect_glb
 from glb_topology import scan_glb_topology
+from glb_uv_surface import inspect_glb_uv_surface
 
 MAX_SOURCE_BYTES = 35 * 1024 * 1024
 MAX_OUTPUT_BYTES = 35 * 1024 * 1024
@@ -36,6 +37,13 @@ def _check_file(path: Path) -> dict:
     # Fail closed: a structurally readable GLB can still contain dangerous
     # non-manifold or degenerate triangle indices.
     meta["topology"] = scan_glb_topology(path)
+    # The existing source/target UV slot gates below retain their own
+    # precise failures; valid UV-bearing output gets a full area audit.
+    meta["uvSurface"] = (
+        inspect_glb_uv_surface(path)
+        if meta["primitives_with_uv0"] == meta["triangle_primitives"]
+        else None
+    )
     if not 28 <= meta["bytes"] <= MAX_OUTPUT_BYTES:
         raise ValueError("lod_output_size_invalid")
     if meta["triangles"] < 1 or meta["triangle_primitives"] < 1:
@@ -51,6 +59,15 @@ def _check_quality(source: dict, candidate: dict, previous: dict) -> None:
         raise ValueError("lod_topology_nonmanifold_or_degenerate")
     if candidate["primitives_with_uv0"] != candidate["triangle_primitives"]:
         raise ValueError("lod_uvs_missing")
+    if source.get("uvSurface") and candidate.get("uvSurface"):
+        source_fraction = source["uvSurface"]["uv_collapsed_fraction"]
+        next_fraction = candidate["uvSurface"]["uv_collapsed_fraction"]
+        if next_fraction > max(.002, source_fraction + .001):
+            raise ValueError("lod_uv_collapse_fraction_too_high")
+        if candidate["uvSurface"]["surface_area_sum"] <= 0:
+            raise ValueError("lod_geometry_surface_area_invalid")
+    else:
+        raise ValueError("lod_uv_surface_audit_missing")
     if candidate["primitives_with_normals"] != candidate["triangle_primitives"]:
         raise ValueError("lod_normals_missing")
     if candidate["pbr_material_count"] < 1:
@@ -154,6 +171,13 @@ def generate_lods(source_file: Path, output_dir: Path,
                     "embeddedTextureImages": value["meta"]["embedded_image_count"],
                     "pbrMaterialCount": value["meta"]["pbr_material_count"],
                     "topology": value["meta"]["topology"],
+                    "uvSurface": value["meta"].get("uvSurface"),
+                    "surfaceAreaChangePercentVsOriginal": (
+                        100 * (value["meta"]["uvSurface"]["surface_area_sum"] /
+                               source_meta["uvSurface"]["surface_area_sum"] - 1)
+                        if source_meta.get("uvSurface") and
+                           value["meta"].get("uvSurface") else None
+                    ),
                 }
                 for name, value in assets.items()
             },
@@ -166,6 +190,7 @@ def generate_lods(source_file: Path, output_dir: Path,
                 "androidFPS": "not-tested",
                 "nonManifoldEdges": "zero-required-and-verified",
                 "visualSeamArtifacts": "not-tested",
+                "surfaceAreaDriftRequiresHumanJudgment": True,
                 "visualError": "not-tested",
                 "sourceRights": "must-be-attested-by-owner",
             },
