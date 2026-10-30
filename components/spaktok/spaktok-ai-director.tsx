@@ -595,7 +595,13 @@ export default function SpaktokAIDirector({
        <p>
         {SPAKTOK_FIRST_GPU_LODS[cloudLod].triangles.toLocaleString('en-US')} مثلث
         {' · '}{(SPAKTOK_FIRST_GPU_LODS[cloudLod].bytes/1_000_000).toFixed(2)} MB
-        {' · '}حواف غير منتظمة: {SPAKTOK_FIRST_GPU_LODS[cloudLod].nonManifoldEdges.toLocaleString('en-US')}
+        {' · '}حواف غير منتظمة بفحص الفهارس: {SPAKTOK_FIRST_GPU_LODS[cloudLod].nonManifoldEdges.toLocaleString('en-US')}
+       </p>
+       <p className="mt-1 text-amber-200">
+        حواف بأكثر من وجهين بعد دمج مواقع الرؤوس (سماحية 10⁻⁶ من قطر المجسم):
+        {' '}{SPAKTOK_FIRST_GPU_LODS[cloudLod].positionWeldedNonManifoldEdges===null?
+         'لم تُفحص':SPAKTOK_FIRST_GPU_LODS[cloudLod].positionWeldedNonManifoldEdges.toLocaleString('en-US')}
+        {' '}— إشارة إلى تداخلات أو فواصل خامات، وليست بالضرورة ثقوبًا أو عيوبًا مرئية.
        </p>
        <p className="mt-1 text-cyan-200">
         اختلاف مواقع الرؤوس عن الأصل:
@@ -787,13 +793,16 @@ export default function SpaktokAIDirector({
     </p>}
     <PrivateStudioGlbPreview file={asset}
      topologyWarning={manifest?.outputs.some(o=>o.state==='needs-optimization'&&
-      o.blockers.includes('non_manifold_lod_requires_professional_retopology_and_visual_qa'))===true}/>
+      (o.blockers.includes('non_manifold_lod_requires_professional_retopology_and_visual_qa')||
+       o.blockers.includes('position_welded_edges_require_visual_surface_review')))===true}/>
     {manifest&&SPAKTOK_FIRST_GPU_LOD_IDS.map(id=>{
      const candidate=SPAKTOK_FIRST_GPU_LODS[id]
      return manifest.source.sha256===candidate.sha256&&
       <p key={id} className="rounded-lg border border-amber-300/30 p-2 text-xs text-amber-100">
        {id.toUpperCase()} · {candidate.triangles.toLocaleString()} مثلث
-       {' · '}حواف Non-manifold: {candidate.nonManifoldEdges.toLocaleString()}
+       {' · '}حواف حسب الفهارس: {candidate.nonManifoldEdges.toLocaleString()}
+       {' · '}حواف بعد دمج المواقع: {candidate.positionWeldedNonManifoldEdges===null?
+        'لم تُفحص':candidate.positionWeldedNonManifoldEdges.toLocaleString()}
        {' · '}مثلثات UV منهارة: {candidate.uvCollapsedTriangles}
        {' · '}فرق مجموع المساحة السطحية: {candidate.surfaceAreaChangePercent.toFixed(1)}%
        {' · '}فرق مجموع مساحات UV: {candidate.uvAreaSumChangePercent===null?
