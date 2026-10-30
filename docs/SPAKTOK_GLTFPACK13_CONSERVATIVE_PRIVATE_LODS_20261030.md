@@ -141,3 +141,66 @@ Bun dependencies, ran `bun run test:word:gate` and ran a full
 All feature flags and public GLB publication remain OFF; PR #15 stays draft.
 Authenticated Ed25519 owner-ticket canaries, visual QA and Android hardware
 tests still gate any release.
+
+## Position-welded seam audit and signed owner ticket QA (2026-10-30)
+
+Performed a **read-only scan on the actual R2 GLB bytes** using a relative
+position-welding tolerance equal to `1e-6` times the model bounding-box
+diagonal. The measured vertex-index edge-incidence count was zero for
+LOD0/LOD1c/LOD2c, but position welding revealed:
+
+| Actual private R2 GLB | Indexed nonmanifold edges | Edges incident to >2 faces after approximate POSITION welding | Welded-degenerate triangles | Welded boundary edges |
+| --- | ---: | ---: | ---: | ---: |
+| LOD0 original | 0 | 495 | 1 | 0 |
+| LOD1c conservative | 0 | 488 | 0 | 0 |
+| LOD2c conservative | 0 | 488 | 0 | 0 |
+
+**Interpretation limits:** This is only a *potential seam/overlap signal*.
+Welding approximate positions can combine independently intended surfaces
+and UV seams. It does **not** establish 495/488 physical holes, nor does it
+prove or disprove watertightness; visual comparison and actual semantic
+mesh analysis remain required.
+
+Implementation:
+- Added fully offline `services/forge-gpu/glb_position_weld_audit.py`,
+  bounded, per-primitive, refusing unsupported/sparse/nonfinite geometry.
+- `build_private_lods.py` now includes its metrics in each candidate
+  manifest and sets `positionWeldGeometryReviewRequired`, preventing any
+  automatic destination recommendation while the issue is unresolved.
+- SHA-pinned LOD registry includes real measured values; the private Studio
+  UI explicitly differentiates index-edge and POSITION-welded signals.
+- All five output destinations' fanout manifests require manual review
+  for the three verified affected model hashes; a forged ready state
+  is rejected by the validator.
+- `forge-gpu-contract.yml` runs the new Python tests on PRs.
+- **33/33 local Python tests passed** after this integration.
+
+Signed private-R2 Worker QA:
+- Added `spaktok-private-studio-asset.test.mjs` with locally generated
+  ephemeral Ed25519 keys and synthetic private R2 objects.
+- **19/19 local Node test cases passed**: exact file path/size, short-lived
+  signing claim, wrong-origin rejection, expired/forged signatures, asset
+  mix-up, invalid HTTP method, disallowed query and missing private asset.
+- `package.json` and `reality-engine-tests.yml` now execute these tests
+  as regular build/PR safety gates.
+- Full isolated `bun run build` at commit
+  `e232edae660ddc7aacacb26d04af7682a023294d` succeeded:
+  **106/106 Vitest**, **19/19 Node security tests**, a successful
+  Next.js 16 compilation and TypeScript build step, and 20 static pages.
+- The runtime test was **synthetic/in-memory**. An authenticated owner-only
+  real Cloudflare R2 fetch end-to-end remains **UNVERIFIED**. The exact
+  signed pilot Worker is not deployed under the expected name; do not
+  mistake the differently named current Worker for it.
+- One temporary signed live-worker attempt was **not created** after an
+  execution security check. No production keys were used.
+- The EU CPU test sandboxes were stopped. No paid GPU was started and
+  no GLB was publicly published. PR #15 remains draft/unmerged.
+
+## Next remaining hard gates
+
+Run a correctly configured and authorized private owner canary end-to-end
+inside the deployed app; inspect front/back/side renders with PBR and wireframe;
+identify which POSITION-weld edges are intentional seams versus true unwanted
+overlaps; check Android FPS/thermal and rigging/AR tracking; then consider
+whether the conservative meshes justify a more aggressive LOD pipeline.
+Keep public release flags OFF until those gates pass.
