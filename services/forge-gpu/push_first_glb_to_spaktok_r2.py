@@ -32,10 +32,14 @@ TARGETS = ("avatar", "live", "filter", "gift", "world")
 def upload(key: str, data: bytes, content_type: str, token: str) -> None:
     url = ("https://api.cloudflare.com/client/v4/accounts/" + ACCOUNT +
            "/r2/buckets/" + BUCKET + "/objects/" + key)
+    # Cloudflare REST R2 Upload Object endpoint advertises
+    # application/octet-stream as its binary request type.
+    # The object's intended MIME type is recorded in our private manifest.
     req = urllib.request.Request(
         url, data=data, method="PUT",
         headers={"Authorization": "Bearer " + token,
-                 "Content-Type": content_type,
+                 "Content-Type": "application/octet-stream",
+                 "Accept": "application/json",
                  "Content-Length": str(len(data))},
     )
     try:
@@ -43,8 +47,29 @@ def upload(key: str, data: bytes, content_type: str, token: str) -> None:
             result = json.loads(response.read(65536))
         if not result.get("success"):
             raise RuntimeError("cloudflare_upload_not_successful")
+        returned = result.get("result") or {}
+        if (returned.get("key") != key or
+                str(returned.get("size")) != str(len(data))):
+            raise RuntimeError("cloudflare_uploaded_metadata_mismatch_check_r2")
     except urllib.error.HTTPError as exc:
-        raise RuntimeError("cloudflare_r2_upload_http_" + str(exc.code)) from None
+        # Only log Cloudflare's numeric error codes and sanitized messages.
+        # Never echo request headers, access tokens or arbitrary HTML.
+        errors = []
+        try:
+            detail = json.loads(exc.read(8192))
+            for item in (detail.get("errors") or [])[:3]:
+                if isinstance(item, dict):
+                    code = item.get("code")
+                    message = str(item.get("message", ""))[:160]
+                    message = message.replace(token, "[REDACTED]")
+                    if isinstance(code, int):
+                        errors.append(f"{code}: {message}")
+        except (ValueError, UnicodeError, OSError, AttributeError):
+            pass
+        suffix = " / ".join(errors) if errors else "no_safe_error_detail"
+        raise RuntimeError(
+            f"cloudflare_r2_upload_http_{exc.code}; cf_errors={suffix}"
+        ) from None
 
 
 def main() -> int:
