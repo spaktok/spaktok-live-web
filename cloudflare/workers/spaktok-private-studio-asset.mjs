@@ -7,9 +7,25 @@
 // Exact public half of SPAKTOK_D1_BRIDGE_SIGNING_KEY must be bound as secret
 // SPAKTOK_STUDIO_ED25519_PUBLIC_KEY (base64 DER SPKI), never checked in.
 const DOMAIN="spaktok-studio-pilot-read-v1";
-const URI="/v1/pilot/first.glb";
-const OBJECT="studio/private/pilot-20261030/33be391ce222f90d00316b26b5ff6c3f21b30f230122d8e87f94b26992f619aa.glb";
-const EXPECTED_BYTES=5343540;
+const OBJECTS=Object.freeze({
+ first:Object.freeze({
+  key:"studio/private/pilot-20261030/33be391ce222f90d00316b26b5ff6c3f21b30f230122d8e87f94b26992f619aa.glb",
+  bytes:5343540,
+ }),
+ lod0:Object.freeze({
+  key:"studio/private/pilot-20261030/lods/lod0.glb",
+  bytes:5343540,
+ }),
+ lod1:Object.freeze({
+  key:"studio/private/pilot-20261030/lods/lod1.glb",
+  bytes:2825124,
+ }),
+ lod2:Object.freeze({
+  key:"studio/private/pilot-20261030/lods/lod2.glb",
+  bytes:1448404,
+ }),
+});
+const LOD_PATH=/^\\/v1\\/pilot\\/(first|lod0|lod1|lod2)\\.glb$/;
 const b64=s=>Uint8Array.from(atob(s),x=>x.charCodeAt(0));
 
 const deny=(status=404)=>new Response(JSON.stringify({error:status===401?"unauthorized":"not_found"}),{
@@ -25,7 +41,7 @@ function corsHeaders(origin){
   "access-control-allow-headers":"X-Spaktok-Studio-Signature, X-Spaktok-Studio-Expires, X-Spaktok-Studio-User",
   "access-control-max-age":"60","vary":"Origin"};
 }
-async function authorized(request,origin,env){
+async function authorized(request,origin,assetId,env){
  const user=request.headers.get("x-spaktok-studio-user")??"";
  const expires=request.headers.get("x-spaktok-studio-expires")??"";
  const signature=request.headers.get("x-spaktok-studio-signature")??"";
@@ -34,7 +50,7 @@ async function authorized(request,origin,env){
   return false;
  const now=Math.floor(Date.now()/1000);
  if(Number(expires)<now||Number(expires)>now+90)return false;
- const payload=[DOMAIN,"GET",user,"first",expires,origin].join("\n");
+ const payload=[DOMAIN,"GET",user,assetId,expires,origin].join("\n");
  try{
   if(typeof env.SPAKTOK_STUDIO_ED25519_PUBLIC_KEY!=="string")return false;
   const key=await crypto.subtle.importKey("spki",b64(env.SPAKTOK_STUDIO_ED25519_PUBLIC_KEY),{name:"Ed25519"},false,["verify"]);
@@ -46,21 +62,23 @@ async function authorized(request,origin,env){
 export default {
  async fetch(req,env){
   const url=new URL(req.url);
-  if(url.pathname!==URI||url.search||url.hash)return deny();
+  const assetId=LOD_PATH.exec(url.pathname)?.[1];
+  if(!assetId||url.search||url.hash)return deny();
   const origin=req.headers.get("origin")??"";
   if(!allowedOrigin(origin,env))return deny(403);
   if(req.method==="OPTIONS")
    return new Response(null,{status:204,headers:corsHeaders(origin)});
-  if(req.method!=="GET"||!await authorized(req,origin,env))return deny(401);
+  if(req.method!=="GET"||!await authorized(req,origin,assetId,env))return deny(401);
   if(!env.STUDIO_ASSETS)return deny(503);
   try{
-   const glb=await env.STUDIO_ASSETS.get(OBJECT);
-   if(!glb||glb.size!==EXPECTED_BYTES)return deny(503);
+   const asset=OBJECTS[assetId];
+   const glb=await env.STUDIO_ASSETS.get(asset.key);
+   if(!glb||glb.size!==asset.bytes)return deny(503);
    return new Response(glb.body,{status:200,headers:{
     ...corsHeaders(origin),
     "content-type":"model/gltf-binary",
-    "content-length":String(EXPECTED_BYTES),
-    "content-disposition":'attachment; filename="spaktok-first.glb"',
+    "content-length":String(asset.bytes),
+    "content-disposition":'attachment; filename="spaktok-first-'+assetId+'.glb"',
     "cache-control":"private,no-store",
     "x-content-type-options":"nosniff",
     "cross-origin-resource-policy":"cross-origin",
