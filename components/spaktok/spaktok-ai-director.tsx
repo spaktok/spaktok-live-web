@@ -745,6 +745,15 @@ export default function SpaktokAIDirector({
     <PrivateStudioGlbPreview file={asset}
      topologyWarning={manifest?.outputs.some(o=>o.state==='needs-optimization'&&
       o.blockers.includes('non_manifold_lod_requires_professional_retopology_and_visual_qa'))===true}/>
+    {manifest&&SPAKTOK_FIRST_GPU_LOD_IDS.map(id=>{
+     const candidate=SPAKTOK_FIRST_GPU_LODS[id]
+     return manifest.source.sha256===candidate.sha256&&
+      <p key={id} className="rounded-lg border border-amber-300/30 p-2 text-xs text-amber-100">
+       {id.toUpperCase()} · {candidate.triangles.toLocaleString()} مثلث
+       {' · '}حواف Non-manifold: {candidate.nonManifoldEdges.toLocaleString()}
+       {' · '}المجسم خاص وغير معتمد للنشر
+      </p>
+    })}
     <div className="flex flex-wrap gap-2">
      <button type="button" onClick={download}
       className="rounded-lg border border-white/25 px-3 py-2 text-xs">
