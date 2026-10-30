@@ -25,7 +25,7 @@ const OBJECTS=Object.freeze({
   bytes:1448404,
  }),
 });
-const LOD_PATH=/^\\/v1\\/pilot\\/(first|lod0|lod1|lod2)\\.glb$/;
+const LOD_PATH=/^\/v1\/pilot\/(first|lod0|lod1|lod2)\.glb$/;
 const b64=s=>Uint8Array.from(atob(s),x=>x.charCodeAt(0));
 
 const deny=(status=404)=>new Response(JSON.stringify({error:status===401?"unauthorized":"not_found"}),{
