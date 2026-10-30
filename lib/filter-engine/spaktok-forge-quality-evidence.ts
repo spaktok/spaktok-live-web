@@ -1,5 +1,6 @@
 import type {StudioFanoutManifest} from './spaktok-studio-fanout'
 import type {StudioTopologyReport} from './spaktok-glb-topology-audit'
+import {SPAKTOK_FIRST_GPU_LOD_IDS,SPAKTOK_FIRST_GPU_LODS} from './spaktok-first-gpu-lods'
 
 /** Objective, user-downloadable evidence. Does NOT score likeness or claim
  * to beat a competitor without a matched-image blind comparison.
@@ -8,11 +9,25 @@ export function buildSpaktokQualityEvidence(
  manifest:StudioFanoutManifest,topology?:StudioTopologyReport|null,
 ){
  const s=manifest.source
+ const pilotLod=SPAKTOK_FIRST_GPU_LOD_IDS
+  .map(id=>SPAKTOK_FIRST_GPU_LODS[id])
+  .find(asset=>asset.sha256===s.sha256&&asset.bytes===s.bytes)
  return {
   schema:'spaktok-3d-quality-evidence-v1' as const,
   generatedAt:new Date().toISOString(),
   asset:{fileName:s.fileName,sha256:s.sha256,bytes:s.bytes},
   generationProfile:manifest.project.gpuProfile??null,
+  verifiedPilotUvAudit:pilotLod?{
+   source:'owner-private-R2-sha256-matched' as const,
+   lodId:pilotLod.id,
+   uvCollapsedTriangles:pilotLod.uvCollapsedTriangles,
+   triangleSurfaceAreaChangePercent:pilotLod.surfaceAreaChangePercent,
+   triangleUvAreaSumChangePercent:pilotLod.uvAreaSumChangePercent,
+   comparedTo:'lod0' as const,
+   visualInspectionCompleted:false as const,
+   approvedForLive:false as const,
+   caveat:'Area sums and UV triangle collapse are structural signals, not visual texture fidelity.',
+  }:null,
   topology:{
    scanStatus:topology?.status??'not-checked',
    reason:topology?.reason??null,
