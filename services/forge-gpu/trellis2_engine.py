@@ -30,9 +30,14 @@ def load_model_once(torch_module) -> None:
     """Load the pinned model *once at server startup*, not on each request."""
     global _pipeline
     check_trellis_capacity(torch_module)
-    from trellis2.pipelines import Trellis2ImageTo3DPipeline
-    _stage("loading_trellis2_weights_and_dinov3", "startup")
-    pipeline = Trellis2ImageTo3DPipeline.from_pretrained(MODEL_ID)
+    from trellis2.pipelines import Trellis2ImageTo3DPipeline, rembg
+    from trellis2_open_rembg import use_open_background_model, OPEN_REMBG_MODEL
+    _stage("loading_trellis2_weights_and_dinov3", "startup",
+           background_model=OPEN_REMBG_MODEL)
+    # Upstream pipeline.json explicitly selects briaai/RMBG-2.0.
+    # Replace only the segmentation model; avoid gated BRIA requests.
+    with use_open_background_model(rembg):
+        pipeline = Trellis2ImageTo3DPipeline.from_pretrained(MODEL_ID)
     pipeline.cuda()
     _pipeline = pipeline
     _stage("model_ready", "startup")
