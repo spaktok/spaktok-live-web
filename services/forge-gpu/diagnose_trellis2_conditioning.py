@@ -25,7 +25,7 @@ def event(stage: str, **metadata) -> None:
 def safe_error(stage: str, exc: Exception) -> None:
     frames = traceback.extract_tb(exc.__traceback__)
     point = frames[-1] if frames else None
-    event("diagnostic_failed", stage=stage,
+    event("diagnostic_failed", failed_stage=stage,
           error_type=type(exc).__name__,
           source=Path(point.filename).name if point else None,
           function=point.name if point else None,
