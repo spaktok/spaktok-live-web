@@ -12,6 +12,12 @@ const INSECURE_PREVIEW_LOD_SHA256=new Set<string>([
  SPAKTOK_FIRST_GPU_LODS.lod1.sha256,
  SPAKTOK_FIRST_GPU_LODS.lod2.sha256,
 ])
+// Professionally simplified but did NOT reach their 50% / 20% targets.
+// Do not allow a SHA-pinned import to silently bypass this quality gate.
+const INCOMPLETE_LOD_BUDGET_SHA256=new Set<string>([
+ SPAKTOK_FIRST_GPU_LODS.lod1c.sha256,
+ SPAKTOK_FIRST_GPU_LODS.lod2c.sha256,
+])
 
 /** A small, safe, versioned build manifest. Contains NO image or GLB bytes,
  * access tokens, signed URLs or authorization to publish. The real asset
@@ -107,6 +113,7 @@ export function createStudioFanoutManifest(input:Readonly<{
     input.sourceEngine!=='ai-360-gpu')))
   throw Error('studio_fanout_project_invalid')
  const knownInvalidTopology=INSECURE_PREVIEW_LOD_SHA256.has(input.sha256)
+ const incompleteLodBudget=INCOMPLETE_LOD_BUDGET_SHA256.has(input.sha256)
  const topologyBlocked=Boolean(input.previewTopologyBlocked||knownInvalidTopology)
  const topologyUnknown=input.topologyScanUnverified===true
  const mobileBlocked=input.bytes>15*1024*1024||
@@ -127,6 +134,8 @@ export function createStudioFanoutManifest(input:Readonly<{
    blockers.push('non_manifold_lod_requires_professional_retopology_and_visual_qa')
   if(topologyUnknown)
    blockers.push('glb_topology_scan_unverified_requires_professional_review')
+  if(incompleteLodBudget)
+   blockers.push('conservative_lod_triangle_budget_unmet_requires_qa')
   const avatar=target==='avatar'||target==='live'
   if(input.sourceEngine==='browser-2.5d')
    blockers.push('local_relief_is_not_a_full_360_reconstruction')
@@ -140,8 +149,8 @@ export function createStudioFanoutManifest(input:Readonly<{
   blockers.push('human_rights_and_publication_review_required')
   return {
    target,destination:DESTINATIONS[target],
-   state:mobileBlocked||topologyBlocked||topologyUnknown?
-    'needs-optimization':'private-preview',
+   state:mobileBlocked||topologyBlocked||topologyUnknown||
+    incompleteLodBudget?'needs-optimization':'private-preview',
    visualScale:'auto-fit-preview',
    anchor:avatar?'head':target==='filter'?'nose_bridge':
     target==='world'?'ground':'object-center',
@@ -217,6 +226,7 @@ export function assertStudioFanoutManifest(value:unknown):
   new Set(v.project.outputTargets).size!==v.outputs.length)
   throw Error('studio_fanout_manifest_invalid')
  const knownTopologyDefect=INSECURE_PREVIEW_LOD_SHA256.has(v.source.sha256)
+ const knownIncompleteBudget=INCOMPLETE_LOD_BUDGET_SHA256.has(v.source.sha256)
  for(let i=0;i<v.outputs.length;i++){
   // Array.isArray narrows a readonly tuple/array to any[] in TS.
   // Reassert the already validated schema before indexed access.
@@ -230,6 +240,10 @@ export function assertStudioFanoutManifest(value:unknown):
    (knownTopologyDefect&&(
     out.state!=='needs-optimization'||
     !out.blockers.includes('non_manifold_lod_requires_professional_retopology_and_visual_qa')
+   ))||
+   (knownIncompleteBudget&&(
+    out.state!=='needs-optimization'||
+    !out.blockers.includes('conservative_lod_triangle_budget_unmet_requires_qa')
    )))
    throw Error('studio_fanout_output_invalid')
  }
