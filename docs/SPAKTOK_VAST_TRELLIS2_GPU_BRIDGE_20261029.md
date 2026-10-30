@@ -161,3 +161,56 @@ coordinator, GPU-side job state, private R2 storage, idempotent control
 plane, structured error reports, cancel-safe semantics, vendor-side
 spend guards and native Android GLB asset manifest. Only then allow a
 higher job quota or automatic scaling.
+
+## AI Director integration implemented on this draft PR
+
+The actual client pipeline now exists (not a future proposal):
+
+1. `components/spaktok/spaktok-ai-director.tsx` compiles Arabic/English intent into the existing private five-target director plan.
+2. `lib/filter-engine/spaktok-forge-gpu-plan.ts` maps that plan into a **finite** GPU profile, not shell code. For avatar/live/filter use `mobile-preview`; otherwise `detail-preview`. Both always use image-conditioned TRELLIS.2 `pipeline_type="512"` on the initial A100 40GB test.
+3. `lib/filter-engine/spaktok-forge-direct-client.ts` computes SHA256 of the actual image and gets a short-lived D1-budgeted ticket from the same-origin `/api/spaktok-forge/gpu-ticket` route.
+4. The ticket includes the signed profile, 8 MiB image size bound, MIME, origin and one-use nonce. The return JSON includes the same provider identity and hostname independently pinned by the server.
+5. Browser POSTs the image directly to Vast TLS hostname; the GPU validates claims, computes one GLB (35 MiB hard upper bound), and returns it to the client.
+6. Client validates GLB, AI Director runs target-specific QA, produces the `SpaktokStudioFanout` manifest, and exposes **private** handoff to avatar / live-preview / filters / gifts / world. It requires an explicit local save (up to 15 MiB) to share between studio pages.
+7. No remote R2 persistence or cross-device/native asset distribution is claimed yet; both require authenticated private R2 upload/download endpoints and owner-scoped manifest lifecycle.
+8. Not a text-to-3D model: creative Arabic text controls **destination and safe profile**, not topology or detailed visual design. Do not promise image edits or auto-rigging from arbitrary natural-language instructions.
+
+### Current rented Vast.ai instance correction
+
+The latest provided terminal output identifies **A100-SXM4-40GB** (40 GiB).
+Earlier offer cards listing 80GB do not override what CUDA reports on the running
+instance. The container has about 113GB filesystem space with toolkit 12.8;
+the user reports PyTorch 2.6.0+cu124 in `trellis2-env`. Build compatibility
+with toolkit 12.8 is still unverified. Both finite GPU profiles are held to
+512³ generation until real end-to-end quality and memory tests pass.
+
+### Minimal operator commands (only after upstream installation succeeds)
+
+```bash
+conda activate trellis2-env
+cd /workspace/TRELLIS.2
+python -c "import torch,o_voxel; from trellis2.pipelines import Trellis2ImageTo3DPipeline; print('imports ok')"
+# Use the exact existing Vast instance, no new rental:
+cd /workspace
+git clone --branch feat/forge-vast-trellis2-adapter-20261029 --single-branch \
+  https://github.com/spaktok/spaktok-live-web.git
+conda activate trellis2-env
+python -m pip install 'fastapi>=0.115,<1' 'uvicorn[standard]>=0.30,<1' 'python-multipart>=0.0.9,<1'
+```
+
+Review/set the operator secrets only in Vast's private environment, not chat.
+`TRELLIS2_REPO_DIR=/workspace/TRELLIS.2` and
+`SPAKTOK_FORGE_OPERATOR_APPROVED=yes` are required. Start from the repo root
+with `bash services/forge-gpu/start-vast-trellis2.sh`. Keep it localhost-only
+until a stable **named Cloudflare Tunnel** securely maps an owner domain.
+Do not reuse a transient `*.trycloudflare.com` development URL as the
+production GPU endpoint. The server's `/health` should respond
+`{"ready":true,"engine":"trellis2",...}` only after the model is in memory.
+
+### Test/CI disclaimer
+
+The GitHub Actions checks currently report failure before any runner steps are
+recorded. Those results are **not evidence of passing or failing code tests**.
+Do not merge or enable feature flags until the CI environment issue is
+investigated, Python and TypeScript tests pass, then real GPU inference is
+verified, and the privacy and billing controls are reviewed.
