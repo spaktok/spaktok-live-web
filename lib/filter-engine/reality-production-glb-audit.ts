@@ -123,7 +123,10 @@ export function auditStudioGlbBytes(buffer:ArrayBuffer):StudioGlbAudit{
   images.every(i=>uriSafe(i.uri)&&(i.uri!==undefined||i.bufferView!==undefined))
  if(!selfContained)warnings.push('external_buffers_or_images')
  const requiredExtensions=data.extensionsRequired??[]
- const supported=['KHR_materials_unlit','KHR_materials_clearcoat',
+ // TRELLIS.2 exports embedded WebP textures with EXT_texture_webp.
+// Three.js GLTFLoader supports that required extension; reject only genuinely
+// unsupported extensions instead of rejecting our own valid GPU export.
+ const supported=['EXT_texture_webp','KHR_materials_unlit','KHR_materials_clearcoat',
   'KHR_materials_transmission','KHR_materials_sheen',
   'KHR_materials_specular','KHR_materials_ior','KHR_materials_emissive_strength',
   'KHR_texture_transform','KHR_mesh_quantization']
