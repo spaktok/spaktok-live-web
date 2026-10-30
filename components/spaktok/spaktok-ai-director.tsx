@@ -15,6 +15,7 @@ import {generateForgeGpuDirect,type ForgeGpuProfile} from '@/lib/filter-engine/s
 import {planForgeGpuGeneration} from '@/lib/filter-engine/spaktok-forge-gpu-plan'
 import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-local-relief'
 import {buildSpaktokQualityEvidence} from '@/lib/filter-engine/spaktok-forge-quality-evidence'
+import {inspectStudioGlbTopology,type StudioTopologyReport} from '@/lib/filter-engine/spaktok-glb-topology-audit'
 import {
  createStudioFanoutManifest,type StudioFanoutManifest,
 } from '@/lib/filter-engine/spaktok-studio-fanout'
@@ -112,6 +113,7 @@ export default function SpaktokAIDirector({
  const [busy,setBusy]=useState(false)
  const [asset,setAsset]=useState<File|null>(null)
  const [qa,setQA]=useState<DirectorAssetQA|null>(null)
+ const [topology,setTopology]=useState<StudioTopologyReport|null>(null)
  const [manifest,setManifest]=useState<StudioFanoutManifest|null>(null)
  const [status,setStatus]=useState('')
  const [show,setShow]=useState(true)
@@ -230,6 +232,10 @@ export default function SpaktokAIDirector({
   const checked=evaluateDirectorAsset(inspection.audit,bytes.byteLength,
    special?.targets??plan.targets)
   if(!checked.valid)throw Error('director_failed_glb_qa')
+  const topologyAudit=inspectStudioGlbTopology(bytes)
+  const mustRepairTopology=topologyAudit.status==='checked'&&(
+   topologyAudit.nonManifoldEdges>0||
+   topologyAudit.degenerateIndexTriangles>0)
   const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))
   const hash=Array.from(digest).map(b=>b.toString(16).padStart(2,'0')).join('')
   const draft=createStudioFanoutManifest({
@@ -237,7 +243,7 @@ export default function SpaktokAIDirector({
    audit:inspection.audit,description:special?.description??description,
    rights,targets:special?.targets??plan.targets,
    gpuJobsUsed,sourceEngine,gpuProfile,
-   previewTopologyBlocked:special?.previewTopologyBlocked===true,
+   previewTopologyBlocked:special?.previewTopologyBlocked===true||mustRepairTopology,
   })
   // GPU has already been billed once the GLB exists. A full browser
   // IndexedDB quota must NOT discard an otherwise valid successful result.
@@ -248,7 +254,7 @@ export default function SpaktokAIDirector({
   }catch{
    // Retain GLB in memory and expose "Download GLB" as an emergency path.
   }
-  setAsset(file);setQA(checked);setManifest(draft)
+  setAsset(file);setQA(checked);setManifest(draft);setTopology(topologyAudit)
   if(sourceEngine!=='existing-glb')onGeneratedGlb?.(file)
   setStatus((special?.fromCloud?
    'تم تنزيل مجسم Vast.ai من Cloudflare R2 الخاص، والتحقق من بصمته وحفظ نسخة معاينة محلية. '+
@@ -424,9 +430,10 @@ export default function SpaktokAIDirector({
    if(hash!==saved.source.sha256)
     throw Error('بصمة الملف لا تطابق المسودة')
    const inspection=inspectWordGeneratedGlb(bytes,file.name)
+   const topologyAudit=inspectStudioGlbTopology(bytes)
    const checked=evaluateDirectorAsset(
     inspection.audit,bytes.byteLength,saved.project.outputTargets)
-   setOwnFile(file);setAsset(file);setQA(checked);setManifest(saved)
+   setOwnFile(file);setAsset(file);setQA(checked);setManifest(saved);setTopology(topologyAudit)
    setDescription(saved.project.description)
    setManualTargets([...saved.project.outputTargets])
    setRightsApproved(false);setGpuConsent(false);setTransferConsent(false)
@@ -438,6 +445,8 @@ export default function SpaktokAIDirector({
  }
  const send=(target:DirectorTarget)=>async()=>{
   if(!asset||!manifest||!qa?.previewReady||busy||
+   (topology?.status==='checked'&&(
+    topology.nonManifoldEdges>0||topology.degenerateIndexTriangles>0))||
    !manifest.project.outputTargets.includes(target)||
    manifest.outputs.find(out=>out.target===target)?.state!=='private-preview')return
   setBusy(true)
@@ -742,6 +751,11 @@ export default function SpaktokAIDirector({
      {' · '}Morph Targets: {qa.morphs}
      {' · '}صور الخامات: {qa.textureImages}
     </p>
+    {topology&&<p className="rounded-lg border border-white/15 p-2 text-xs text-slate-200">
+     فحص الشبكة: {topology.status==='checked'?
+      `${topology.triangles.toLocaleString()} مثلث · ${topology.nonManifoldEdges.toLocaleString()} حافة غير منتظمة · ${topology.degenerateIndexTriangles.toLocaleString()} مثلث منهار · ${topology.boundaryEdges.toLocaleString()} حافة مفتوحة`:
+      'لم يُفحص كامل الملف هندسيًا: '+topology.reason}
+    </p>}
     <PrivateStudioGlbPreview file={asset}
      topologyWarning={manifest?.outputs.some(o=>o.state==='needs-optimization'&&
       o.blockers.includes('non_manifold_lod_requires_professional_retopology_and_visual_qa'))===true}/>
@@ -776,6 +790,8 @@ export default function SpaktokAIDirector({
      </button>
      {manifest?.project.outputTargets.map(target=><button key={target} type="button"
       disabled={!qa.previewReady||busy||!manifest||
+       (topology?.status==='checked'&&(
+        topology.nonManifoldEdges>0||topology.degenerateIndexTriangles>0))||
        manifest.outputs.find(o=>o.target===target)?.state!=='private-preview'}
       onClick={()=>void send(target)()}
       className="rounded-lg bg-indigo-600 px-3 py-2 text-xs disabled:opacity-40">
