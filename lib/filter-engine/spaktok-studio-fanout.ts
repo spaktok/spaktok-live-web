@@ -1,4 +1,5 @@
 import type {StudioGlbAudit} from './reality-production-glb-audit'
+import type {ForgeGpuProfile} from './spaktok-forge-gpu-plan'
 import {
  DIRECTOR_TARGETS,type DirectorTarget,
 } from './spaktok-ai-director'
@@ -40,6 +41,7 @@ export type StudioFanoutManifest=Readonly<{
   rightsAttested:boolean
   outputTargets:readonly DirectorTarget[]
   gpuJobsUsed:0|1
+  gpuProfile?:ForgeGpuProfile
   sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d'
  }>
  calibration:Readonly<{
@@ -75,6 +77,7 @@ export function createStudioFanoutManifest(input:Readonly<{
  description:string;rights:'original'|'licensed'
  targets:readonly DirectorTarget[]
  gpuJobsUsed?:0|1;createdAt?:string
+ gpuProfile?:ForgeGpuProfile
  sourceEngine?:'existing-glb'|'ai-360-gpu'|'browser-2.5d'
 }>):StudioFanoutManifest{
  if(!safeFile(input.fileName)||!validHash(input.sha256)||
@@ -89,7 +92,10 @@ export function createStudioFanoutManifest(input:Readonly<{
   !targets.every(target=>DIRECTOR_TARGETS.includes(target)))
   throw Error('studio_fanout_targets_invalid')
  if(input.description.length>1000||
-  !['original','licensed'].includes(input.rights))
+  !['original','licensed'].includes(input.rights)||
+  (input.gpuProfile!==undefined&&
+   (!['mobile-preview','detail-preview','studio-hd'].includes(input.gpuProfile)||
+    input.sourceEngine!=='ai-360-gpu')))
   throw Error('studio_fanout_project_invalid')
  const mobileBlocked=input.bytes>15*1024*1024||
   input.audit.triangles>150000||input.audit.textures>12||
@@ -144,6 +150,7 @@ export function createStudioFanoutManifest(input:Readonly<{
    description:input.description.trim(),
    rights:input.rights,rightsAttested:true,
    outputTargets:targets,gpuJobsUsed:input.gpuJobsUsed??0,
+   gpuProfile:input.gpuProfile,
    sourceEngine:input.sourceEngine??'existing-glb',
   },
   calibration:{
@@ -181,6 +188,9 @@ export function assertStudioFanoutManifest(value:unknown):
   v.project.description.length>1000||
   !['existing-glb','ai-360-gpu','browser-2.5d'].includes(
    v.project.sourceEngine)||
+  (v.project.gpuProfile!==undefined&&
+   (!['mobile-preview','detail-preview','studio-hd'].includes(v.project.gpuProfile)||
+    v.project.sourceEngine!=='ai-360-gpu'))||
   !Array.isArray(v.project.outputTargets)||
   !Array.isArray(v.outputs)||v.outputs.length<1||
   v.outputs.length>DIRECTOR_TARGETS.length||
