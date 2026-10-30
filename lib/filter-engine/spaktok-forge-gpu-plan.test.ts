@@ -25,6 +25,15 @@ describe('AI Director finite GPU command compiler',()=>{
   })
   expect(JSON.stringify(x)).not.toContain('rm -rf')
  })
+ it('selects studio-hd ONLY when explicitly requested; never auto-spends HD',()=>{
+  const params={description:'high detail world',targets:['gift','world'] as const}
+  expect(planForgeGpuGeneration(params).profile).toBe('detail-preview')
+  expect(planForgeGpuGeneration({...params,preferredProfile:'studio-hd'}).profile)
+   .toBe('studio-hd')
+  expect(()=>planForgeGpuGeneration({
+   ...params,preferredProfile:'overpriced' as 'studio-hd',
+  })).toThrow('forge_gpu_plan_invalid_profile')
+ })
  it('rejects no targets or unknown destinations',()=>{
   expect(()=>planForgeGpuGeneration({description:'a',targets:[]})).toThrow()
   expect(()=>planForgeGpuGeneration({
