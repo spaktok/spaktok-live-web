@@ -105,6 +105,23 @@ describe('Studio fan-out manifest GPU-free production contract',()=>{
    expect(()=>assertStudioFanoutManifest(forged)).toThrow('studio_fanout_output_invalid')
   }
  })
+ it('pins R2-measured welded-position overlap risk to all five departments',()=>{
+  for(const lod of [SPAKTOK_FIRST_GPU_LODS.lod0,SPAKTOK_FIRST_GPU_LODS.lod1c,
+                     SPAKTOK_FIRST_GPU_LODS.lod2c]){
+   const report=make({
+    fileName:lod.fileName,sha256:lod.sha256,bytes:lod.bytes,
+    audit:{...audit,triangles:lod.triangles,textures:2},
+   })
+   const blocker='position_welded_edges_require_visual_surface_review'
+   expect(report.outputs.every(o=>o.state==='needs-optimization')).toBe(true)
+   expect(report.outputs.every(o=>o.blockers.includes(blocker))).toBe(true)
+   const forged={...report,outputs:report.outputs.map(o=>({
+    ...o,state:'private-preview' as const,
+    blockers:o.blockers.filter(b=>b!==blocker),
+   }))}
+   expect(()=>assertStudioFanoutManifest(forged)).toThrow('studio_fanout_output_invalid')
+  }
+ })
  it('blocks unsupported topology scanning for all private Studio handoffs',()=>{
   const report=make({
    sha256:'f'.repeat(64),sourceEngine:'existing-glb',
