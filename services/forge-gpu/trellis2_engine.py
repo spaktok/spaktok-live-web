@@ -73,10 +73,17 @@ def make_glb(photo: bytes, profile: str = "mobile-preview",
     # Use official default resolution for this first experimental bridge.
     # Higher resolutions require measured VRAM, runtime and size gates.
     with torch.inference_mode():
-        # The upstream default is 1024_cascade. Force 512 on the rented
-        # A100 40 GiB trial until measured 512 mode passes.
+        # The upstream default is 1024_cascade; start this A100 80GB
+        # validation at 512 before attempting higher resolutions.
+        _stage("background_segmentation_started", job_id)
+        # Identical official preprocessing, but split from generation so
+        # operator can locate 503 causes before resubmitting expensive jobs.
+        prepared = _pipeline.preprocess_image(image)
+        _stage("background_segmentation_completed", job_id)
         _stage("dinov3_conditioning_and_generation_started", job_id)
-        mesh = _pipeline.run(image, pipeline_type="512")[0]
+        mesh = _pipeline.run(
+            prepared, pipeline_type="512", preprocess_image=False
+        )[0]
         _stage("geometry_and_pbr_generated", job_id)
         mesh.simplify(16777216)
         _stage("glb_texture_baking_started", job_id)
