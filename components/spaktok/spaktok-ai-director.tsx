@@ -5,7 +5,7 @@ import {
  planSpaktokDirector,type DirectorTarget,type DirectorAssetQA,
 } from '@/lib/filter-engine/spaktok-ai-director'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
-import {isFirstGpuAsset} from '@/lib/filter-engine/spaktok-first-gpu-asset'
+import {isFirstGpuAsset,SPAKTOK_FIRST_GPU_ASSET} from '@/lib/filter-engine/spaktok-first-gpu-asset'
 import {generateForgeGpuDirect} from '@/lib/filter-engine/spaktok-forge-direct-client'
 import {planForgeGpuGeneration} from '@/lib/filter-engine/spaktok-forge-gpu-plan'
 import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-local-relief'
@@ -179,7 +179,7 @@ export default function SpaktokAIDirector({
  }
  const commitGlb=async(file:File,gpuJobsUsed:0|1,
   sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d',
-  special?:{targets:DirectorTarget[];description:string;save:boolean})=>{
+  special?:{targets:DirectorTarget[];description:string;save:boolean;fromCloud?:boolean})=>{
   const bytes=await file.arrayBuffer()
   const inspection=inspectWordGeneratedGlb(bytes,file.name)
   const checked=evaluateDirectorAsset(inspection.audit,bytes.byteLength,
@@ -196,9 +196,12 @@ export default function SpaktokAIDirector({
   if(special?.save)await saveStudioFanoutBundle(file,draft)
   setAsset(file);setQA(checked);setManifest(draft)
   if(sourceEngine!=='existing-glb')onGeneratedGlb?.(file)
-  setStatus((special?.save?
+  setStatus((special?.fromCloud?
+   'تم تنزيل مجسم Vast.ai من Cloudflare R2 الخاص، والتحقق من بصمته وحفظ نسخة معاينة محلية. '+
+   'أُنشئت مسودات للأقسام الخمسة؛ لم يُنشر المجسم للجمهور. ':
+   special?.save?
    'تم التحقق من بصمة المجسم المولّد على Vast.ai وحفظه كمسودة خاصة في هذا المتصفح. '+
-   'تم تجهيز مخطط جميع الأقسام الخمسة؛ لم يُرفع إلى Cloudflare R2 ولم يُنشر للجمهور. ':
+   'تم تجهيز مخطط جميع الأقسام الخمسة؛ لا يوجد رفع جديد إلى Cloudflare R2 ولا نشر للجمهور. ':
    sourceEngine==='browser-2.5d'?
    'نجح إنشاء GLB بارز 2.5D محليًا مجانًا دون رفع الصورة. '+
    'هذا ليس نموذج وجه/جسم 360° ولا تصلح حركاته تلقائيًا. ':
@@ -262,6 +265,73 @@ export default function SpaktokAIDirector({
    setStatus('تعذّر استيراد مجسم GPU الأول: '+
     (error instanceof Error?error.message:String(error))+
     '. تأكد أنك اخترت ملف GLB الأصلي الذي أنشأناه على Vast.ai.')
+  }finally{setBusy(false)}
+ }
+ const importFirstGpuFromCloud=async()=>{
+  if(busy||!rightsApproved)return
+  setBusy(true)
+  try{
+   const permission=await fetch('/api/spaktok-studio/pilot-ticket',{
+    method:'POST',credentials:'same-origin',cache:'no-store',
+    headers:{'content-type':'application/json'},body:'{}',
+   })
+   if(!permission.ok)throw Error('cloud_pilot_ticket_'+permission.status)
+   const ticket:unknown=await permission.json()
+   if(!ticket||typeof ticket!=='object')throw Error('cloud_pilot_invalid_ticket')
+   const t=ticket as Record<string,unknown>
+   const expectedUrl='https://spaktok-private-studio-asset.spaktok.workers.dev/v1/pilot/first.glb'
+   if(t.url!==expectedUrl||t.bytes!==SPAKTOK_FIRST_GPU_ASSET.bytes||
+      t.sha256!==SPAKTOK_FIRST_GPU_ASSET.sha256||
+      !t.headers||typeof t.headers!=='object')
+    throw Error('cloud_pilot_wrong_server_or_hash')
+   const headers=t.headers as Record<string,unknown>
+   const signature=headers['X-Spaktok-Studio-Signature']
+   const expiry=headers['X-Spaktok-Studio-Expires']
+   const owner=headers['X-Spaktok-Studio-User']
+   if(typeof signature!=='string'||!/^[a-z0-9_-]{86}$/i.test(signature)||
+      typeof expiry!=='string'||!/^\d{10}$/.test(expiry)||
+      Number(expiry)*1000<=Date.now()||
+      typeof owner!=='string'||!/^[a-f0-9-]{36}$/i.test(owner))
+    throw Error('cloud_pilot_invalid_signature_grant')
+   const response=await fetch(expectedUrl,{
+    method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
+    redirect:'error',signal:AbortSignal.timeout(45000),
+    headers:{
+     'X-Spaktok-Studio-Signature':signature,
+     'X-Spaktok-Studio-Expires':expiry,
+     'X-Spaktok-Studio-User':owner,
+    },
+   })
+   if(!response.ok)throw Error('cloud_pilot_asset_'+response.status)
+   if(response.headers.get('content-type')?.split(';')[0]!=='model/gltf-binary')
+    throw Error('cloud_pilot_wrong_media_type')
+   const declared=Number(response.headers.get('content-length'))
+   if(declared!==SPAKTOK_FIRST_GPU_ASSET.bytes)
+    throw Error('cloud_pilot_wrong_length')
+   const blob=await response.blob()
+   if(blob.size!==SPAKTOK_FIRST_GPU_ASSET.bytes)
+    throw Error('cloud_pilot_wrong_size')
+   const file=new File([blob],SPAKTOK_FIRST_GPU_ASSET.fileName,{
+    type:'model/gltf-binary',
+   })
+   const buf=await file.arrayBuffer()
+   const digest=Array.from(new Uint8Array(
+    await crypto.subtle.digest('SHA-256',buf)
+   )).map(b=>b.toString(16).padStart(2,'0')).join('')
+   if(!isFirstGpuAsset(digest,buf.byteLength))
+    throw Error('cloud_pilot_digest_mismatch')
+   const destinations=[...DIRECTOR_TARGETS]
+   const desc='Spaktok AI: مسودة GPU الأولى للأفاتار واللايف والفلاتر والهدايا والعالم'
+   await commitGlb(file,0,'existing-glb',{
+    targets:destinations,description:desc,save:true,fromCloud:true,
+   })
+   setOwnFile(file)
+   setManualTargets(destinations)
+   setDescription(desc)
+  }catch(error){
+   setStatus('استيراد R2 الخاص غير مكتمل: '+
+    (error instanceof Error?error.message:String(error))+
+    '. لا تعاود تشغيل GPU؛ تأكد من نشر مسار القراءة الآمن وصلاحية حسابك.')
   }finally{setBusy(false)}
  }
  const persistDraft=async()=>{
@@ -386,6 +456,23 @@ export default function SpaktokAIDirector({
       {sourceKind==='glb'?' إعادة استخدام دون GPU':
        imageMode==='local-2.5d'?' نمط بارز 2.5D مجاني':' يتطلب GPU لتوليد 360°'}
      </p>}
+     <div className="rounded-xl border border-cyan-400/30 bg-slate-950/70 p-3 text-xs">
+      <p className="font-semibold text-cyan-200">استيراد مجسم Spaktok من Cloudflare R2 الخاص</p>
+      <p className="mt-2 leading-5 text-slate-200">
+       نزّل ملف spaktok-first.glb مباشرةً من التخزين الخاص بحساب Spaktok
+       بعد تسجيل الدخول كمشغّل مُصرّح به. لن تمر بيانات المجسم عبر وظيفة Vercel
+       ولن تُشغّل مهمة GPU جديدة. سيجري التحقق من SHA-256 وإنشاء خمس
+       مسودات معاينة غير منشورة في هذا المتصفح.
+      </p>
+      <button type="button" onClick={()=>void importFirstGpuFromCloud()}
+       disabled={busy||!rightsApproved}
+       className="mt-3 w-full rounded-lg bg-violet-700 px-3 py-3 font-bold text-white disabled:opacity-40">
+       استيراد GLB الخاص من R2 وتوزيعه على الأقسام الخمسة
+      </button>
+      <p className="mt-2 text-slate-400">
+       يعمل هذا المسار بعد نشر Worker القراءة الموقّع وتفعيل حساب المشغّل.
+      </p>
+     </div>
      {sourceKind==='glb'&&<div className="rounded-xl border border-indigo-300/30 bg-indigo-950/40 p-3 text-xs">
       <p className="font-semibold text-cyan-200">استيراد أول مجسم Spaktok GPU</p>
       <p className="mt-2 leading-5 text-slate-200">
