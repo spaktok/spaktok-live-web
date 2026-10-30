@@ -1,16 +1,17 @@
 import type {StudioGlbAudit} from './reality-production-glb-audit'
 import type {ForgeGpuProfile} from './spaktok-forge-gpu-plan'
 import {SPAKTOK_FIRST_GPU_LODS} from './spaktok-first-gpu-lods'
-const INSECURE_PREVIEW_LOD_SHA256=new Set([
- SPAKTOK_FIRST_GPU_LODS.lod1.sha256,
- SPAKTOK_FIRST_GPU_LODS.lod2.sha256,
-])
 import {
  DIRECTOR_TARGETS,type DirectorTarget,
 } from './spaktok-ai-director'
 import {
  RODIN_HEAD_CALIBRATED_SHA256,RODIN_HEAD_PREVIEW_HEIGHT_M,
 } from './rodin-owner-head'
+
+const INSECURE_PREVIEW_LOD_SHA256=new Set([
+ SPAKTOK_FIRST_GPU_LODS.lod1.sha256,
+ SPAKTOK_FIRST_GPU_LODS.lod2.sha256,
+])
 
 /** A small, safe, versioned build manifest. Contains NO image or GLB bytes,
  * access tokens, signed URLs or authorization to publish. The real asset
