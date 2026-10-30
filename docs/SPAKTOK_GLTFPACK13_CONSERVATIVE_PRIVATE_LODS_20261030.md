@@ -106,3 +106,38 @@ The existing operator-only pilot signing route and read-only R2 Worker **source*
 `spaktok-studio-fanout.ts` independently recognizes those candidate file hashes. Regardless of caller flags, all five private handoffs stay `needs-optimization` with `conservative_lod_triangle_budget_unmet_requires_qa`, and the manifest validator rejects forged ready states. Existing prototype LODs remain blocked as non-manifold. Unit tests reproduce both failure categories.
 
 **This is not an active released feature.** The owner-pilot Worker remains undeployed and the signing/auth Preview configuration is not verified; no feature flags or public routes enabled. A successful full Vercel build and authenticated owner-only signed read canary must precede any limited pilot. Visual turntables on real Android/WebGL, UV seams, welded-position topology, rights and FPS still require testing.
+
+
+## Isolated full web-app build verification (2026-10-30)
+
+A short-lived Vercel CPU sandbox in `fra1` cloned exact code commit
+`e2101ee924b0e3e35bde4d14df715aeb19da260f`, installed the pinned
+Bun dependencies, ran `bun run test:word:gate` and ran a full
+`next build` with Google Fonts network access allowed.
+
+- **105/105 JavaScript Vitest cases passed** in 21 test files.
+- **Next.js 16.0.10 compiled successfully**, completed its app TypeScript check,
+  and generated all 20 static pages; the route table included
+  `/spaktok-word`, `/spaktok-world`, and
+  `/api/spaktok-studio/pilot-ticket`.
+- An additional repository-wide `tsc --noEmit` was **not clean** because of
+  preexisting strict-type errors in separate test-only files
+  (`spaktok-glb-topology-audit.test.ts`,
+  `spaktok-word-face-rig.test.ts` and `spaktok-word-rig-qa.test.ts`).
+  Do not claim all repository TypeScript checks are green.
+- The first standalone build attempt failed because the sandbox network
+  policy disallowed Google's Cairo font host. Restricting network access to
+  `fonts.googleapis.com` / `fonts.gstatic.com` then yielded a successful
+  full Next build **without changing the application code**.
+- The sandbox was stopped successfully after testing.
+- **The exact pilot read Worker named `spaktok-private-studio-asset` is not
+  currently in the connected account's Worker script list.** A differently
+  named `spaktok-private-studio-assets` Worker exists; it is not evidence
+  that this signed pilot route is deployed or working.
+- The latest Vercel Git-linked deployment for this exact branch head was not
+  available when checked. The isolated build is proof of buildability, not a
+  live Preview rollout.
+
+All feature flags and public GLB publication remain OFF; PR #15 stays draft.
+Authenticated Ed25519 owner-ticket canaries, visual QA and Android hardware
+tests still gate any release.
