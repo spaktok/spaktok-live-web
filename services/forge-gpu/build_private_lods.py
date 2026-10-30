@@ -9,7 +9,6 @@ LOD assets remain PRIVATE AND UNPUBLISHED. No skin or AR readiness claimed.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -51,6 +50,14 @@ def _check_quality(source: dict, candidate: dict, previous: dict) -> None:
         raise ValueError("lod_pbr_materials_missing")
     if source["embedded_image_count"] and not candidate["embedded_image_count"]:
         raise ValueError("lod_lost_embedded_textures")
+    if (source["morph_target_count"] and
+            candidate["morph_target_count"] < source["morph_target_count"]):
+        raise ValueError("lod_lost_morph_targets")
+    if source["skin_count"] and candidate["skin_count"] < source["skin_count"]:
+        raise ValueError("lod_lost_skins")
+    if (source["animation_count"] and
+            candidate["animation_count"] < source["animation_count"]):
+        raise ValueError("lod_lost_animations")
     # Preserve the broad texture PBR capability of the original. Names/counts
     # may change during packing; the report records the exact observed slots.
     for slot in ("base_color", "metallic_roughness", "normal",
