@@ -588,6 +588,23 @@ export default function SpaktokAIDirector({
         )}
        </select>
       </label>
+      <div className="mt-2 rounded-lg border border-indigo-300/25 bg-slate-950/50 p-2 leading-5 text-slate-200"
+       role="status">
+       <p>
+        {SPAKTOK_FIRST_GPU_LODS[cloudLod].triangles.toLocaleString('en-US')} مثلث
+        {' · '}{(SPAKTOK_FIRST_GPU_LODS[cloudLod].bytes/1_000_000).toFixed(2)} MB
+        {' · '}حواف غير منتظمة: {SPAKTOK_FIRST_GPU_LODS[cloudLod].nonManifoldEdges.toLocaleString('en-US')}
+       </p>
+       <p className="mt-1 text-cyan-200">
+        متوسط اختلاف مواقع الرؤوس عن الأصل:
+        {' '}{SPAKTOK_FIRST_GPU_LODS[cloudLod].meanVertexDriftPercent.toFixed(2)}%
+        {' '}من قطر المجسم (مقياس تقريبي، لا يمثل جودة الصورة)
+       </p>
+       {SPAKTOK_FIRST_GPU_LODS[cloudLod].nonManifoldEdges>0&&
+        <p className="mt-1 text-amber-200">
+         مسودة فحص فقط؛ يلزم إصلاح الشبكة قبل أي استخدام مباشر.
+        </p>}
+      </div>
       <button type="button" onClick={()=>void importFirstGpuFromCloud()}
        disabled={busy||!rightsApproved}
        className="mt-3 w-full rounded-lg bg-violet-700 px-3 py-3 font-bold text-white disabled:opacity-40">
