@@ -86,6 +86,20 @@ describe('Studio fan-out manifest GPU-free production contract',()=>{
    expect(()=>assertStudioFanoutManifest(bypass)).toThrow('studio_fanout_output_invalid')
   }
  })
+ it('blocks unsupported topology scanning for all private Studio handoffs',()=>{
+  const report=make({
+   sha256:'f'.repeat(64),sourceEngine:'existing-glb',
+   topologyScanUnverified:true,
+  })
+  expect(report.outputs).toHaveLength(5)
+  for(const result of report.outputs){
+   expect(result.state).toBe('needs-optimization')
+   expect(result.blockers)
+    .toContain('glb_topology_scan_unverified_requires_professional_review')
+   expect(result.published).toBe(false)
+  }
+  expect(report.review.publicReleaseApproved).toBe(false)
+ })
  it('cannot mix another asset, duplicate targets or unverifiable approvals',()=>{
   expect(()=>make({sha256:'invalid'})).toThrow()
   expect(()=>make({targets:[]})).toThrow()
