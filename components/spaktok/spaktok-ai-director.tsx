@@ -1,12 +1,21 @@
 'use client'
 import {useEffect,useMemo,useState,type ChangeEvent} from 'react'
+import dynamic from 'next/dynamic'
 import {
  DIRECTOR_TARGETS,detectDirectorTargets,evaluateDirectorAsset,
  planSpaktokDirector,type DirectorTarget,type DirectorAssetQA,
 } from '@/lib/filter-engine/spaktok-ai-director'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
-import {generateForgeGpuDirect} from '@/lib/filter-engine/spaktok-forge-direct-client'
+import {isFirstGpuAsset,SPAKTOK_FIRST_GPU_ASSET} from '@/lib/filter-engine/spaktok-first-gpu-asset'
+import {
+ SPAKTOK_FIRST_GPU_LODS,SPAKTOK_FIRST_GPU_LOD_IDS,
+ type SpaktokFirstLodId,
+} from '@/lib/filter-engine/spaktok-first-gpu-lods'
+import {generateForgeGpuDirect,type ForgeGpuProfile} from '@/lib/filter-engine/spaktok-forge-direct-client'
+import {planForgeGpuGeneration} from '@/lib/filter-engine/spaktok-forge-gpu-plan'
 import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-local-relief'
+import {buildSpaktokQualityEvidence} from '@/lib/filter-engine/spaktok-forge-quality-evidence'
+import {inspectStudioGlbTopology,type StudioTopologyReport} from '@/lib/filter-engine/spaktok-glb-topology-audit'
 import {
  createStudioFanoutManifest,type StudioFanoutManifest,
 } from '@/lib/filter-engine/spaktok-studio-fanout'
@@ -16,9 +25,13 @@ import {
  loadActiveOwnerRodinHead,clearActiveOwnerRodinHead,
 } from '@/lib/filter-engine/reality-local-asset-handoff'
 
+const PrivateStudioGlbPreview=dynamic(
+ ()=>import('./private-studio-glb-preview'),{ssr:false},
+)
+
 const TARGET_LABELS:Readonly<Record<DirectorTarget,string>>={
  avatar:'أفاتار',live:'لايف',filter:'فلتر AR',
- gift:'هدية Gift',world:'عالم Spaktok',
+ gift:'هدية Gift',world:'عالم Spaktok',video:'استوديو الفيديو',
 }
 const TARGET_DESTINATIONS:Readonly<Record<DirectorTarget,string>>={
  avatar:'/avatar-studio?from=ai-director',
@@ -26,6 +39,7 @@ const TARGET_DESTINATIONS:Readonly<Record<DirectorTarget,string>>={
  filter:'/reality-studio?from=ai-director',
  gift:'/gift-studio?from=ai-director',
  world:'/spaktok-world?from=ai-director',
+ video:'/video-studio?from=ai-director',
 }
 const ISSUE_AR:Readonly<Record<string,string>>={
  invalid_or_external_glb:'شبكة GLB غير صالحة أو تحتوي على روابط خارجية',
@@ -47,13 +61,21 @@ const STAGE_NAMES:Readonly<Record<string,string>>={
  source:'فحص المصدر والحقوق',generation:'توليد أو إعادة استخدام المجسم',
  geometry:'فحص شبكة GLB',rig:'تجهيز تحريك الوجه',
  filter:'تثبيت الفلتر والكاميرا', 'gift-animation':'تحريك الهدية',
- 'world-placement':'تجهيز عنصر العالم','mobile-qa':'اختبار Android',
+ 'world-placement':'تجهيز عنصر العالم',
+ 'video-composition':'تجهيز تركيب الفيديو','mobile-qa':'اختبار Android',
  publish:'مراجعة النشر',
 }
 const isImage=(file:File)=>/\.(png|jpe?g|webp)$/i.test(file.name)
 const isGlb=(file:File)=>/\.glb$/i.test(file.name)
+type StudioPilotHealth=Readonly<{
+ enabled:boolean
+ reason:'pilot_operator_not_configured'|'pilot_sign_in_required'|
+  'pilot_owner_only'|'server_signer_configured'|'unavailable'
+ workerVerified:false
+}>
 type GPUHealth=Readonly<{
- enabled:boolean;globalDailyCap:number|null
+ enabled:boolean;authConfigured?:boolean;hdAvailable?:boolean;globalDailyCap:number|null;provider:string|null;engine:string|null
+ readiness?:'ready'|'operator_not_configured'|'gpu_loading_or_unreachable'
 }>
 export default function SpaktokAIDirector({
  sourceFile,onGeneratedGlb,
@@ -67,11 +89,66 @@ export default function SpaktokAIDirector({
  const [rightsApproved,setRightsApproved]=useState(false)
  const [gpuConsent,setGpuConsent]=useState(false)
  const [imageMode,setImageMode]=useState<'local-2.5d'|'gpu-360'>('local-2.5d')
+ const [qualityPreference,setQualityPreference]=useState<'auto'|ForgeGpuProfile>('auto')
  const [transferConsent,setTransferConsent]=useState(false)
  const [health,setHealth]=useState<GPUHealth|null>(null)
+ const [healthBusy,setHealthBusy]=useState(false)
+ const [cloudLod,setCloudLod]=useState<SpaktokFirstLodId>('lod1c')
+ const [studioPilot,setStudioPilot]=useState<StudioPilotHealth>({
+  enabled:false,reason:'unavailable',workerVerified:false,
+ })
+ useEffect(()=>{
+  let active=true
+  fetch('/api/spaktok-studio/pilot-ticket',{
+   method:'GET',credentials:'same-origin',cache:'no-store',
+  }).then(r=>r.ok?r.json():Promise.reject(Error('studio_pilot_unreachable')))
+   .then((value:unknown)=>{
+    if(!active)return
+    const v=value as Partial<StudioPilotHealth>|null
+    const ready=v?.enabled===true&&v.reason==='server_signer_configured'
+    setStudioPilot({
+     enabled:ready,
+     reason:ready?'server_signer_configured':
+      v?.reason==='pilot_sign_in_required'?'pilot_sign_in_required':
+      v?.reason==='pilot_owner_only'?'pilot_owner_only':
+      'pilot_operator_not_configured',
+     workerVerified:false,
+    })
+   }).catch(()=>{
+    if(active)setStudioPilot({
+     enabled:false,reason:'unavailable',workerVerified:false,
+    })
+   })
+  return()=>{active=false}
+ },[])
+ const refreshGpuHealth=async()=>{
+  if(healthBusy)return
+  setHealthBusy(true)
+  try{
+   const r=await fetch('/api/spaktok-forge/gpu-ticket',{
+    cache:'no-store',credentials:'same-origin',
+   })
+   if(!r.ok)throw Error('gpu_health_http_'+r.status)
+   const x=await r.json()
+   setHealth({
+    enabled:x.enabled===true,
+    authConfigured:x.authConfigured===true,
+    hdAvailable:x.hdAvailable===true,
+    globalDailyCap:typeof x.globalDailyCap==='number'?x.globalDailyCap:null,
+    provider:typeof x.provider==='string'?x.provider:null,
+    engine:typeof x.engine==='string'?x.engine:null,
+    readiness:['ready','operator_not_configured','gpu_loading_or_unreachable'].includes(x.readiness)?
+     x.readiness:undefined,
+   })
+  }catch{
+   setHealth({enabled:false,authConfigured:false,globalDailyCap:null,
+    provider:null,engine:null,readiness:'operator_not_configured'})
+  }finally{setHealthBusy(false)}
+ }
  const [busy,setBusy]=useState(false)
  const [asset,setAsset]=useState<File|null>(null)
  const [qa,setQA]=useState<DirectorAssetQA|null>(null)
+ const [topology,setTopology]=useState<StudioTopologyReport|null>(null)
  const [manifest,setManifest]=useState<StudioFanoutManifest|null>(null)
  const [status,setStatus]=useState('')
  const [show,setShow]=useState(true)
@@ -80,7 +157,7 @@ export default function SpaktokAIDirector({
  const sourceKind=source?(isGlb(source)?'glb':isImage(source)?'image':'none'):'none'
  const plan=useMemo(()=>planSpaktokDirector({
   description,targets,source:sourceKind,
-  rightsApproved,gpuAvailable:health?.enabled===true,
+  rightsApproved,gpuAvailable:health?.enabled===true&&health?.authConfigured===true,
   computeApproved:gpuConsent,transferApproved:transferConsent,
   localReliefSelected:sourceKind==='image'&&imageMode==='local-2.5d',
  }),[description,targets,sourceKind,rightsApproved,health,gpuConsent,transferConsent,imageMode])
@@ -91,6 +168,7 @@ export default function SpaktokAIDirector({
   setTransferConsent(false)
   setGpuConsent(false)
   setImageMode('local-2.5d')
+  setQualityPreference('auto')
  },[sourceFile])
  useEffect(()=>{
   let active=true
@@ -98,9 +176,15 @@ export default function SpaktokAIDirector({
    .then(r=>r.ok?r.json():Promise.reject(Error('forge_gpu_health')))
    .then(x=>{if(active)setHealth({
     enabled:x.enabled===true,
+    authConfigured:x.authConfigured===true,
+    hdAvailable:x.hdAvailable===true,
     globalDailyCap:typeof x.globalDailyCap==='number'?x.globalDailyCap:null,
+    provider:typeof x.provider==='string'?x.provider:null,
+    engine:typeof x.engine==='string'?x.engine:null,
+    readiness:['ready','operator_not_configured','gpu_loading_or_unreachable'].includes(x.readiness)?
+     x.readiness:undefined,
    })})
-   .catch(()=>{if(active)setHealth({enabled:false,globalDailyCap:null})})
+   .catch(()=>{if(active)setHealth({enabled:false,globalDailyCap:null,provider:null,engine:null})})
   return()=>{active=false}
  },[])
  const select=(event:ChangeEvent<HTMLInputElement>)=>{
@@ -117,6 +201,7 @@ export default function SpaktokAIDirector({
   setOwnFile(file);setAsset(null);setQA(null);setManifest(null)
   setRightsApproved(false);setTransferConsent(false);setGpuConsent(false)
   setImageMode('local-2.5d')
+  setQualityPreference('auto')
   setStatus(file?'المصدر جاهز للتخطيط، لم يتم رفعه إلى أي خادم.':'')
  }
  const storeRodin=async()=>{
@@ -174,26 +259,52 @@ export default function SpaktokAIDirector({
   })
  }
  const commitGlb=async(file:File,gpuJobsUsed:0|1,
-  sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d')=>{
+  sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d',
+  special?:{targets:DirectorTarget[];description:string;save:boolean;fromCloud?:boolean;previewTopologyBlocked?:boolean},
+  gpuProfile?:ForgeGpuProfile)=>{
   const bytes=await file.arrayBuffer()
   const inspection=inspectWordGeneratedGlb(bytes,file.name)
   const checked=evaluateDirectorAsset(inspection.audit,bytes.byteLength,
-   plan.targets)
+   special?.targets??plan.targets)
   if(!checked.valid)throw Error('director_failed_glb_qa')
+  const topologyAudit=inspectStudioGlbTopology(bytes)
+  const mustRepairTopology=topologyAudit.status==='checked'&&(
+   topologyAudit.nonManifoldEdges>0||
+   topologyAudit.degenerateIndexTriangles>0)
+  const topologyUnknown=topologyAudit.status!=='checked'
   const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))
   const hash=Array.from(digest).map(b=>b.toString(16).padStart(2,'0')).join('')
   const draft=createStudioFanoutManifest({
    fileName:file.name,sha256:hash,bytes:bytes.byteLength,
-   audit:inspection.audit,description,rights,targets:plan.targets,
-   gpuJobsUsed,sourceEngine,
+   audit:inspection.audit,description:special?.description??description,
+   rights,targets:special?.targets??plan.targets,
+   gpuJobsUsed,sourceEngine,gpuProfile,
+   previewTopologyBlocked:special?.previewTopologyBlocked===true||mustRepairTopology,
+   topologyScanUnverified:topologyUnknown,
   })
-  setAsset(file);setQA(checked);setManifest(draft)
+  // GPU has already been billed once the GLB exists. A full browser
+  // IndexedDB quota must NOT discard an otherwise valid successful result.
+  let browserSaved=false
+  try{
+   await saveStudioFanoutBundle(file,draft)
+   browserSaved=true
+  }catch{
+   // Retain GLB in memory and expose "Download GLB" as an emergency path.
+  }
+  setAsset(file);setQA(checked);setManifest(draft);setTopology(topologyAudit)
   if(sourceEngine!=='existing-glb')onGeneratedGlb?.(file)
-  setStatus((sourceEngine==='browser-2.5d'?
+  setStatus((special?.fromCloud?
+   'تم تنزيل مجسم Vast.ai من Cloudflare R2 الخاص، والتحقق من بصمته وحفظ نسخة معاينة محلية. '+
+   'أُنشئت مسودات للأقسام الخمسة؛ لم يُنشر المجسم للجمهور. ':
+   special?.save?
+   'تم التحقق من بصمة المجسم المولّد على Vast.ai وحفظه كمسودة خاصة في هذا المتصفح. '+
+   'تم تجهيز مخطط جميع الأقسام الخمسة؛ لا يوجد رفع جديد إلى Cloudflare R2 ولا نشر للجمهور. ':
+   sourceEngine==='browser-2.5d'?
    'نجح إنشاء GLB بارز 2.5D محليًا مجانًا دون رفع الصورة. '+
    'هذا ليس نموذج وجه/جسم 360° ولا تصلح حركاته تلقائيًا. ':
-   'أنشأنا مسودة إنتاج للأقسام المختارة من GLB واحد. ')+
-   'تم إنشاء خطة لكل قسم، لكن Rig والحركات واختبارات Android والنشر غير مكتملة.')
+   'تم حفظ مسودة إنتاج للأقسام المختارة من GLB واحد في هذا المتصفح لمدة 24 ساعة. ')+
+   'تم إنشاء خطة لكل قسم، لكن Rig والحركات واختبارات Android والنشر غير مكتملة.')+
+   (browserSaved?'':' تعذّر الحفظ الدائم في المتصفح؛ نزّل GLB فورًا قبل إغلاق الصفحة.')
  }
  const generate=async()=>{
   if(busy||!source||!rightsApproved||!plan.targets.length)return
@@ -211,20 +322,123 @@ export default function SpaktokAIDirector({
     await commitGlb(relief.file,0,'browser-2.5d')
     return
    }
-   if(!health?.enabled)throw Error('director_gpu_disabled')
+   if(!health?.enabled||!health?.authConfigured)throw Error('director_gpu_or_auth_disabled')
+   if(health.provider!=='vast'||health.engine!=='trellis2')
+    throw Error('director_requires_operator_vast_trellis2')
    if(!gpuConsent||!transferConsent)
     throw Error('director_explicit_gpu_and_image_transfer_consent_required')
    if(source.size<128||source.size>8*1024*1024)
     throw Error('director_invalid_image_size')
-   setStatus('إرسال مهمة GPU واحدة بعد موافقتك، وتوليد GLB من الصورة…')
-   // Small authenticated D1 quota ticket goes to Vercel; the image
-   // and potentially 35MB GLB travel DIRECTLY to the licensed GPU host.
-   // Source text routes output departments but does not condition SF3D.
-   const generated=await generateForgeGpuDirect(source,rights)
-   await commitGlb(generated.file,1,'ai-360-gpu')
+   if(qualityPreference==='studio-hd'&&!health?.hdAvailable)
+    throw Error('studio_hd_requires_explicit_operator_and_gpu_approval')
+   const gpuPlan=planForgeGpuGeneration({description,targets:plan.targets,
+    preferredProfile:qualityPreference==='auto'?undefined:qualityPreference,
+   })
+   setStatus('إرسال مهمة GPU آمنة إلى TRELLIS.2 على Vast.ai بملف واحد…')
+   // The Arabic prompt selects private destinations and safe output profile;
+   // TRELLIS.2 itself is image-conditioned, not arbitrary text/terminal control.
+   const generated=await generateForgeGpuDirect(source,rights,gpuPlan.profile)
+   await commitGlb(generated.file,1,'ai-360-gpu',undefined,gpuPlan.profile)
   }catch(error){
    setStatus('لم تكتمل المهمة: '+(error instanceof Error?error.message:String(error))+
     '. إذا بدأ تشغيل GPU فالمحاولة قد تُحتسب؛ لا تعاود الإرسال دون فحص الحالة.')
+  }finally{setBusy(false)}
+ }
+ const importFirstGpuAsset=async()=>{
+  // No GPU, no external network upload: verify the exact known private
+  // TRELLIS.2 artifact and save one local manifest for all five studios.
+  if(busy||!source||sourceKind!=='glb'||!rightsApproved)return
+  setBusy(true)
+  try{
+   const raw=await source.arrayBuffer()
+   const hash=Array.from(new Uint8Array(
+    await crypto.subtle.digest('SHA-256',raw)
+   )).map(byte=>byte.toString(16).padStart(2,'0')).join('')
+   if(!isFirstGpuAsset(hash,raw.byteLength))
+    throw Error('glb_does_not_match_vast_first_successful_asset')
+   const requested=[...DIRECTOR_TARGETS]
+   const firstDescription='المجسم الأول من Spaktok GPU: أفاتار، لايف، فلتر، هدية، وعالم'
+   await commitGlb(source,0,'existing-glb',{
+    targets:requested,description:firstDescription,save:true,
+   })
+   setManualTargets(requested)
+   setDescription(firstDescription)
+  }catch(error){
+   setStatus('تعذّر استيراد مجسم GPU الأول: '+
+    (error instanceof Error?error.message:String(error))+
+    '. تأكد أنك اخترت ملف GLB الأصلي الذي أنشأناه على Vast.ai.')
+  }finally{setBusy(false)}
+ }
+ const importFirstGpuFromCloud=async()=>{
+  if(busy||!rightsApproved||!studioPilot.enabled)return
+  const chosen=SPAKTOK_FIRST_GPU_LODS[cloudLod]
+  setBusy(true)
+  try{
+   const permission=await fetch('/api/spaktok-studio/pilot-ticket',{
+    method:'POST',credentials:'same-origin',cache:'no-store',
+    headers:{'content-type':'application/json'},
+    body:JSON.stringify({lod:cloudLod}),
+   })
+   if(!permission.ok)throw Error('cloud_pilot_ticket_'+permission.status)
+   const ticket:unknown=await permission.json()
+   if(!ticket||typeof ticket!=='object')throw Error('cloud_pilot_invalid_ticket')
+   const t=ticket as Record<string,unknown>
+   const expectedUrl='https://spaktok-private-studio-asset.spaktok.workers.dev/v1/pilot/'+cloudLod+'.glb'
+   if(t.url!==expectedUrl||t.lod!==cloudLod||
+      t.bytes!==chosen.bytes||t.sha256!==chosen.sha256||
+      t.fileName!==chosen.fileName||
+      !t.headers||typeof t.headers!=='object')
+    throw Error('cloud_pilot_wrong_server_or_hash')
+   const headers=t.headers as Record<string,unknown>
+   const signature=headers['X-Spaktok-Studio-Signature']
+   const expiry=headers['X-Spaktok-Studio-Expires']
+   const owner=headers['X-Spaktok-Studio-User']
+   if(typeof signature!=='string'||!/^[a-z0-9_-]{86}$/i.test(signature)||
+      typeof expiry!=='string'||!/^\d{10}$/.test(expiry)||
+      Number(expiry)*1000<=Date.now()||
+      typeof owner!=='string'||!/^[a-f0-9-]{36}$/i.test(owner))
+    throw Error('cloud_pilot_invalid_signature_grant')
+   const response=await fetch(expectedUrl,{
+    method:'GET',mode:'cors',credentials:'omit',cache:'no-store',
+    redirect:'error',signal:AbortSignal.timeout(45000),
+    headers:{
+     'X-Spaktok-Studio-Signature':signature,
+     'X-Spaktok-Studio-Expires':expiry,
+     'X-Spaktok-Studio-User':owner,
+    },
+   })
+   if(!response.ok)throw Error('cloud_pilot_asset_'+response.status)
+   if(response.headers.get('content-type')?.split(';')[0]!=='model/gltf-binary')
+    throw Error('cloud_pilot_wrong_media_type')
+   const declared=Number(response.headers.get('content-length'))
+   if(declared!==chosen.bytes)
+    throw Error('cloud_pilot_wrong_length')
+   const blob=await response.blob()
+   if(blob.size!==chosen.bytes)
+    throw Error('cloud_pilot_wrong_size')
+   const file=new File([blob],chosen.fileName,{
+    type:'model/gltf-binary',
+   })
+   const buf=await file.arrayBuffer()
+   const digest=Array.from(new Uint8Array(
+    await crypto.subtle.digest('SHA-256',buf)
+   )).map(b=>b.toString(16).padStart(2,'0')).join('')
+   if(digest!==chosen.sha256||buf.byteLength!==chosen.bytes)
+    throw Error('cloud_pilot_lod_sha256_mismatch')
+   const destinations=[...DIRECTOR_TARGETS]
+   const desc='Spaktok AI: '+chosen.id+
+    ' معاينة خاصة من المجسم الأول — لا يوجد Rig أو اختبار AR معتمد'
+   await commitGlb(file,0,'existing-glb',{
+    targets:destinations,description:desc,save:true,fromCloud:true,
+    previewTopologyBlocked:chosen.nonManifoldEdges>0,
+   })
+   setOwnFile(file)
+   setManualTargets(destinations)
+   setDescription(desc)
+  }catch(error){
+   setStatus('استيراد R2 الخاص غير مكتمل: '+
+    (error instanceof Error?error.message:String(error))+
+    '. لا تعاود تشغيل GPU؛ تأكد من نشر مسار القراءة الآمن وصلاحية حسابك.')
   }finally{setBusy(false)}
  }
  const persistDraft=async()=>{
@@ -253,9 +467,10 @@ export default function SpaktokAIDirector({
    if(hash!==saved.source.sha256)
     throw Error('بصمة الملف لا تطابق المسودة')
    const inspection=inspectWordGeneratedGlb(bytes,file.name)
+   const topologyAudit=inspectStudioGlbTopology(bytes)
    const checked=evaluateDirectorAsset(
     inspection.audit,bytes.byteLength,saved.project.outputTargets)
-   setOwnFile(file);setAsset(file);setQA(checked);setManifest(saved)
+   setOwnFile(file);setAsset(file);setQA(checked);setManifest(saved);setTopology(topologyAudit)
    setDescription(saved.project.description)
    setManualTargets([...saved.project.outputTargets])
    setRightsApproved(false);setGpuConsent(false);setTransferConsent(false)
@@ -267,7 +482,10 @@ export default function SpaktokAIDirector({
  }
  const send=(target:DirectorTarget)=>async()=>{
   if(!asset||!manifest||!qa?.previewReady||busy||
-   !manifest.project.outputTargets.includes(target))return
+   (topology?.status!=='checked'||
+    topology.nonManifoldEdges>0||topology.degenerateIndexTriangles>0)||
+   !manifest.project.outputTargets.includes(target)||
+   manifest.outputs.find(out=>out.target===target)?.state!=='private-preview')return
   setBusy(true)
   try{
    await saveStudioFanoutBundle(asset,manifest)
@@ -277,6 +495,17 @@ export default function SpaktokAIDirector({
     '. استعمل تنزيل GLB والاستيراد اليدوي.')
    setBusy(false)
   }
+ }
+ const downloadQualityReport=()=>{
+  if(!manifest)return
+  const report=buildSpaktokQualityEvidence(manifest,topology)
+  const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'})
+  const url=URL.createObjectURL(blob)
+  const a=document.createElement('a')
+  a.href=url
+  a.download='spaktok-3d-quality-evidence.json'
+  a.click()
+  window.setTimeout(()=>URL.revokeObjectURL(url),1000)
  }
  const downloadManifest=()=>{
   if(!manifest)return
@@ -311,8 +540,8 @@ export default function SpaktokAIDirector({
   </div>
   <p className="text-xs leading-6 text-slate-300">
    يحلل طلبك لتوجيه العمل بين الأقسام، ويستخدم GLB الحالي دون GPU أو
-   يرسل صورة واحدة إلى Stable Fast 3D عند تفعيل خادم مرخص وموافقتك.
-   الوصف يحدد الاستخدامات حاليًا، ولا يغير شكل التوليد نفسه.
+   يرسل صورة واحدة إلى TRELLIS.2 على Vast.ai بعد تفعيل الخادم وموافقتك.
+   الوصف يحدد الأقسام ونمط جودة محدودًا، وليس أمرًا عامًا للترمنال.
    لا يوجد نشر جماهيري تلقائي ولا توليد وجه متحرك دون Rig حقيقي.
   </p>
   {show&&<>
@@ -339,7 +568,30 @@ export default function SpaktokAIDirector({
         <option value="gpu-360">AI 360°: يحتاج GPU مرخصًا وموافقات</option>
        </select>
       </label>
-      {imageMode==='local-2.5d'&&<p className="mt-2 leading-5 text-amber-200">
+      {imageMode==='gpu-360'&&<div className="mt-3 rounded-lg border border-violet-300/25 p-3">
+      <label className="block font-semibold">
+       جودة توليد TRELLIS.2 — كل اختيار مدفوع بمهمة واحدة
+       <select value={qualityPreference}
+        onChange={e=>{
+         setQualityPreference(e.target.value as typeof qualityPreference)
+         setGpuConsent(false)
+        }}
+        className="mt-2 block w-full rounded-lg border border-white/20 bg-slate-950 p-2">
+        <option value="auto">تلقائي: 512³ للهاتف، خامات مناسبة للقسم</option>
+        <option value="mobile-preview">الهاتف 512³ — 1K PBR و120 ألف وجه مستهدف</option>
+        <option value="detail-preview">تفصيلي 512³ — 2K PBR و200 ألف وجه مستهدف</option>
+        <option value="studio-hd" disabled={!health?.hdAvailable}>
+         Studio HD 1024³ — 2K PBR و300 ألف وجه (اختباري)
+        </option>
+       </select>
+      </label>
+      <p className="mt-2 leading-5 text-amber-100">
+       HD يُسمح به فقط بعد تفعيله من الخادم والمشغّل وبذاكرة GPU كافية؛
+       لم نثبت بعد تفوّقه على Rodin أو صلاحيته للأفاتار المتحرك.
+       قد يتطلب وقتًا أعلى ويُخصم من حصة المهمة الواحدة.
+      </p>
+     </div>}
+     {imageMode==='local-2.5d'&&<p className="mt-2 leading-5 text-amber-200">
        هذا اختبار مجاني للخط الإنتاج فقط. يحفظ سطح الصورة وخلفية مبسطة،
        ولا يعيد بناء الرأس أو الجسم ثلاثي الأبعاد بجودة Rodin.
       </p>}
@@ -349,6 +601,96 @@ export default function SpaktokAIDirector({
       {sourceKind==='glb'?' إعادة استخدام دون GPU':
        imageMode==='local-2.5d'?' نمط بارز 2.5D مجاني':' يتطلب GPU لتوليد 360°'}
      </p>}
+     <div className="rounded-xl border border-cyan-400/30 bg-slate-950/70 p-3 text-xs">
+      <p className="font-semibold text-cyan-200">استيراد مجسم Spaktok من Cloudflare R2 الخاص</p>
+      <p className="mt-2 leading-5 text-slate-200">
+       توجد خمس نسخ GLB فعلية من المجسم الأول محفوظة في Cloudflare R2
+       الخاص، بينها نسختان احترافيتان محافظتان أنتجناهما باستخدام gltfpack.
+       يتم الاستيراد بتصريح قصير العمر والتحقق من SHA-256 دون GPU جديد.
+       النسختان التجريبيتان LOD1 وLOD2 لديهما حواف غير منتظمة؛
+       النسختان LOD1c وLOD2c اجتازتا فحص الحواف المفهرسة لكن لم
+       تصلا إلى مستوى التخفيض المطلوب. الجميع للمراجعة الخاصة فقط،
+       ولا توجد نسخة معتمدة للايف أو AR أو الهدايا المدفوعة.
+      </p>
+      <label className="mt-3 block text-slate-100">
+       نسخة المجسم الخاصة
+       <select value={cloudLod}
+        disabled={busy}
+        onChange={e=>setCloudLod(e.target.value as SpaktokFirstLodId)}
+        className="mt-2 w-full rounded-lg border border-cyan-200/40 bg-slate-950 p-2">
+        {SPAKTOK_FIRST_GPU_LOD_IDS.map(lod=>
+         <option key={lod} value={lod}>
+          {SPAKTOK_FIRST_GPU_LODS[lod].description}
+         </option>
+        )}
+       </select>
+      </label>
+      <div className="mt-2 rounded-lg border border-indigo-300/25 bg-slate-950/50 p-2 leading-5 text-slate-200"
+       role="status">
+       <p>
+        {SPAKTOK_FIRST_GPU_LODS[cloudLod].triangles.toLocaleString('en-US')} مثلث
+        {' · '}{(SPAKTOK_FIRST_GPU_LODS[cloudLod].bytes/1_000_000).toFixed(2)} MB
+        {' · '}حواف غير منتظمة بفحص الفهارس: {SPAKTOK_FIRST_GPU_LODS[cloudLod].nonManifoldEdges.toLocaleString('en-US')}
+       </p>
+       <p className="mt-1 text-amber-200">
+        حواف بأكثر من وجهين بعد دمج مواقع الرؤوس (سماحية 10⁻⁶ من قطر المجسم):
+        {' '}{SPAKTOK_FIRST_GPU_LODS[cloudLod].positionWeldedNonManifoldEdges===null?
+         'لم تُفحص':SPAKTOK_FIRST_GPU_LODS[cloudLod].positionWeldedNonManifoldEdges.toLocaleString('en-US')}
+        {' '}— إشارة إلى تداخلات أو فواصل خامات، وليست بالضرورة ثقوبًا أو عيوبًا مرئية.
+       </p>
+       <p className="mt-1 text-cyan-200">
+        اختلاف مواقع الرؤوس عن الأصل:
+        {' '}{SPAKTOK_FIRST_GPU_LODS[cloudLod].meanVertexDriftPercent===null?
+         'لم يُقَس بعد':
+         SPAKTOK_FIRST_GPU_LODS[cloudLod].meanVertexDriftPercent.toFixed(2)+'% من قطر المجسم'}
+        {' '}— ليس قياسًا لجودة الصورة.
+       </p>
+       {SPAKTOK_FIRST_GPU_LODS[cloudLod].nonManifoldEdges>0&&
+        <p className="mt-1 text-amber-200">
+         مسودة فحص فقط؛ يلزم إصلاح الشبكة قبل أي استخدام مباشر.
+        </p>}
+       {(cloudLod==='lod1c'||cloudLod==='lod2c')&&
+        <p className="mt-1 text-amber-200">
+         نسخة محافظة: صفر حواف غير منتظمة حسب فحص الفهارس فقط،
+         لكنها لم تحقق نسبة LOD المستهدفة. تحتاج مراجعة بصرية
+         واختبار Android قبل نقلها لأي قسم.
+        </p>}
+      </div>
+      <p role="status" className="mt-2 text-amber-200">
+       {studioPilot.enabled?
+        'توقيع الموقع مهيأ لحساب المالك؛ اتصال Cloudflare الفعلي لم يُختبر بعد.':
+        studioPilot.reason==='pilot_sign_in_required'?
+         'سجّل الدخول بحساب المشغّل لتجربة الاستيراد الخاص.':
+        studioPilot.reason==='pilot_owner_only'?
+         'هذا الاستيراد متاح لحساب مالك الاستوديو فقط.':
+        studioPilot.reason==='pilot_operator_not_configured'?
+         'الاستيراد الخاص غير مُفعّل؛ إعدادات المشغّل والتوقيع لم تكتمل.':
+         'تعذّر التأكد من حالة الاستيراد الخاص حاليًا.'}
+      </p>
+      <button type="button" onClick={()=>void importFirstGpuFromCloud()}
+       disabled={busy||!rightsApproved||!studioPilot.enabled}
+       className="mt-3 w-full rounded-lg bg-violet-700 px-3 py-3 font-bold text-white disabled:opacity-40">
+       استيراد LOD من R2 إلى Spaktok Studio (خاص)
+      </button>
+      <p className="mt-2 text-slate-400">
+       يعمل هذا المسار بعد نشر Worker القراءة الموقّع وتفعيل حساب المشغّل.
+      </p>
+     </div>
+     {sourceKind==='glb'&&<div className="rounded-xl border border-indigo-300/30 bg-indigo-950/40 p-3 text-xs">
+      <p className="font-semibold text-cyan-200">استيراد أول مجسم Spaktok GPU</p>
+      <p className="mt-2 leading-5 text-slate-200">
+       بعد تنزيل spaktok-first.glb من Vast.ai اختره أعلاه، وأكد حقوق
+       الاستخدام، ثم احفظه مرة واحدة كمسودة للأفاتار واللايف والفلاتر
+       والهدايا والعالم. نفحص SHA-256 والحجم المطابقين لنتيجة GPU الناجحة.
+       التخزين محلي وخاص؛ هذا ليس رفعًا إلى Cloudflare R2 أو نشرًا مباشرًا.
+      </p>
+      <button type="button"
+       onClick={()=>void importFirstGpuAsset()}
+       disabled={busy||!rightsApproved}
+       className="mt-3 w-full rounded-lg bg-cyan-700 px-3 py-3 font-bold text-white disabled:opacity-40">
+       استيراد مجسم Vast.ai وتجهيزه للأقسام الخمسة دون GPU
+      </button>
+     </div>}
      <div className="flex flex-wrap gap-2 text-xs">
       <button type="button" onClick={()=>void deleteSavedDraft()}
        disabled={busy}
@@ -400,12 +742,29 @@ export default function SpaktokAIDirector({
     </div>
     <div className="space-y-3">
      <div className="rounded-xl border border-white/15 bg-slate-950/60 p-3 text-xs">
-      <p className="font-semibold">خطة الإنتاج المبدئية</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+       <p className="font-semibold">خطة الإنتاج المبدئية</p>
+       <button type="button" disabled={healthBusy||busy}
+        onClick={()=>void refreshGpuHealth()}
+        className="rounded-lg border border-cyan-300/40 px-3 py-1 text-cyan-100 disabled:opacity-40">
+        {healthBusy?'فحص الاتصال…':'إعادة فحص اتصال GPU'}
+       </button>
+      </div>
+      {sourceKind==='image'&&imageMode==='gpu-360'&&
+       <p role="status" className="mt-2 text-amber-200">
+        حالة الاتصال: {health?.authConfigured===false?
+          'نظام تسجيل الدخول بقاعدة بيانات المعاينة لم يُضبط بعد؛ لا ترسل صورة مدفوعة':
+         health?.readiness==='ready'?'جاهز لاختبار صورة واحدة':
+         health?.readiness==='gpu_loading_or_unreachable'?
+          'الخادم المحدد لا يستجيب أو ما زال يحمّل النموذج':
+         'لم يكتمل إعداد خادم GPU في هذه النسخة بعد'}
+       </p>}
       <p className="mt-2 text-cyan-200">
        GPU: {plan.estimatedGpuJobs} مهمة ·
        {sourceKind==='glb'?' إعادة استعمال GLB':
         imageMode==='local-2.5d'?' Forge المحلي المجاني 2.5D':
-        health?.enabled?' GPU مرخص متصل':' GPU متوقف'}
+        health?.enabled&&health.authConfigured&&health.provider==='vast'&&health.engine==='trellis2'?
+        ' Vast.ai TRELLIS.2 متصل':' GPU متوقف'}
       </p>
       {plan.stages.map(step=><div key={step.id}
        className="mt-2 flex items-start justify-between gap-3">
@@ -431,10 +790,11 @@ export default function SpaktokAIDirector({
      </label>
      {sourceKind==='image'&&imageMode==='gpu-360'&&<div className="space-y-2 rounded-lg border border-amber-400/30 bg-amber-950/20 p-3">
       <p className="text-xs text-amber-100">
-       {health?.enabled?'الإنشاء الكامل GPU متصل لكنه قد يكون مدفوعًا للمشغّل.':
+       {health?.enabled&&health.authConfigured&&health.provider==='vast'&&health.engine==='trellis2'?
+        'محرك TRELLIS.2 على Vast.ai متصل؛ GPU مدفوع للمشغّل.':
         'محرك AI 360° غير متصل بعد؛ يمكن إنشاء خطة أو استيراد GLB مجاني الآن.'}
       </p>
-      {health?.enabled&&<>
+      {health?.enabled&&health.authConfigured&&<>
        <label className="flex items-start gap-2 text-xs">
         <input type="checkbox" checked={transferConsent}
          onChange={e=>setTransferConsent(e.target.checked)}/>
@@ -450,7 +810,8 @@ export default function SpaktokAIDirector({
      <button type="button" onClick={()=>void generate()}
       disabled={busy||!rightsApproved||!source||!plan.targets.length||
        (sourceKind==='image'&&imageMode==='gpu-360'&&
-        (!health?.enabled||!gpuConsent||!transferConsent))||
+        (!health?.enabled||!health?.authConfigured||!gpuConsent||!transferConsent||
+         (qualityPreference==='studio-hd'&&!health?.hdAvailable)))||
        sourceKind==='none'}
       className="w-full rounded-xl bg-violet-500 px-4 py-3 font-bold text-white disabled:opacity-40">
       {busy?'يتم العمل…':sourceKind==='glb'?
@@ -471,10 +832,40 @@ export default function SpaktokAIDirector({
      {' · '}Morph Targets: {qa.morphs}
      {' · '}صور الخامات: {qa.textureImages}
     </p>
+    {topology&&<p className="rounded-lg border border-white/15 p-2 text-xs text-slate-200">
+     فحص الشبكة: {topology.status==='checked'?
+      `${topology.triangles.toLocaleString()} مثلث · ${topology.nonManifoldEdges.toLocaleString()} حافة غير منتظمة · ${topology.degenerateIndexTriangles.toLocaleString()} مثلث منهار · ${topology.boundaryEdges.toLocaleString()} حافة مفتوحة`:
+      'لم يُفحص كامل الملف هندسيًا: '+topology.reason}
+    </p>}
+    <PrivateStudioGlbPreview file={asset}
+     topologyWarning={manifest?.outputs.some(o=>o.state==='needs-optimization'&&
+      (o.blockers.includes('non_manifold_lod_requires_professional_retopology_and_visual_qa')||
+       o.blockers.includes('position_welded_edges_require_visual_surface_review')))===true}/>
+    {manifest&&SPAKTOK_FIRST_GPU_LOD_IDS.map(id=>{
+     const candidate=SPAKTOK_FIRST_GPU_LODS[id]
+     return manifest.source.sha256===candidate.sha256&&
+      <p key={id} className="rounded-lg border border-amber-300/30 p-2 text-xs text-amber-100">
+       {id.toUpperCase()} · {candidate.triangles.toLocaleString()} مثلث
+       {' · '}حواف حسب الفهارس: {candidate.nonManifoldEdges.toLocaleString()}
+       {' · '}حواف بعد دمج المواقع: {candidate.positionWeldedNonManifoldEdges===null?
+        'لم تُفحص':candidate.positionWeldedNonManifoldEdges.toLocaleString()}
+       {' · '}مثلثات UV منهارة: {candidate.uvCollapsedTriangles}
+       {' · '}فرق مجموع المساحة السطحية: {candidate.surfaceAreaChangePercent.toFixed(1)}%
+       {' · '}فرق مجموع مساحات UV: {candidate.uvAreaSumChangePercent===null?
+        'لم يُقَس بعد':candidate.uvAreaSumChangePercent.toFixed(1)+'%'}
+       {' · '}هذه قياسات هندسية لا تثبت جودة العرض.
+       {' · '}المجسم خاص وغير معتمد للنشر
+      </p>
+    })}
     <div className="flex flex-wrap gap-2">
      <button type="button" onClick={download}
       className="rounded-lg border border-white/25 px-3 py-2 text-xs">
       تنزيل GLB
+     </button>
+     <button type="button" disabled={!manifest}
+      onClick={downloadQualityReport}
+      className="rounded-lg border border-cyan-300/35 px-3 py-2 text-xs disabled:opacity-40">
+      تنزيل تقرير فحص جودة 3D
      </button>
      <button type="button" disabled={!manifest}
       onClick={downloadManifest}
@@ -487,7 +878,10 @@ export default function SpaktokAIDirector({
       حفظ مسودة GLB وخطة الأقسام
      </button>
      {manifest?.project.outputTargets.map(target=><button key={target} type="button"
-      disabled={!qa.previewReady||busy||!manifest}
+      disabled={!qa.previewReady||busy||!manifest||
+       (topology?.status!=='checked'||
+        topology.nonManifoldEdges>0||topology.degenerateIndexTriangles>0)||
+       manifest.outputs.find(o=>o.target===target)?.state!=='private-preview'}
       onClick={()=>void send(target)()}
       className="rounded-lg bg-indigo-600 px-3 py-2 text-xs disabled:opacity-40">
       معاينة {TARGET_LABELS[target]}

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "node scripts/build-couture-glb.mjs && npm run test:word:gate && next build",
+    "build": "npm run test:cloudflare-only && node scripts/build-couture-glb.mjs && npm run test:word:gate && npm run test:studio:worker && next build",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
@@ -12,10 +12,17 @@
     "cf:preview": "wrangler dev",
     "cf:deploy": "vinext deploy",
     "test": "vitest run --config vitest.config.ts",
-    "test:word:gate": "vitest run --config vitest.config.ts lib/filter-engine/spaktok-word-face-rig.test.ts lib/filter-engine/spaktok-word-import.test.ts lib/filter-engine/spaktok-word-cloudflare.test.ts lib/filter-engine/reality-avatar-full-retarget.test.ts lib/filter-engine/spaktok-word-rig-qa.test.ts lib/filter-engine/reality-avatar-live-qa.test.ts lib/filter-engine/spaktok-forge-relief.test.ts lib/server/spaktok-forge-budget.test.ts lib/filter-engine/spaktok-forge-benchmark.test.ts lib/filter-engine/spaktok-forge-normals-repair.test.ts lib/filter-engine/spaktok-ai-director.test.ts lib/filter-engine/spaktok-studio-fanout.test.ts lib/server/runpod-one-hour-safety.test.ts",
+    "test:word:gate": "vitest run --config vitest.config.ts lib/filter-engine/spaktok-word-face-rig.test.ts lib/filter-engine/spaktok-word-import.test.ts lib/filter-engine/spaktok-word-cloudflare.test.ts lib/filter-engine/reality-avatar-full-retarget.test.ts lib/filter-engine/spaktok-word-rig-qa.test.ts lib/filter-engine/reality-avatar-live-qa.test.ts lib/filter-engine/spaktok-forge-relief.test.ts lib/server/spaktok-forge-budget.test.ts lib/filter-engine/spaktok-forge-benchmark.test.ts lib/filter-engine/spaktok-forge-normals-repair.test.ts lib/filter-engine/spaktok-ai-director.test.ts lib/filter-engine/spaktok-studio-fanout.test.ts lib/server/runpod-one-hour-safety.test.ts lib/server/spaktok-forge-provider.test.ts lib/filter-engine/spaktok-forge-gpu-plan.test.ts lib/filter-engine/spaktok-first-gpu-asset.test.ts lib/filter-engine/spaktok-forge-direct-client.test.ts lib/filter-engine/spaktok-forge-quality-evidence.test.ts lib/filter-engine/spaktok-first-gpu-lods.test.ts lib/filter-engine/spaktok-glb-preview-transform.test.ts lib/filter-engine/spaktok-glb-topology-audit.test.ts lib/server/spaktok-studio-pilot-config.test.ts lib/filter-engine/spaktok-director-chat-router.test.ts lib/filter-engine/spaktok-director-agent-contract.test.ts lib/filter-engine/spaktok-director-verified-reply.test.ts lib/filter-engine/spaktok-director-chat-material.test.ts lib/filter-engine/spaktok-director-dispatch.test.ts lib/filter-engine/spaktok-studio-private-cloud.test.ts lib/filter-engine/spaktok-forge-gpu-endpoint.test.ts lib/filter-engine/spaktok-forge-readiness.test.ts",
+    "test:forge:providers": "vitest run --config vitest.config.ts lib/server/spaktok-forge-provider.test.ts lib/filter-engine/spaktok-forge-gpu-plan.test.ts",
     "test:d1": "vitest run --config vitest.config.ts lib/cloudflare/d1-repository.test.ts",
     "test:cloudflare": "vitest run --config vitest.config.ts lib/cloudflare",
-    "asset:crown": "node scripts/build-couture-glb.mjs"
+    "asset:crown": "node scripts/build-couture-glb.mjs",
+    "test:studio:worker": "node --test cloudflare/workers/spaktok-private-studio-asset.test.mjs",
+    "test:cloudflare-only": "node scripts/assert-cloudflare-only.mjs",
+    "test:studio:worker:canary": "node scripts/test-private-studio-worker.mjs",
+    "test:studio:ai:free:canary": "node scripts/test-director-ai-worker.mjs",
+    "test:hi3d": "node --test lib/server/hi3d-api.test.mjs",
+    "hi3d:smoke": "node scripts/hi3d-v3-smoke.mjs"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
@@ -48,8 +55,6 @@
     "@radix-ui/react-toggle": "1.1.1",
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
-    "@supabase/ssr": "latest",
-    "@supabase/supabase-js": "latest",
     "@vercel/analytics": "1.3.1",
     "ai": "^7.0.127",
     "autoprefixer": "^10.4.20",

@@ -9,6 +9,7 @@ import {
  type ForgeReliefOptions,type ForgeReliefStats,
 } from '@/lib/filter-engine/spaktok-forge-relief'
 import {generateForgeGpuDirect} from '@/lib/filter-engine/spaktok-forge-direct-client'
+import {FORGE_GPU_READINESS_AR,type ForgeGpuReadiness} from '@/lib/filter-engine/spaktok-forge-readiness'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
 
 const MAX_PHOTO_BYTES=8*1024*1024
@@ -56,6 +57,8 @@ export default function SpaktokForge({
  const [message,setMessage]=useState('')
  const [webglAvailable,setWebglAvailable]=useState(true)
  const [gpuAvailable,setGpuAvailable]=useState(false)
+ const [gpuReadiness,setGpuReadiness]=useState<ForgeGpuReadiness|null>(null)
+ const [gpuEngine,setGpuEngine]=useState<string|null>(null)
  const [gpuConsent,setGpuConsent]=useState(false)
  const [transferConsent,setTransferConsent]=useState(false)
  const [sourceRights,setSourceRights]=useState<'original'|'licensed'>('original')
@@ -86,8 +89,14 @@ export default function SpaktokForge({
   let live=true
   fetch('/api/spaktok-forge/gpu-ticket',{cache:'no-store'})
    .then(r=>r.ok?r.json():Promise.reject(Error('gpu_health_error')))
-   .then(data=>{if(live)setGpuAvailable(data.enabled===true)})
-   .catch(()=>{if(live)setGpuAvailable(false)})
+   .then(data=>{if(live){
+    const status=typeof data?.status==='string'&&Object.prototype.hasOwnProperty.call(FORGE_GPU_READINESS_AR,data.status)?
+     data.status as ForgeGpuReadiness:'provider-offline'
+    setGpuReadiness(status)
+    setGpuEngine(['trellis1','trellis2','stable-fast-3d'].includes(String(data.engine))?data.engine:null)
+    setGpuAvailable(data.enabled===true&&status==='ready')
+   }})
+   .catch(()=>{if(live){setGpuAvailable(false);setGpuReadiness('provider-offline')}})
   return()=>{live=false}
  },[])
  useEffect(()=>{
@@ -336,9 +345,13 @@ export default function SpaktokForge({
      <p className="mt-2 text-[11px] leading-5 text-slate-300">
       {gpuAvailable?
        'المحرك متصل. الاستخدام مُقيّد بمهمة واحدة لكل حساب يوميًا. GPU يُحاسب المشغّل على وقت التشغيل.':
-       'محرك AI الكامل غير موصول حاليًا. يلزم خادم GPU مرخص وتفعيل المشغّل؛ لا توجد رسوم أو تشغيل تلقائي.'}
+       gpuReadiness?FORGE_GPU_READINESS_AR[gpuReadiness]:'جارٍ فحص حالة محرك التوليد...'}
      </p>
-     {gpuAvailable&&<>
+     {gpuEngine&&<p className="mt-1 text-[11px] leading-5 text-violet-200">
+       المحرك المختار: {gpuEngine==='trellis1'?'Microsoft TRELLIS (DINOv2)':
+        gpuEngine==='trellis2'?'Microsoft TRELLIS.2 (DINOv3)':'Stable Fast 3D'}
+      </p>}
+      {gpuAvailable&&<>
       <label className="mt-2 flex gap-2 text-xs leading-5 text-amber-100">
        <input type="checkbox" checked={gpuConsent}
         onChange={e=>setGpuConsent(e.target.checked)} className="mt-1"/>

@@ -7,6 +7,7 @@ import {loadFaceLandmarker} from '@/lib/filter-engine/vision'
 import {resolveRealityAnchor} from '@/lib/filter-engine/reality-effect-anchors'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {GLTFExporter} from 'three/addons/exporters/GLTFExporter.js'
+import {loadVerifiedDirectorHandoff} from '@/lib/filter-engine/reality-local-asset-handoff'
 import {REALITY_SHARED_GRADE_OPTIONS} from '@/lib/filter-engine/reality-unified-profile'
 import {createRealityVideoGrade,setRealityVideoGrade} from '@/lib/filter-engine/reality-video-grade'
 import {
@@ -344,9 +345,7 @@ export default function RealityVideo3DStudio(){
   setProject(prev=>({...prev,layers:[...prev.layers,layer]}))
   setSelected(id)
  }
- const importGlb=async(e:ChangeEvent<HTMLInputElement>)=>{
-  const file=e.target.files?.[0];e.target.value=''
-  if(!file)return
+ const importGlbFile=async(file:File)=>{
   if(!/\.glb$/i.test(file.name)||file.size>VIDEO_3D_MAX_GLB_BYTES||
    project.layers.length>=VIDEO_3D_MAX_LAYERS){
    setAssetErrors('يُسمح بملفات GLB ذاتية الاكتفاء حتى 15 MB وبحد أقصى 12 مجسمًا.')
@@ -385,6 +384,25 @@ export default function RealityVideo3DStudio(){
    setAssetErrors('فشل تحميل GLB: '+String(error))
   }finally{setBusy(false)}
  }
+ const importGlb=async(e:ChangeEvent<HTMLInputElement>)=>{
+  const file=e.target.files?.[0];e.target.value=''
+  if(file)await importGlbFile(file)
+ }
+ const directorVideoHandoffRef=useRef(false)
+ useEffect(()=>{
+  // On explicit navigation only. Verify the exact chosen target AND SHA256
+  // before creating a private timeline layer. No media upload or automatic
+  // video creation; the creator still selects a source and keyframes.
+  if(directorVideoHandoffRef.current||
+    new URLSearchParams(window.location.search).get('from')!=='ai-director')return
+  directorVideoHandoffRef.current=true
+  void loadVerifiedDirectorHandoff('video').then(result=>{
+   if(!result)throw Error('studio_video_handoff_missing')
+   return importGlbFile(result.file)
+  }).catch(error=>setAssetErrors('AI Director: '+String(error)))
+ // One mount-only user-directed handoff, not a background automation.
+ // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[])
  const deleteLayer=()=>{
   if(!currentLayer)return
   const id=currentLayer.id

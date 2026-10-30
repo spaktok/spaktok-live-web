@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Radio, Sparkles } from 'lucide-react'
 import { BottomNavigation } from '@/components/spaktok/bottom-navigation'
 import { VideoFeed } from '@/components/spaktok/video-feed'
@@ -8,6 +9,7 @@ import { StoryViewer } from '@/components/spaktok/story-viewer'
 import { StoriesScreen } from '@/components/spaktok/stories-screen'
 import { LiveGrid } from '@/components/spaktok/live-grid'
 import { LiveStream } from '@/components/spaktok/live-stream'
+import { SpaktokLiveHub } from '@/components/spaktok/spaktok-live-hub'
 import { ChatScreen } from '@/components/spaktok/chat-screen'
 import { CameraScreen } from '@/components/spaktok/camera-screen'
 import { ProfileScreen } from '@/components/spaktok/profile-screen'
@@ -29,6 +31,7 @@ export default function SpakTok() {
   const [feedType, setFeedType] = useState<'forYou' | 'following' | 'live'>('forYou')
   const [focusedVideoId, setFocusedVideoId] = useState<string | null>(null)
   const [showCamera, setShowCamera] = useState(false)
+  const [cameraInitialMode,setCameraInitialMode]=useState<'photo'|'live'>('photo')
   const [viewingStory, setViewingStory] = useState<string | null>(null)
   const [viewingProfile, setViewingProfile] = useState<string | null>(null)
   const [viewingLive, setViewingLive] = useState<string | null>(null)
@@ -53,6 +56,7 @@ export default function SpakTok() {
 
   const handleTabChange = (tab: TabType) => {
     if (tab === 'create') {
+      setCameraInitialMode('photo')
       setShowCamera(true)
     } else {
       setFocusedVideoId(null)
@@ -80,6 +84,7 @@ export default function SpakTok() {
   }
 
   const handleAddStory = () => {
+    setCameraInitialMode('photo')
     setShowCamera(true)
   }
 
@@ -99,7 +104,7 @@ export default function SpakTok() {
 
   // Camera Screen
   if (showCamera) {
-    return <CameraScreen onClose={() => setShowCamera(false)} />
+    return <CameraScreen initialMode={cameraInitialMode} onClose={() => setShowCamera(false)} />
   }
 
   // Story Viewer
@@ -153,6 +158,11 @@ export default function SpakTok() {
         {activeTab === 'home' && (
           <div className="relative h-dvh overflow-hidden bg-black">
             {/* Feed Type Selector */}
+            <Link href="/spaktok-studio"
+              className="absolute right-3 top-14 z-30 flex items-center gap-2 rounded-full border border-indigo-300/35 bg-[#171536]/85 px-3 py-2 text-xs font-bold text-white shadow-xl shadow-indigo-900/40 backdrop-blur-xl transition hover:bg-indigo-500/70"
+              aria-label="افتح Spaktok Studio AI Director">
+              <Sparkles size={15} className="text-sky-300"/> AI Studio
+            </Link>
             <div className="absolute top-0 left-0 right-0 z-20 safe-top">
                 {/* Feed Tabs */}
                 <div className="flex items-center justify-center gap-6 py-2 bg-black/25 backdrop-blur-sm">
@@ -197,14 +207,13 @@ export default function SpakTok() {
 
             {/* Content */}
             {feedType === 'live' ? (
-              <div className="relative flex h-full flex-col items-center justify-center overflow-hidden px-8 text-center text-white" dir="rtl">
-                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(72,95,211,.25),transparent_58%)]"/>
-                <div className="relative mb-6 flex size-24 items-center justify-center rounded-[28px] border border-[#8daaff]/25 bg-[#273e7f]/25"><Radio className="size-10 text-[#a8c0ff]"/></div>
-                <div className="relative flex items-center gap-2 text-[10px] tracking-[.2em] text-[#8aa9fa]"><Sparkles className="size-3"/>SPAKTOK LIVE</div>
-                <h2 className="relative mt-3 text-2xl font-extrabold">البث المباشر قريبًا</h2>
-                <p className="relative mt-3 max-w-xs text-sm leading-7 text-white/55">نعمل على بثّ آمن وسريع، ولن نعرض بثوثًا تجريبية وكأنها حقيقية.</p>
-                <button onClick={() => setFeedType('forYou')} className="relative mt-7 rounded-2xl bg-[#8faaff] px-6 py-3 text-sm font-bold text-[#0b1632]">العودة للمقاطع</button>
-              </div>
+              <SpaktokLiveHub
+                onOpenLivePreview={() => {
+                  setCameraInitialMode('live')
+                  setShowCamera(true)
+                }}
+                onUserClick={handleUserClick}
+              />
             ) : (
               <div className="absolute inset-0">
                 <VideoFeed key={feedType + (focusedVideoId || '')} feedType={feedType} initialVideoId={focusedVideoId} onUserClick={handleUserClick} onCreate={() => setShowCamera(true)} onDiscover={() => handleTabChange('discover')} />

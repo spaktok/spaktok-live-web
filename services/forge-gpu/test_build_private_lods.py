@@ -1,0 +1,353 @@
+"""GPU-free subprocess-contract tests for actual private GLB LOD production."""
+import hashlib
+import json
+from pathlib import Path
+import struct
+import subprocess
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from build_private_lods import generate_lods
+
+
+def fixture(path: Path, triangles: int, *, uv=True, normal=True,
+            pbr=True, malformed_edges=False) -> None:
+    """A *valid* indexed GLB fixture. No fake/unbacked geometry declarations."""
+    indices = list(range(triangles * 3))
+    if malformed_edges:
+        # Three triangles incident to undirected edge (0,1).
+        indices[:9] = [0, 1, 2, 1, 0, 3, 0, 1, 4]
+    vertex_count = triangles * 3
+    index_bytes = struct.pack("<" + "I"*len(indices), *indices)
+    # Genuine nonzero-area triangles. Fake gltfpack responses retain
+    # valid geometry and image views; no unbacked data or zero extents.
+    xyz, uv_values = [], []
+    for triangle in range(triangles):
+        x = (triangle % 50) * .01
+        y = (triangle // 50) * .01
+        xyz.extend([x, y, 0., x + .004, y, 0., x, y + .004, 0.])
+        uv_values.extend([0., 0., .75, 0., 0., .75])
+    positions = struct.pack("<" + "f"*len(xyz), *xyz)
+    uvs = struct.pack("<" + "f"*len(uv_values), *uv_values)
+    normals = struct.pack("<" + "f"*(vertex_count*3),
+                          *([0.0, 0.0, 1.0]*vertex_count))
+    embedded_png = b"\x89PNG" + b"\x00"*12
+    views = []
+    binary = bytearray()
+    for block in (index_bytes, positions, uvs, normals, embedded_png):
+        views.append({"buffer": 0, "byteOffset": len(binary),
+                      "byteLength": len(block)})
+        binary.extend(block)
+        binary.extend(b"\0" * (-len(binary) % 4))
+    attrs = {"POSITION": 1}
+    if uv:
+        attrs["TEXCOORD_0"] = 2
+    if normal:
+        attrs["NORMAL"] = 3
+    data = {
+        "asset": {"version": "2.0"},
+        "buffers": [{"byteLength": len(binary)}],
+        "bufferViews": views,
+        "accessors": [
+            {"bufferView": 0, "componentType": 5125,
+             "count": len(indices), "type": "SCALAR"},
+            {"bufferView": 1, "componentType": 5126,
+             "count": vertex_count, "type": "VEC3"},
+            {"bufferView": 2, "componentType": 5126,
+             "count": vertex_count, "type": "VEC2"},
+            {"bufferView": 3, "componentType": 5126,
+             "count": vertex_count, "type": "VEC3"},
+        ],
+        "materials": ([{"pbrMetallicRoughness": {
+            "baseColorTexture": {"index": 0},
+        }}] if pbr else []),
+        "textures": [{"source": 0}],
+        "images": [{"bufferView": 4, "mimeType": "image/png"}],
+        "meshes": [{"primitives": [{
+            "attributes": attrs, "indices": 0, "mode": 4, "material": 0,
+        }]}],
+    }
+    raw = json.dumps(data).encode("utf-8")
+    raw += b" " * (-len(raw) % 4)
+    path.write_bytes(
+        struct.pack("<4sII", b"glTF", 2,
+                    20 + len(raw) + 8 + len(binary))
+        + struct.pack("<I4s", len(raw), b"JSON")
+        + raw
+        + struct.pack("<I4s", len(binary), b"BIN\x00")
+        + binary
+    )
+
+
+class MultiLODTests(unittest.TestCase):
+    def test_generates_3_monotonically_smaller_pbr_lods_and_atomic_manifest(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "private-lods"
+            fixture(origin, 1000)
+            before = hashlib.sha256(origin.read_bytes()).hexdigest()
+            calls = []
+            def fake_run(args, **kwargs):
+                calls.append(args)
+                self.assertEqual(kwargs["timeout"], 90)
+                fixture(Path(args[args.index("-o") + 1]),
+                        480 if args[args.index("-si") + 1] == "0.50" else 190)
+                return subprocess.CompletedProcess(args, 0, "", "")
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                result = generate_lods(origin, output)
+            self.assertEqual(len(calls), 2)
+            self.assertTrue(all("-noq" in c and "-km" in c and "-slb" in c
+                                and "-sv" in c for c in calls))
+            self.assertEqual(result["variants"]["lod1"]["topology"]["nonmanifold_edges"], 0)
+            self.assertEqual(result["variants"]["lod2"]["topology"]["degenerate_index_triangles"], 0)
+            self.assertEqual([result["variants"][n]["triangles"]
+                              for n in ("lod0", "lod1", "lod2")],
+                             [1000, 480, 190])
+            self.assertTrue((output / "lod0.glb").exists())
+            self.assertTrue((output / "lod1.glb").exists())
+            self.assertTrue((output / "lod2.glb").exists())
+            self.assertEqual(json.loads((output / "pack.json").read_text()),
+                             result)
+            self.assertFalse(result["published"])
+            self.assertFalse(result["rigged"])
+            self.assertEqual(result["privateStudioRecommendations"]["live"],
+                             "lod2")
+            self.assertEqual(hashlib.sha256(origin.read_bytes()).hexdigest(), before)
+            with self.assertRaises(FileExistsError):
+                generate_lods(origin, output)
+
+    def test_rejects_uv_loss_without_exposing_partial_output(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "private-lods"
+            fixture(origin, 1000)
+            def fake_run(args, **kwargs):
+                fixture(Path(args[args.index("-o") + 1]), 400, uv=False)
+                return subprocess.CompletedProcess(args, 0, "", "")
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                with self.assertRaisesRegex(ValueError, "lod_uvs_missing"):
+                    generate_lods(origin, output)
+            self.assertFalse(output.exists())
+
+    def test_rejects_nonreducing_geometry_without_partial_delivery(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "private-lods"
+            fixture(origin, 1000)
+            def fake_run(args, **kwargs):
+                fixture(Path(args[args.index("-o") + 1]), 1000)
+                return subprocess.CompletedProcess(args, 0, "", "")
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                with self.assertRaisesRegex(ValueError, "lod_did_not_reduce"):
+                    generate_lods(origin, output)
+            self.assertFalse(output.exists())
+
+    def test_records_uv_surface_metrics_without_claiming_visual_quality(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "private-lods"
+            fixture(origin, 1000)
+            def fake_run(args, **kwargs):
+                fixture(Path(args[args.index("-o") + 1]),
+                        480 if args[args.index("-si") + 1] == "0.50" else 190)
+                return subprocess.CompletedProcess(args, 0, "", "")
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                result = generate_lods(origin, output)
+            for name in ("lod0", "lod1", "lod2"):
+                audit = result["variants"][name]["uvSurface"]
+                self.assertGreater(audit["surface_area_sum"], 0)
+                self.assertEqual(audit["uv_collapsed_triangles"], 0)
+                self.assertFalse(audit["visual_quality_tested"])
+            self.assertTrue(result["review"]["surfaceAreaDriftRequiresHumanJudgment"])
+
+    def test_refuses_lod_with_collapsed_uv_rate(self):
+        from build_private_lods import _check_quality, _check_file
+        from copy import deepcopy
+        with tempfile.TemporaryDirectory() as root:
+            owner = Path(root) / "original.glb"
+            fixture(owner, 1000)
+            original = _check_file(owner)
+            failed = deepcopy(original)
+            failed["triangles"] = 450
+            failed["uvSurface"]["uv_collapsed_fraction"] = 0.95
+            with self.assertRaisesRegex(ValueError,
+                                        "lod_uv_collapse_fraction_too_high"):
+                _check_quality(original, failed, original)
+
+    def test_rejects_nonmanifold_lod_and_never_exposes_pack(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "private-lods"
+            fixture(origin, 1000)
+            def fake_run(args, **kwargs):
+                fixture(Path(args[args.index("-o") + 1]), 450,
+                        malformed_edges=True)
+                return subprocess.CompletedProcess(args, 0, "", "")
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                with self.assertRaisesRegex(ValueError, "lod_topology_nonmanifold"):
+                    generate_lods(origin, output)
+            self.assertFalse(output.exists())
+
+    def test_rejects_defective_input_before_running_optimizer(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "broken.glb"
+            fixture(origin, 1000, malformed_edges=True)
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run") as process:
+                with self.assertRaisesRegex(ValueError, "lod_source_topology_requires_repair"):
+                    generate_lods(origin, Path(root) / "lod")
+                process.assert_not_called()
+
+    def test_conservative_retries_reject_bad_topology_and_disclose_actual_ratios(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "private-lods"
+            fixture(origin, 1000)
+            before = hashlib.sha256(origin.read_bytes()).hexdigest()
+            calls = []
+
+            def fake_run(args, **kwargs):
+                calls.append(args)
+                self.assertIn("-se", args)
+                cap = args[args.index("-se") + 1]
+                target = Path(args[args.index("-o") + 1])
+                ratio = args[args.index("-si") + 1]
+                if ratio == "0.50":
+                    fixture(target, 930 if cap == "0.0014" else 920,
+                            malformed_edges=(cap == "0.0014"))
+                else:
+                    fixture(target, 890 if cap == "0.0025" else 880,
+                            malformed_edges=(cap == "0.0025"))
+                return subprocess.CompletedProcess(args, 0, "", "")
+
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                manifest = generate_lods(origin, output, conservative=True)
+            self.assertEqual(len(calls), 4)
+            self.assertEqual(manifest["optimizationMode"],
+                             "bounded-conservative-cpu")
+            self.assertFalse(manifest["triangleTargetsMet"])
+            self.assertTrue(manifest["needsOptimization"])
+            self.assertEqual(manifest["privateStudioRecommendations"], {})
+            self.assertTrue(manifest["review"]["automaticDistributionBlocked"])
+            self.assertTrue(manifest["review"]["requiresVisualReview"])
+            self.assertEqual(manifest["variants"]["lod1"]["triangles"], 920)
+            self.assertEqual(manifest["variants"]["lod2"]["triangles"], 880)
+            self.assertAlmostEqual(
+                manifest["variants"]["lod1"]["achievedTriangleRatio"], .92)
+            self.assertAlmostEqual(
+                manifest["variants"]["lod2"]["achievedTriangleRatio"], .88)
+            self.assertEqual(
+                manifest["variants"]["lod1"]["maxSimplificationErrorUsed"],
+                "0.0012")
+            self.assertEqual(
+                manifest["variants"]["lod2"]["maxSimplificationErrorUsed"],
+                "0.0022")
+            self.assertEqual(
+                [v["result"] for v in
+                 manifest["variants"]["lod1"]["optimizationAttempts"]],
+                ["rejected", "accepted"])
+            self.assertEqual(hashlib.sha256(origin.read_bytes()).hexdigest(),
+                             before)
+            self.assertEqual(json.loads((output / "pack.json").read_text()),
+                             manifest)
+
+    def test_conservative_all_attempts_rejected_no_partial_pack(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "rejected"
+            fixture(origin, 1000)
+            calls = []
+
+            def fake_run(args, **kwargs):
+                calls.append(args)
+                fixture(Path(args[args.index("-o") + 1]), 900,
+                        malformed_edges=True)
+                return subprocess.CompletedProcess(args, 0, "", "")
+
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                with self.assertRaisesRegex(
+                    ValueError, "lod_no_valid_conservative_candidate_lod1"
+                ):
+                    generate_lods(origin, output, conservative=True)
+            self.assertEqual(len(calls), 4)
+            self.assertFalse(output.exists())
+
+    def test_conservative_failed_program_cannot_reuse_stale_candidate(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "rejected"
+            fixture(origin, 1000)
+            calls = []
+
+            def fake_run(args, **kwargs):
+                calls.append(args)
+                if len(calls) == 1:
+                    fixture(Path(args[args.index("-o") + 1]), 900,
+                            malformed_edges=True)
+                    return subprocess.CompletedProcess(args, 0, "", "")
+                # An attempted command fails before writing an output.
+                return subprocess.CompletedProcess(args, 1, "", "failure")
+
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run):
+                with self.assertRaisesRegex(
+                    ValueError, "lod_no_valid_conservative_candidate_lod1"
+                ):
+                    generate_lods(origin, output, conservative=True)
+            self.assertFalse(output.exists())
+
+    def test_position_welded_source_defects_block_recommendations_even_with_small_lods(self):
+        from build_private_lods import scan_glb_position_weld
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            output = Path(root) / "private-lods"
+            fixture(origin, 1000)
+
+            def fake_weld(path):
+                report = scan_glb_position_weld(path)
+                if path.name == "owner.glb":
+                    report["nonmanifold_edges_after_position_weld"] = 3
+                return report
+
+            def fake_run(args, **kwargs):
+                count = 480 if args[args.index("-si") + 1] == "0.50" else 190
+                fixture(Path(args[args.index("-o") + 1]), count)
+                return subprocess.CompletedProcess(args, 0, "", "")
+
+            with patch("build_private_lods.shutil.which", return_value="/bin/true"), \
+                 patch("build_private_lods.subprocess.run", side_effect=fake_run), \
+                 patch("build_private_lods.scan_glb_position_weld",
+                       side_effect=fake_weld):
+                result = generate_lods(origin, output)
+            self.assertTrue(result["triangleTargetsMet"])
+            self.assertTrue(result["positionWeldGeometryReviewRequired"])
+            self.assertTrue(result["needsOptimization"])
+            self.assertEqual(result["privateStudioRecommendations"], {})
+            self.assertTrue(result["review"]["automaticDistributionBlocked"])
+            self.assertTrue(result["review"]["requiresVisualReview"])
+            self.assertEqual(
+                result["variants"]["lod0"]["positionWeldTopology"][
+                    "nonmanifold_edges_after_position_weld"], 3
+            )
+
+    def test_no_gpu_or_download_when_binary_missing(self):
+        with tempfile.TemporaryDirectory() as root:
+            origin = Path(root) / "owner.glb"
+            fixture(origin, 1000)
+            with patch("build_private_lods.shutil.which", return_value=None), \
+                 patch("build_private_lods.subprocess.run") as run:
+                with self.assertRaises(FileNotFoundError):
+                    generate_lods(origin, Path(root) / "lod")
+                run.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()

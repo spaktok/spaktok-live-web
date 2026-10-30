@@ -32,6 +32,10 @@ import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 import { APP_NAME } from "@/lib/brand";
+import {
+ DEFAULT_DEVICE_PREFERENCES,SPAKTOK_PREFERENCES_KEY,
+ SPAKTOK_PREFERENCES_EVENT,parseDevicePreferences,
+} from '@/lib/video/user-playback-preferences'
 import { useAuth } from "@/hooks/use-auth";
 import { supportedLanguages, useLanguage, type LanguageCode } from '@/components/language-provider'
 
@@ -50,12 +54,9 @@ interface SettingItem {
 }
 
 const defaultSettings = {
-  notifications: true,
-  darkMode: true,
-  privateAccount: false,
-  twoFactor: false,
-  dataSaver: false,
-  autoPlay: true,
+ ...DEFAULT_DEVICE_PREFERENCES,
+ privateAccount:false,
+ twoFactor:false,
 };
 
 interface SettingSection {
@@ -68,6 +69,11 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const { language, languageName, setLanguage, t } = useLanguage()
   const languageLabel = t('language', 'اللغة')
   const [settings, setSettings] = useState(defaultSettings);
+  const [exporting,setExporting]=useState(false)
+  useEffect(()=>{
+    const stored=parseDevicePreferences(window.localStorage.getItem(SPAKTOK_PREFERENCES_KEY))
+    setSettings(prev=>({...prev,...stored}))
+  },[])
   const [account, setAccount] = useState<{ displayName: string; username: string; avatarUrl: string; followers: number; following: number; likes: number; isVerified: boolean } | null>(null)
 
   useEffect(() => {
@@ -105,13 +111,13 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
         { icon: <Eye className="w-5 h-5" />, label: "حساب خاص", description: "لم يُفعّل على الخادم بعد", action: "toggle", settingKey: "privateAccount", value: settings.privateAccount },
         { icon: <Shield className="w-5 h-5" />, label: "التحقق بخطوتين", description: "قيد التطوير — غير مفعّل حاليًا", action: "toggle", settingKey: "twoFactor", value: settings.twoFactor },
         { icon: <UserPlus className="w-5 h-5" />, label: "الحسابات المحظورة", action: "navigate" },
-        { icon: <Database className="w-5 h-5" />, label: "تحميل بياناتي", action: "navigate" },
+        { icon: <Database className="w-5 h-5" />, label: "تحميل بياناتي", description:"تنزيل نسخة جزئية من معلومات الحساب في ملف JSON", action: "navigate" },
       ],
     },
     {
       title: "الإشعارات",
       items: [
-        { icon: <Bell className="w-5 h-5" />, label: "تفعيل الإشعارات", action: "toggle", settingKey: "notifications", value: settings.notifications },
+        { icon: <Bell className="w-5 h-5" />, label: "تفعيل الإشعارات", description:"تفضيل محلي لهذا الجهاز، وليس إذن إشعارات النظام", action: "toggle", settingKey: "notifications", value: settings.notifications },
       ],
     },
     {
@@ -139,6 +145,27 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
     },
   ];
 
+  const downloadMyData = async()=>{
+    if(exporting)return
+    setExporting(true)
+    try{
+      const response=await fetch('/api/account/export',{
+        method:'GET',credentials:'same-origin',cache:'no-store',
+      })
+      if(!response.ok)throw Error('export_unavailable')
+      const file=await response.blob()
+      if(file.size>12*1024*1024)throw Error('export_too_large')
+      const url=URL.createObjectURL(file)
+      try{
+        const a=document.createElement('a')
+        a.href=url;a.download='spaktok-account-export.json'
+        document.body.appendChild(a);a.click();a.remove()
+      }finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000)}
+      showFeedback('تم تجهيز ملف الحساب. النسخة جزئية؛ يمكن طلب نسخة أشمل من المسؤول عن المنصة.')
+    }catch{showFeedback('تعذر تجهيز ملف بياناتك حاليًا. حاول مجددًا.')}
+    finally{setExporting(false)}
+  }
+
   const toggleSetting = (key: keyof typeof settings) => {
     if (key === 'privateAccount' || key === 'twoFactor') {
       showFeedback('هذا الخيار لا يمكن تفعيله بعد؛ لم يتم ربط الحماية مع الخادم.')
@@ -146,11 +173,17 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
     }
     setSettings((prev) => {
       const nextValue = !prev[key]
-      if (key === "darkMode") {
-        document.documentElement.classList.toggle("dark", nextValue)
-      }
-      setFeedback(`${key === "darkMode" ? "الوضع الليلي" : key === "notifications" ? "الإشعارات" : key === "dataSaver" ? "توفير البيانات" : "الإعداد"} ${nextValue ? "مفعّل" : "متوقف"}`)
-      return { ...prev, [key]: nextValue }
+      const next={...prev,[key]:nextValue}
+      try{
+        window.localStorage.setItem(SPAKTOK_PREFERENCES_KEY,JSON.stringify({
+          notifications:next.notifications,darkMode:next.darkMode,
+          dataSaver:next.dataSaver,autoPlay:next.autoPlay,
+        }))
+        window.dispatchEvent(new Event(SPAKTOK_PREFERENCES_EVENT))
+      }catch{/* UI state still works in private mode. */}
+      if(key==='darkMode')document.documentElement.classList.toggle('dark',nextValue)
+      setFeedback(`${key==='darkMode'?'الوضع الليلي':key==='notifications'?'تفضيل الإشعارات':key==='dataSaver'?'توفير بيانات الفيديو':'الإعداد'} ${nextValue?'مفعّل':'متوقف'}`)
+      return next
     })
   };
 
@@ -242,8 +275,9 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                       return;
                     }
   if (item.action === "navigate") {
-          if (item.label === languageLabel) return
-          showFeedback(`${item.label}: ستتوفر إعداداته التفصيلية هنا قريباً`);
+          if(item.label===languageLabel)return
+          if(item.label==='تحميل بياناتي'){void downloadMyData();return}
+          showFeedback(`${item.label}: غير مفعّل على الخادم بعد`);
           return;
         }
                     if (item.action === "danger") {
@@ -267,7 +301,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                     {item.icon}
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-sm">{item.label}</p>
+                    <p className="font-medium text-sm">{item.label}{item.label==='تحميل بياناتي'&&exporting?' — جارٍ التجهيز…':''}</p>
                     {item.description && (
                       <p className="text-xs text-muted-foreground">{item.description}</p>
                     )}

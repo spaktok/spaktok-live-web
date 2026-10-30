@@ -42,6 +42,7 @@ RUN useradd -m -u 10001 forge \
 COPY --chown=forge:forge services/forge-gpu/server.py /opt/spaktok/server.py
 COPY --chown=forge:forge services/forge-gpu/gpu_preflight.py /opt/spaktok/gpu_preflight.py
 COPY --chown=forge:forge services/forge-gpu/gpu_ticket.py /opt/spaktok/gpu_ticket.py
+COPY --chown=forge:forge services/forge-gpu/gpu_health.py /opt/spaktok/gpu_health.py
 WORKDIR /opt/spaktok
 USER forge
 EXPOSE 8000

@@ -74,4 +74,10 @@ def validate_gpu_ticket(
         raise InvalidGPUTicket("ticket_invalid_size")
     if claim.get("mime") not in ("image/png","image/jpeg","image/webp"):
         raise InvalidGPUTicket("ticket_invalid_mime")
+    # Exact, signed server-side model profile. Never accept runtime code,
+    # shell commands, user model URLs or arbitrary pipeline settings.
+    if claim.get("profile", "mobile-preview") not in (
+        "mobile-preview", "detail-preview", "studio-hd"
+    ):
+        raise InvalidGPUTicket("ticket_invalid_profile")
     return claim

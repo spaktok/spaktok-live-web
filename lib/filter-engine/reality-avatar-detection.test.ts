@@ -13,7 +13,7 @@ const points=()=>{
 }
 describe('Live avatar on-device diagnostic and no-coefficient expression fallback',()=>{
  it('reads a bright neutral frame and identifies low light',()=>{
-  expect(avatarLuminance(new Uint8Array([255,255,255,255,0,0,0,255]))).toBe(127.5)
+  expect(avatarLuminance(new Uint8Array([255,255,255,255,0,0,0,255]))).toBeCloseTo(127.5,10)
   expect(avatarLuminance(new Uint8Array([0,0,0,0]))).toBeNull()
   expect(avatarLuminance(new Uint8Array([255,255,255]))).toBeNull()
   expect(chooseAvatarTrackerIssue({videoReady:true,hasFace:false,poseValid:false,brightness:25,inferenceFailed:false})).toBe('too-dark')

@@ -5,7 +5,7 @@ import Link from 'next/link'
 import * as THREE from 'three'
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js'
 import {createLuxeAvatar,LUXE_AVATAR_PRESETS,type LuxeAvatarStyle} from '@/lib/filter-engine/reality-avatar-luxe'
-import {loadLocalStudioGlb,loadStudioFanoutManifest} from '@/lib/filter-engine/reality-local-asset-handoff'
+import {loadLocalStudioGlb,loadStudioFanoutManifest,loadVerifiedDirectorHandoff} from '@/lib/filter-engine/reality-local-asset-handoff'
 import {assertSelfContainedVideo3DGlb,VIDEO_3D_MAX_GLB_BYTES} from '@/lib/filter-engine/reality-video3d-project'
 import {loadFaceLandmarker,configureFace3DExtras,recoverFaceLandmarkerOnCpu} from '@/lib/filter-engine/vision'
 import {avatarLandmarkExpression,avatarLuminance,chooseAvatarTrackerIssue,
@@ -455,25 +455,22 @@ export default function RealityAvatarStudio(){
   if(handoffBusy)return
   setHandoffBusy(true)
   try{
-   const file=await loadLocalStudioGlb()
+   const plan=await loadStudioFanoutManifest()
+   const target=plan?.project.outputTargets.includes('avatar')?'avatar':'live'
+   const verified=plan?await loadVerifiedDirectorHandoff(target):null
+   const file=verified?.file??(plan?null:await loadLocalStudioGlb())
    if(!file){
-    setMessage('لا يوجد GLB محلي حديث. اختر الصورة في Reality Studio وصدّر نموذج GLB أولًا.')
+    setMessage('لا يوجد GLB مطابق لمسودة AI Director، أو لم يُوجّه لهذا القسم.')
     return
    }
-   const plan=await loadStudioFanoutManifest()
+   // Check target and SHA256 before WebGL parsing or telling the creator
+   // that the avatar/live draft was successfully dispatched.
    const loaded=await loadGlbFile(file)
    if(!loaded)throw Error('studio_avatar_import_failed')
-   // Keep private GLB available for other departments for 24 hours.
-   if(plan&&plan.source.fileName===file.name&&plan.source.bytes===file.size){
-    const bytes=await file.arrayBuffer()
-    const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))
-    const sha=Array.from(digest).map(x=>x.toString(16).padStart(2,'0')).join('')
-    if(sha===plan.source.sha256){
-     const blockers=plan.outputs.find(x=>x.target==='avatar'||
-      x.target==='live')?.blockers??[]
-     setMessage('تم استيراد GLB من AI Director وبصمته مطابقة. '+
-      'متطلبات الأفاتار/اللايف: '+blockers.join(' · '))
-    }
+   if(verified){
+    const blockers=verified.manifest.outputs.find(x=>x.target===target)?.blockers??[]
+    setMessage('تم استيراد GLB من AI Director بعد مطابقة البصمة. '+
+     'Rig والتتبّع يحتاجان فحصًا حقيقيًا: '+blockers.join(' · '))
    }
   }catch(error){setMessage('تعذر جلب المجسم المحلي: '+String(error))}
   finally{setHandoffBusy(false)}

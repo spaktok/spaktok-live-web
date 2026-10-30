@@ -1,0 +1,95 @@
+import {describe,expect,it} from 'vitest'
+import type {StudioGlbAudit} from './reality-production-glb-audit'
+import {createStudioFanoutManifest} from './spaktok-studio-fanout'
+import {buildSpaktokQualityEvidence} from './spaktok-forge-quality-evidence'
+
+const fixture=(bytes=5_343_540,hd=false)=>{
+ const audit:StudioGlbAudit={
+  valid:true,selfContained:true,triangles:100_000,
+  materials:1,meshCount:1,primitives:1,textures:2,
+  hasUV:true,hasNormals:true,hasPBR:true,
+  rigTargets:0,animations:0,skins:0,
+  requiredExtensions:[],warnings:[],
+ }
+ return createStudioFanoutManifest({
+  fileName:'private.glb',sha256:'a'.repeat(64),bytes,audit,
+  rights:'original',description:'Spaktok personal draft',
+  targets:['avatar','live','gift','world'],
+  sourceEngine:hd?'ai-360-gpu':'existing-glb',
+  gpuProfile:hd?'studio-hd':undefined,
+ })
+}
+describe('Spaktok objective Rodin-comparison evidence',()=>{
+ it('reports real structural metrics but never invents an image-fidelity winner',()=>{
+  const value=buildSpaktokQualityEvidence(fixture())
+  expect(value.measured.triangleCount).toBe(100_000)
+  expect(value.verifiedPilotUvAudit).toBeNull()
+  expect(value.measured.embeddedTextureImageCount).toBe(2)
+  expect(value.measured.hasPBRMaterial).toBe(true)
+  expect(value.fidelity.referenceImageSimilarityMeasured).toBe(false)
+  expect(value.competitorComparison.verifiedWinner).toBeNull()
+  expect(value.publicReleaseApproved).toBe(false)
+  expect(value.studios).toHaveLength(4)
+  expect(value.studios.every(s=>!s.published)).toBe(true)
+ })
+ it('records HD provenance without calling it a fidelity win',()=>{
+  const result=buildSpaktokQualityEvidence(fixture(5_343_540,true))
+  expect(result.generationProfile).toBe('studio-hd')
+  expect(result.competitorComparison.verifiedWinner).toBeNull()
+ })
+ it('blocks prototype non-manifold LODs from all production studios',()=>{
+  const audit:StudioGlbAudit={
+   valid:true,selfContained:true,triangles:54_132,materials:1,
+   meshCount:1,primitives:1,textures:2,
+   hasUV:true,hasNormals:true,hasPBR:true,
+   rigTargets:0,animations:0,skins:0,requiredExtensions:[],warnings:[],
+  }
+  const manifest=createStudioFanoutManifest({
+   fileName:'spaktok-first-lod1.glb',sha256:'3c0cb4c850450dd60195639199ec96f1260303cf7f4cf9272ff879e5d9b2ed8b',
+   bytes:2_825_124,audit,description:'private LOD1 preview',
+   rights:'original',targets:['avatar','live','filter','gift','world'],
+   sourceEngine:'existing-glb',previewTopologyBlocked:true,
+  })
+  expect(manifest.outputs).toHaveLength(5)
+  for(const out of manifest.outputs){
+   expect(out.state).toBe('needs-optimization')
+   expect(out.blockers).toContain('non_manifold_lod_requires_professional_retopology_and_visual_qa')
+   expect(out.published).toBe(false)
+  }
+  const evidence=buildSpaktokQualityEvidence(manifest)
+  expect(evidence.verifiedPilotUvAudit?.lodId).toBe('lod1')
+  expect(evidence.verifiedPilotUvAudit?.uvCollapsedTriangles).toBe(0)
+  expect(evidence.verifiedPilotUvAudit?.triangleSurfaceAreaChangePercent)
+   .toBeCloseTo(-13.4723,4)
+  expect(evidence.verifiedPilotUvAudit?.triangleUvAreaSumChangePercent)
+   .toBeCloseTo(47.5168,4)
+  expect(evidence.verifiedPilotUvAudit?.visualInspectionCompleted).toBe(false)
+  expect(evidence.verifiedPilotUvAudit?.approvedForLive).toBe(false)
+  expect(evidence.publicReleaseApproved).toBe(false)
+ })
+ it('includes measured edge defects without claiming mesh integrity',()=>{
+  const evidence=buildSpaktokQualityEvidence(fixture(),{
+   status:'checked',triangles:100_000,edges:200_000,
+   boundaryEdges:40_000,nonManifoldEdges:825,
+   degenerateIndexTriangles:4,checkedPrimitives:1,
+   publishReady:false,
+  })
+  expect(evidence.topology.scanStatus).toBe('checked')
+  expect(evidence.topology.nonManifoldEdges).toBe(825)
+  expect(evidence.topology.boundaryEdges).toBe(40_000)
+  expect(evidence.topology.manifoldCertified).toBe(false)
+  expect(evidence.publicReleaseApproved).toBe(false)
+ })
+ it('marks unscanned meshes as unknown rather than safe',()=>{
+  const evidence=buildSpaktokQualityEvidence(fixture())
+  expect(evidence.topology.scanStatus).toBe('not-checked')
+  expect(evidence.topology.nonManifoldEdges).toBeNull()
+  expect(evidence.topology.manifoldCertified).toBe(false)
+ })
+ it('identifies large models as outside mobile budgets',()=>{
+  const report=buildSpaktokQualityEvidence(fixture(17*1024*1024))
+  expect(report.mobile.under15MiB).toBe(false)
+  expect(report.mobile.testedOnAndroid).toBe(false)
+  expect(report.studios.every(s=>s.state==='needs-optimization')).toBe(true)
+ })
+})

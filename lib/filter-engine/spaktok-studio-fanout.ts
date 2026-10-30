@@ -1,10 +1,32 @@
 import type {StudioGlbAudit} from './reality-production-glb-audit'
+import type {ForgeGpuProfile} from './spaktok-forge-gpu-plan'
+import {SPAKTOK_FIRST_GPU_LODS} from './spaktok-first-gpu-lods'
 import {
  DIRECTOR_TARGETS,type DirectorTarget,
 } from './spaktok-ai-director'
 import {
  RODIN_HEAD_CALIBRATED_SHA256,RODIN_HEAD_PREVIEW_HEIGHT_M,
 } from './rodin-owner-head'
+
+const INSECURE_PREVIEW_LOD_SHA256=new Set<string>([
+ SPAKTOK_FIRST_GPU_LODS.lod1.sha256,
+ SPAKTOK_FIRST_GPU_LODS.lod2.sha256,
+])
+// Professionally simplified but did NOT reach their 50% / 20% targets.
+// Do not allow a SHA-pinned import to silently bypass this quality gate.
+const INCOMPLETE_LOD_BUDGET_SHA256=new Set<string>([
+ SPAKTOK_FIRST_GPU_LODS.lod1c.sha256,
+ SPAKTOK_FIRST_GPU_LODS.lod2c.sha256,
+])
+// Position-welded (tolerance = 1e-6 of bounding diagonal) seam/overlap
+// incidence >2 was measured in R2 for the actual source and two candidates.
+// This is diagnostic: UV seams or overlapping shells can explain it. Block
+// automatic department handoff pending visual/surface interpretation.
+const POSITION_WELD_REVIEW_SHA256=new Set<string>([
+ SPAKTOK_FIRST_GPU_LODS.lod0.sha256,
+ SPAKTOK_FIRST_GPU_LODS.lod1c.sha256,
+ SPAKTOK_FIRST_GPU_LODS.lod2c.sha256,
+])
 
 /** A small, safe, versioned build manifest. Contains NO image or GLB bytes,
  * access tokens, signed URLs or authorization to publish. The real asset
@@ -40,6 +62,7 @@ export type StudioFanoutManifest=Readonly<{
   rightsAttested:boolean
   outputTargets:readonly DirectorTarget[]
   gpuJobsUsed:0|1
+  gpuProfile?:ForgeGpuProfile
   sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d'
  }>
  calibration:Readonly<{
@@ -65,6 +88,7 @@ const DESTINATIONS:Readonly<Record<DirectorTarget,string>>={
  filter:'/reality-studio',
  gift:'/gift-studio',
  world:'/spaktok-world',
+ video:'/video-studio',
 }
 const safeFile=(s:string)=>/^[^\\/\x00-\x1f]{1,120}\.glb$/i.test(s)
 const validHash=(s:string)=>/^[a-f0-9]{64}$/.test(s)
@@ -75,6 +99,10 @@ export function createStudioFanoutManifest(input:Readonly<{
  description:string;rights:'original'|'licensed'
  targets:readonly DirectorTarget[]
  gpuJobsUsed?:0|1;createdAt?:string
+ gpuProfile?:ForgeGpuProfile
+ // Explicit QA blocker for prototype cluster LODs with non-manifold edges.
+ previewTopologyBlocked?:boolean
+ topologyScanUnverified?:boolean
  sourceEngine?:'existing-glb'|'ai-360-gpu'|'browser-2.5d'
 }>):StudioFanoutManifest{
  if(!safeFile(input.fileName)||!validHash(input.sha256)||
@@ -89,8 +117,16 @@ export function createStudioFanoutManifest(input:Readonly<{
   !targets.every(target=>DIRECTOR_TARGETS.includes(target)))
   throw Error('studio_fanout_targets_invalid')
  if(input.description.length>1000||
-  !['original','licensed'].includes(input.rights))
+  !['original','licensed'].includes(input.rights)||
+  (input.gpuProfile!==undefined&&
+   (!['mobile-preview','detail-preview','studio-hd'].includes(input.gpuProfile)||
+    input.sourceEngine!=='ai-360-gpu')))
   throw Error('studio_fanout_project_invalid')
+ const knownInvalidTopology=INSECURE_PREVIEW_LOD_SHA256.has(input.sha256)
+ const incompleteLodBudget=INCOMPLETE_LOD_BUDGET_SHA256.has(input.sha256)
+ const positionWeldReview=POSITION_WELD_REVIEW_SHA256.has(input.sha256)
+ const topologyBlocked=Boolean(input.previewTopologyBlocked||knownInvalidTopology)
+ const topologyUnknown=input.topologyScanUnverified===true
  const mobileBlocked=input.bytes>15*1024*1024||
   input.audit.triangles>150000||input.audit.textures>12||
   !input.audit.hasUV||!input.audit.hasNormals||
@@ -105,6 +141,14 @@ export function createStudioFanoutManifest(input:Readonly<{
  ]
  const outputs:StudioOutputProfile[]=targets.map(target=>{
   const blockers=[...technicalReasons]
+  if(topologyBlocked)
+   blockers.push('non_manifold_lod_requires_professional_retopology_and_visual_qa')
+  if(topologyUnknown)
+   blockers.push('glb_topology_scan_unverified_requires_professional_review')
+  if(incompleteLodBudget)
+   blockers.push('conservative_lod_triangle_budget_unmet_requires_qa')
+  if(positionWeldReview)
+   blockers.push('position_welded_edges_require_visual_surface_review')
   const avatar=target==='avatar'||target==='live'
   if(input.sourceEngine==='browser-2.5d')
    blockers.push('local_relief_is_not_a_full_360_reconstruction')
@@ -114,11 +158,13 @@ export function createStudioFanoutManifest(input:Readonly<{
   if(target==='filter')blockers.push('face_anchor_and_occlusion_not_calibrated')
   if(target==='gift')blockers.push('gift_effect_animation_and_payment_review_required')
   if(target==='world')blockers.push('collision_scale_and_lod_not_verified')
+  if(target==='video')blockers.push('video_timeline_source_and_keyframes_not_verified')
   blockers.push('real_android_fps_and_thermal_not_verified')
   blockers.push('human_rights_and_publication_review_required')
   return {
    target,destination:DESTINATIONS[target],
-   state:mobileBlocked?'needs-optimization':'private-preview',
+   state:mobileBlocked||topologyBlocked||topologyUnknown||
+    incompleteLodBudget||positionWeldReview?'needs-optimization':'private-preview',
    visualScale:'auto-fit-preview',
    anchor:avatar?'head':target==='filter'?'nose_bridge':
     target==='world'?'ground':'object-center',
@@ -144,6 +190,7 @@ export function createStudioFanoutManifest(input:Readonly<{
    description:input.description.trim(),
    rights:input.rights,rightsAttested:true,
    outputTargets:targets,gpuJobsUsed:input.gpuJobsUsed??0,
+   gpuProfile:input.gpuProfile,
    sourceEngine:input.sourceEngine??'existing-glb',
   },
   calibration:{
@@ -181,6 +228,9 @@ export function assertStudioFanoutManifest(value:unknown):
   v.project.description.length>1000||
   !['existing-glb','ai-360-gpu','browser-2.5d'].includes(
    v.project.sourceEngine)||
+  (v.project.gpuProfile!==undefined&&
+   (!['mobile-preview','detail-preview','studio-hd'].includes(v.project.gpuProfile)||
+    v.project.sourceEngine!=='ai-360-gpu'))||
   !Array.isArray(v.project.outputTargets)||
   !Array.isArray(v.outputs)||v.outputs.length<1||
   v.outputs.length>DIRECTOR_TARGETS.length||
@@ -189,6 +239,9 @@ export function assertStudioFanoutManifest(value:unknown):
    t=>DIRECTOR_TARGETS.includes(t))||
   new Set(v.project.outputTargets).size!==v.outputs.length)
   throw Error('studio_fanout_manifest_invalid')
+ const knownTopologyDefect=INSECURE_PREVIEW_LOD_SHA256.has(v.source.sha256)
+ const knownIncompleteBudget=INCOMPLETE_LOD_BUDGET_SHA256.has(v.source.sha256)
+ const knownWeldReview=POSITION_WELD_REVIEW_SHA256.has(v.source.sha256)
  for(let i=0;i<v.outputs.length;i++){
   // Array.isArray narrows a readonly tuple/array to any[] in TS.
   // Reassert the already validated schema before indexed access.
@@ -198,7 +251,19 @@ export function assertStudioFanoutManifest(value:unknown):
    out.destination!==DESTINATIONS[out.target as DirectorTarget]||
    !['private-preview','needs-optimization'].includes(out.state)||
    out.published!==false||!Array.isArray(out.blockers)||
-   !out.blockers.includes('human_rights_and_publication_review_required'))
+   !out.blockers.includes('human_rights_and_publication_review_required')||
+   (knownTopologyDefect&&(
+    out.state!=='needs-optimization'||
+    !out.blockers.includes('non_manifold_lod_requires_professional_retopology_and_visual_qa')
+   ))||
+   (knownIncompleteBudget&&(
+    out.state!=='needs-optimization'||
+    !out.blockers.includes('conservative_lod_triangle_budget_unmet_requires_qa')
+   ))||
+   (knownWeldReview&&(
+    out.state!=='needs-optimization'||
+    !out.blockers.includes('position_welded_edges_require_visual_surface_review')
+   )))
    throw Error('studio_fanout_output_invalid')
  }
  if(v.review?.publicReleaseApproved!==false||

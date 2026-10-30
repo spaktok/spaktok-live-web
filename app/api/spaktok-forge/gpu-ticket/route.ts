@@ -1,10 +1,9 @@
 import {NextRequest,NextResponse} from 'next/server'
 import {createHmac} from 'node:crypto'
-import {getNativeUser,rateLimit} from '@/lib/native/auth'
+import {resolveForgeGpuBackend,type ForgeGpuBackend} from '@/lib/server/spaktok-forge-provider'
+import {getNativeUser,rateLimit,nativeAuthReady} from '@/lib/native/auth'
 import {queryD1} from '@/lib/native/d1'
-import {
- parseForgeDailyJobLimit,FORGE_QUOTA_CLAIM_SQL,
-} from '@/lib/server/spaktok-forge-budget'
+import {FORGE_QUOTA_CLAIM_SQL} from '@/lib/server/spaktok-forge-budget'
 
 /** Browser-to-operator GPU short-lived one-use grant.
  *
@@ -26,59 +25,43 @@ const json=(body:unknown,status=200)=>NextResponse.json(body,{
   'cache-control':'private,no-store','x-content-type-options':'nosniff',
  },
 })
-function config(origin:string){
- if(process.env.SPAKTOK_FORGE_GPU_ENABLED!=='true'||
-  process.env.SPAKTOK_FORGE_GPU_DIRECT_ENABLED!=='true')
-  return null
- const globalCap=parseForgeDailyJobLimit(
-  process.env.SPAKTOK_FORGE_GPU_DAILY_LIMIT)
- if(globalCap===null)return null
- const expectedOrigin=process.env.SPAKTOK_FORGE_GPU_BROWSER_ORIGIN??''
- const host=process.env.SPAKTOK_FORGE_GPU_HOST??''
- const urlText=process.env.SPAKTOK_FORGE_GPU_URL??''
- const token=process.env.SPAKTOK_FORGE_GPU_TOKEN??''
- if(!expectedOrigin||expectedOrigin!==origin||
-  token.length<32||!urlText||!host)return null
- try{
-  const url=new URL(urlText)
-  const originURL=new URL(expectedOrigin)
-  if(originURL.protocol!=='https:'||originURL.origin!==expectedOrigin||
-   url.protocol!=='https:'||url.hostname!==host||
-   url.port||url.username||url.password||url.hash||url.search||
-   url.pathname!=='/v1/generate'||host==='localhost'||
-   !host.endsWith('.proxy.runpod.net')||
-   /^(?:127\.|10\.|192\.168\.|169\.254\.|0\.|::1$)/.test(host))
-   return null
-  return {url:url.toString(),token,globalCap}
- }catch{return null}
-}
+const config=(origin:string)=>resolveForgeGpuBackend(process.env,origin)
 const allowed=(request:NextRequest)=>
  request.headers.get('origin')===request.nextUrl.origin&&
  request.headers.get('sec-fetch-site')!=='cross-site'
 
-async function gpuHealthy(cfg:{url:string}):Promise<boolean>{
+async function gpuStatus(cfg:ForgeGpuBackend):Promise<{online:boolean;hdConfigured:boolean}>{
  try{
   const healthUrl=new URL('/health',cfg.url)
   const r=await fetch(healthUrl.toString(),{
    method:'GET',cache:'no-store',redirect:'error',
    signal:AbortSignal.timeout(4000),
   })
-  if(!r.ok)return false
+  if(!r.ok)return {online:false,hdConfigured:false}
   const raw=await r.text()
-  if(raw.length>1024)return false
+  if(raw.length>1024)return {online:false,hdConfigured:false}
   const parsed:unknown=JSON.parse(raw)
-  return !!parsed&&typeof parsed==='object'&&
-   (parsed as {ready?:unknown;engine?:unknown}).ready===true&&
-   (parsed as {ready?:unknown;engine?:unknown}).engine==='stable-fast-3d'
- }catch{return false}
+  const value=parsed as {ready?:unknown;engine?:unknown;hdConfigured?:unknown}
+  const online=!!value&&value.ready===true&&value.engine===cfg.engine
+  return {online,hdConfigured:online&&value.hdConfigured===true}
+ }catch{return {online:false,hdConfigured:false}}
 }
 
 export async function GET(request:NextRequest){
  const cfg=config(request.nextUrl.origin)
- const online=cfg?await gpuHealthy(cfg):false
+ const gpu=cfg?await gpuStatus(cfg):{online:false,hdConfigured:false}
+ const online=gpu.online
+ const hdAvailable=Boolean(cfg?.engine==='trellis2'&&gpu.hdConfigured&&
+  process.env.SPAKTOK_FORGE_GPU_HD_ENABLED==='true')
  return json({
   enabled:online,delivery:'direct-private-ticket',
-  engine:'Stable Fast 3D (licensed self-host)',
+  authConfigured:nativeAuthReady(),
+  readiness:!cfg?'operator_not_configured':
+   online?'ready':'gpu_loading_or_unreachable',
+  previewQuickTunnel:Boolean(cfg?.provider==='vast'&&
+   new URL(cfg.url).hostname.endsWith('.trycloudflare.com')),
+  engine:cfg?.engine??null,provider:cfg?.provider??null,
+  hdAvailable,
   full360:true,dailyCapPerOwner:1,
   globalDailyCap:cfg?.globalCap??null,maxImageMB:8,
   maxResultMB:35,
@@ -89,7 +72,8 @@ export async function POST(request:NextRequest){
  if(!allowed(request))return json({error:'forge_invalid_origin'},403)
  const cfg=config(request.nextUrl.origin)
  if(!cfg)return json({error:'forge_gpu_disabled'},503)
- if(!await gpuHealthy(cfg))
+ const gpu=await gpuStatus(cfg)
+ if(!gpu.online)
   return json({error:'forge_gpu_provider_not_ready'},503)
  const length=Number(request.headers.get('content-length')??0)
  if(length>MAX_BODY)return json({error:'forge_ticket_too_large'},413)
@@ -104,11 +88,18 @@ export async function POST(request:NextRequest){
  const imageSHA=data.sha256
  const size=data.size
  const mime=data.mime
+ const profile=data.profile??'mobile-preview'
  if(typeof imageSHA!=='string'||!/^[0-9a-f]{64}$/.test(imageSHA)||
   typeof size!=='number'||!Number.isSafeInteger(size)||
   size<128||size>MAX_IMAGE||
   !['image/png','image/jpeg','image/webp'].includes(String(mime)))
   return json({error:'forge_ticket_image_invalid'},422)
+ if(!['mobile-preview','detail-preview','studio-hd'].includes(String(profile)))
+  return json({error:'forge_ticket_profile_invalid'},422)
+ if(profile==='studio-hd'&&!(
+  cfg.engine==='trellis2'&&process.env.SPAKTOK_FORGE_GPU_HD_ENABLED==='true'&&
+  gpu.hdConfigured))
+  return json({error:'forge_gpu_hd_not_authorized'},403)
  if(!['original','licensed'].includes(String(data.rights))||
   data.approveCompute!=='yes'||data.approveTransfer!=='yes')
   return json({error:'forge_approvals_required'},422)
@@ -130,12 +121,15 @@ export async function POST(request:NextRequest){
  const claims={
   v:1,purpose:'forge-browser-one-use',nonce,
   origin:request.nextUrl.origin,
-  iat,exp:iat+120,sha256:imageSHA,size,mime,
+  iat,exp:iat+120,sha256:imageSHA,size,mime,profile,
  }
  const base=Buffer.from(JSON.stringify(claims)).toString('base64url')
  const signature=createHmac('sha256',cfg.token).update(base).digest('base64url')
  return json({
-  url:cfg.url,ticket:'st1.'+base+'.'+signature,
+  url:cfg.url,host:new URL(cfg.url).hostname,
+  provider:cfg.provider,engine:cfg.engine,
+  ticket:'st1.'+base+'.'+signature,
+  quickTunnelPreview:cfg.provider==='vast'&&new URL(cfg.url).hostname.endsWith('.trycloudflare.com'),
   jobId:nonce,expiresAt:new Date((iat+120)*1000).toISOString(),
   note:'This one-use grant consumed an operator daily job reservation. No automatic retry; never share the temporary ticket.',
  })

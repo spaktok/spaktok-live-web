@@ -17,8 +17,8 @@ import os
 import secrets
 import hashlib
 import time
+import json
 
-import rembg
 import torch
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +44,7 @@ MAX_MULTIPART = MAX_PHOTO + 32768
 _gpu_lock = asyncio.Lock()
 _ticket_lock = asyncio.Lock()
 _used_tickets: dict[str, int] = {}
+_ENGINE_NAME = os.environ.get("FORGE_GPU_ENGINE", "stable-fast-3d")
 _model = None
 _rembg_session = None
 _remove_background_fn = None
@@ -105,7 +106,20 @@ def load_model_once():
         raise RuntimeError("FORGE_GPU_TOKEN must be set to >=32 characters")
     # This catches Blackwell sm_120 with CUDA 12.1/PyTorch 2.4 before
     # downloading gated weights or burning paid compute on a broken kernel.
+    if _ENGINE_NAME not in ("stable-fast-3d", "trellis-v1", "trellis2"):
+        raise RuntimeError("unsupported_forge_gpu_engine")
     require_compatible_gpu(torch)
+    if _ENGINE_NAME == "trellis2":
+        import trellis2_engine
+        trellis2_engine.load_model_once(torch)
+        _model = trellis2_engine
+        return
+    if _ENGINE_NAME == "trellis-v1":
+        import trellis_v1_engine
+        trellis_v1_engine.load_model_once(torch)
+        _model = trellis_v1_engine
+        return
+    import rembg
     # Loading custom SF3D CUDA modules before the architecture preflight
     # can fail expensively on an RTX PRO 6000 sm_120 with old cu121 torch.
     from sf3d.system import SF3D
@@ -123,12 +137,19 @@ def load_model_once():
 
 @app.get("/health")
 async def health():
-    return {"ready": _model is not None, "engine": "stable-fast-3d",
+    return {"ready": _model is not None, "engine": _ENGINE_NAME,
+            "hdConfigured": _ENGINE_NAME == "trellis2" and
+                os.environ.get("FORGE_GPU_HD_ENABLED") == "yes",
             "no_persistent_images": True}
 
 
-def _make_glb(photo: bytes) -> bytes:
+def _make_glb(photo: bytes, profile: str = "mobile-preview",
+              job_id: str = "operator-direct") -> bytes:
     """Inference is serialized to avoid OOM and uncontrolled GPU concurrency."""
+    if _ENGINE_NAME == "trellis2":
+        return _model.make_glb(photo, profile=profile, job_id=job_id)
+    if _ENGINE_NAME == "trellis-v1":
+        return _model.make_glb(photo, profile=profile)
     with Image.open(io.BytesIO(photo)) as source:
         if source.width < 64 or source.height < 64 or (
             source.width * source.height > 4096 * 4096
@@ -166,6 +187,10 @@ async def generate(request: Request, image: UploadFile = File(...)):
     if len(data) < 128 or len(data) > MAX_PHOTO:
         raise HTTPException(status_code=413, detail="invalid_image_size")
     ticket = getattr(request.state, "gpu_ticket", None)
+    if ticket and ticket.get("profile") == "studio-hd" and (
+        _ENGINE_NAME != "trellis2" or os.environ.get("FORGE_GPU_HD_ENABLED") != "yes"
+    ):
+        raise HTTPException(status_code=403, detail="gpu_hd_not_enabled")
     if ticket and (
         image.content_type != ticket["mime"]
         or len(data) != ticket["size"]
@@ -180,12 +205,43 @@ async def generate(request: Request, image: UploadFile = File(...)):
                 raise ValueError("unsupported image encoding")
         # One GPU job at a time, no queue of parallel GPU allocations.
         async with _gpu_lock:
-            result = await asyncio.to_thread(_make_glb, data)
-    except (ValueError, UnidentifiedImageError):
+            profile = ticket.get("profile", "mobile-preview") if ticket else "mobile-preview"
+            job_id = ticket["nonce"] if ticket else "operator-direct"
+            print(json.dumps({"event":"spaktok_gpu_stage",
+              "job":job_id,"stage":"image_received","at":int(time.time())}),
+              flush=True)
+            result = await asyncio.to_thread(_make_glb, data, profile, job_id)
+    except (ValueError, UnidentifiedImageError) as exc:
+        # Only operator-terminal safe metadata. Never log image bytes, token,
+        # model URLs, exception messages or full paths in public HTTP responses.
+        print(json.dumps({"event":"spaktok_gpu_stage",
+            "stage":"image_or_glb_invalid","at":int(time.time()),
+            "error_type":type(exc).__name__}),flush=True)
         raise HTTPException(status_code=422, detail="image_or_glb_invalid")
-    except Exception:
-        # Never leak model stack traces, local paths or source content.
+    except Exception as exc:
+        # A previous blanket 503 masked the failing component completely.
+        # The final traceback *location*, without its message / path / args,
+        # lets operators distinguish rembg vs DINOv3 vs CUDA errors safely.
+        import traceback
+        frames=traceback.extract_tb(exc.__traceback__)
+        last=frames[-1] if frames else None
+        message=str(exc).lower()
+        category=("cuda_out_of_memory" if "out of memory" in message
+                  else "model_access_denied" if any(x in message for x in
+                  ("gated repo","403 client error","401 client error"))
+                  else "cuda_runtime_error" if any(x in message for x in
+                  ("cuda error","cublas","cudnn")) else "inference_exception")
+        print(json.dumps({"event":"spaktok_gpu_stage",
+            "stage":"inference_failed","at":int(time.time()),
+            "error_type":type(exc).__name__,"category":category,
+            "source_file":os.path.basename(last.filename) if last else None,
+            "source_function":last.name if last else None,
+            "source_line":last.lineno if last else None}),flush=True)
+        # Never leak model stack traces, local paths or source content to clients.
         raise HTTPException(status_code=503, detail="inference_unavailable")
+    print(json.dumps({"event":"spaktok_gpu_stage",
+        "stage":"private_glb_delivered","at":int(time.time()),
+        "bytes":len(result)}),flush=True)
     return Response(
         content=result,
         media_type="model/gltf-binary",
