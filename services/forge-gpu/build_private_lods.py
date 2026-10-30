@@ -25,6 +25,15 @@ MAX_OUTPUT_BYTES = 35 * 1024 * 1024
 PACK_SCHEMA = "spaktok-private-multi-lod-v1"
 # Retain LOD0 original; derive independent geometry for LOD1 and LOD2.
 LOD_RATIOS = (("lod1", "0.50"), ("lod2", "0.20"))
+# Bounded, opt-in CPU retries. The source GLB remains untouched.
+# Real 2026-10-30 asset: aggressive simplification created non-manifold edges,
+# whereas these conservative error budgets yielded two topology-clean previews.
+# These are NOT promises that the requested 50% / 20% LOD targets can be met.
+CONSERVATIVE_ERROR_CAPS = {
+    "lod1": ("0.0014", "0.0012", "0.0010", "0.0008"),
+    "lod2": ("0.0025", "0.0022", "0.0020", "0.0018", "0.0017",
+             "0.00165", "0.0016", "0.0014", "0.0012", "0.0010"),
+}
 # All target assignments are merely private-preview recommendations.
 TARGET_LODS = {
     "avatar": "lod1", "live": "lod2",
@@ -92,7 +101,8 @@ def _check_quality(source: dict, candidate: dict, previous: dict) -> None:
 
 
 def generate_lods(source_file: Path, output_dir: Path,
-                  executable: str = "gltfpack") -> dict:
+                  executable: str = "gltfpack",
+                  *, conservative: bool = False) -> dict:
     source_file = source_file.resolve(strict=True)
     if not source_file.is_file() or source_file.suffix.lower() != ".glb":
         raise ValueError("lod_source_must_be_glb")
@@ -132,31 +142,76 @@ def generate_lods(source_file: Path, output_dir: Path,
         previous = source_meta
         for name, ratio in LOD_RATIOS:
             target = temp / (name + ".glb")
-            # No compression extensions: avoid requiring a new decoder in
-            # existing Three.js/native preview code. -noq avoids quantization
-            # and synthetic dequantization nodes; keep mesh/material names.
-            command = [program, "-i", str(source_file), "-o", str(target),
-                       "-si", ratio, "-noq", "-kn", "-km", "-ke",
-                       "-slb", "-sv"]
-            try:
-                result = subprocess.run(
-                    command, capture_output=True, text=True, timeout=90,
-                    check=False, env={**os.environ, "NO_COLOR": "1"},
-                )
-            except subprocess.TimeoutExpired as exc:
-                raise RuntimeError("gltfpack_lod_timeout") from exc
-            if result.returncode != 0 or not target.is_file():
-                raise RuntimeError("gltfpack_lod_failed")
-            next_meta = _check_file(target)
-            _check_quality(source_meta, next_meta, previous)
+            trials = []
+            accepted_meta = None
+            accepted_cap = None
+            caps = (CONSERVATIVE_ERROR_CAPS[name] if conservative
+                    else (None,))
+            for error_cap in caps:
+                # A rejected attempt must never be confused with the next
+                # attempt, and no temporary candidate is published.
+                target.unlink(missing_ok=True)
+                command = [program, "-i", str(source_file), "-o", str(target),
+                           "-si", ratio, "-noq", "-kn", "-km", "-ke",
+                           "-slb", "-sv"]
+                if error_cap is not None:
+                    command += ["-se", error_cap]
+                try:
+                    result = subprocess.run(
+                        command, capture_output=True, text=True, timeout=90,
+                        check=False, env={**os.environ, "NO_COLOR": "1"},
+                    )
+                except subprocess.TimeoutExpired as exc:
+                    if not conservative:
+                        raise RuntimeError("gltfpack_lod_timeout") from exc
+                    trials.append({"maxError": error_cap, "result": "timeout"})
+                    continue
+                if result.returncode != 0 or not target.is_file():
+                    if not conservative:
+                        raise RuntimeError("gltfpack_lod_failed")
+                    trials.append({"maxError": error_cap,
+                                   "result": "gltfpack_failed"})
+                    continue
+                try:
+                    next_meta = _check_file(target)
+                    _check_quality(source_meta, next_meta, previous)
+                except (ValueError, OSError, IndexError, KeyError, TypeError) as exc:
+                    if not conservative:
+                        raise
+                    # This is diagnostic metadata, never authorization to
+                    # distribute an invalid LOD. No subprocess output included.
+                    trials.append({"maxError": error_cap,
+                                   "result": "rejected", "reason": str(exc)})
+                    continue
+                accepted_meta = next_meta
+                accepted_cap = error_cap
+                trials.append({"maxError": error_cap, "result": "accepted"})
+                break
+            if accepted_meta is None:
+                raise ValueError("lod_no_valid_conservative_candidate_" + name
+                                 if conservative else "lod_generation_failed")
             paths[name] = target
             assets[name] = {
                 "file": target.name, "ratioRequested": float(ratio),
-                "meta": next_meta,
+                "meta": accepted_meta, "maxErrorUsed": accepted_cap,
+                "trials": trials,
             }
-            previous = next_meta
+            previous = accepted_meta
+        actual_ratios = {
+            name: value["meta"]["triangles"] / source_meta["triangles"]
+            for name, value in assets.items()
+        }
+        targets_met = all(
+            actual_ratios[name] <= float(ratio)
+            for name, ratio in LOD_RATIOS
+        )
         pack = {
-            "schema": PACK_SCHEMA, "source": {
+            "schema": PACK_SCHEMA,
+            "optimizationMode": ("bounded-conservative-cpu"
+                                  if conservative else "fixed-target-cpu"),
+            "triangleTargetsMet": targets_met,
+            "needsOptimization": not targets_met,
+            "source": {
                 "filename": source_file.name,
                 "sha256": source_meta["sha256"],
                 "bytes": source_meta["bytes"],
@@ -165,6 +220,12 @@ def generate_lods(source_file: Path, output_dir: Path,
                 name: {
                     "file": value["file"],
                     "requestedTriangleRatio": value["ratioRequested"],
+                    "achievedTriangleRatio": actual_ratios[name],
+                    "triangleTargetMet": (
+                        actual_ratios[name] <= value["ratioRequested"]
+                    ),
+                    "maxSimplificationErrorUsed": value["maxErrorUsed"],
+                    "optimizationAttempts": value["trials"],
                     "triangles": value["meta"]["triangles"],
                     "bytes": value["meta"]["bytes"],
                     "sha256": value["meta"]["sha256"],
@@ -181,13 +242,20 @@ def generate_lods(source_file: Path, output_dir: Path,
                 }
                 for name, value in assets.items()
             },
-            "privateStudioRecommendations": TARGET_LODS,
+            # Never infer live/AR suitability from a conservative LOD that
+            # did not actually reach its intended triangle budget.
+            "privateStudioRecommendations": (
+                TARGET_LODS if targets_met else {}
+            ),
             "published": False,
             "rigged": False,
             "animated": False,
             "cameraTracked": False,
             "review": {
                 "androidFPS": "not-tested",
+                "automaticDistributionBlocked": True,
+                "requiresVisualReview": True,
+                "simplificationTargetsAchieved": targets_met,
                 "nonManifoldEdges": "zero-required-and-verified",
                 "visualSeamArtifacts": "not-tested",
                 "surfaceAreaDriftRequiresHumanJudgment": True,
@@ -211,9 +279,15 @@ def main() -> int:
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--gltfpack", default="gltfpack")
+    parser.add_argument(
+        "--conservative", action="store_true",
+        help=("Retry bounded gltfpack error budgets; failed topology/UV/PBR "
+              "candidates are discarded. Actual LOD targets may remain unmet."),
+    )
     args = parser.parse_args()
     try:
-        result = generate_lods(args.source, args.output, args.gltfpack)
+        result = generate_lods(args.source, args.output, args.gltfpack,
+                               conservative=args.conservative)
     except (OSError, ValueError, RuntimeError) as exc:
         print("SPAKTOK_LOD_FAILED:", str(exc), file=sys.stderr)
         return 1
@@ -221,6 +295,8 @@ def main() -> int:
     for name, v in result["variants"].items():
         print(name, "triangles=", v["triangles"], "bytes=", v["bytes"])
     print("published=false; rigged=false; androidQA=not-tested")
+    print("triangleTargetsMet=", result["triangleTargetsMet"],
+          "needsOptimization=", result["needsOptimization"])
     return 0
 
 
