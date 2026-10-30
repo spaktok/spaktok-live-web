@@ -138,6 +138,8 @@ def load_model_once():
 @app.get("/health")
 async def health():
     return {"ready": _model is not None, "engine": _ENGINE_NAME,
+            "hdConfigured": _ENGINE_NAME == "trellis2" and
+                os.environ.get("FORGE_GPU_HD_ENABLED") == "yes",
             "no_persistent_images": True}
 
 
