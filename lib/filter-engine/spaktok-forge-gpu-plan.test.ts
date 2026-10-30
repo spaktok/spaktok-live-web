@@ -5,7 +5,7 @@ describe('AI Director finite GPU command compiler',()=>{
   expect(planForgeGpuGeneration({
    description:'أفاتار لايف فلتر وهدية',targets:['avatar','live','gift','gift'],
   })).toMatchObject({
-   task:'image-to-3d',engine:'trellis-v1',
+   task:'image-to-3d',engine:'trellis2',
    profile:'mobile-preview',publicRelease:false,
    destinations:['avatar','live','gift'],
   })
@@ -21,7 +21,7 @@ describe('AI Director finite GPU command compiler',()=>{
    targets:['world'],
   })
   expect(x).toMatchObject({
-   task:'image-to-3d',engine:'trellis-v1',publicRelease:false,
+   task:'image-to-3d',engine:'trellis2',publicRelease:false,
   })
   expect(JSON.stringify(x)).not.toContain('rm -rf')
  })
