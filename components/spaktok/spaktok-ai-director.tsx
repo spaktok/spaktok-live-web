@@ -218,7 +218,7 @@ export default function SpaktokAIDirector({
  }
  const commitGlb=async(file:File,gpuJobsUsed:0|1,
   sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d',
-  special?:{targets:DirectorTarget[];description:string;save:boolean;fromCloud?:boolean},
+  special?:{targets:DirectorTarget[];description:string;save:boolean;fromCloud?:boolean;previewTopologyBlocked?:boolean},
   gpuProfile?:ForgeGpuProfile)=>{
   const bytes=await file.arrayBuffer()
   const inspection=inspectWordGeneratedGlb(bytes,file.name)
@@ -232,6 +232,7 @@ export default function SpaktokAIDirector({
    audit:inspection.audit,description:special?.description??description,
    rights,targets:special?.targets??plan.targets,
    gpuJobsUsed,sourceEngine,gpuProfile,
+   previewTopologyBlocked:special?.previewTopologyBlocked===true,
   })
   // GPU has already been billed once the GLB exists. A full browser
   // IndexedDB quota must NOT discard an otherwise valid successful result.
@@ -381,6 +382,7 @@ export default function SpaktokAIDirector({
     ' معاينة خاصة من المجسم الأول — لا يوجد Rig أو اختبار AR معتمد'
    await commitGlb(file,0,'existing-glb',{
     targets:destinations,description:desc,save:true,fromCloud:true,
+    previewTopologyBlocked:cloudLod!=='lod0',
    })
    setOwnFile(file)
    setManualTargets(destinations)
@@ -553,7 +555,8 @@ export default function SpaktokAIDirector({
        توجد ثلاث نسخ GLB فعلية من المجسم الأول محفوظة في Cloudflare R2
        الخاص. اختر دقة المعاينة لتنزيل نسخة واحدة بتصريح قصير العمر،
        ثم تحقق من SHA-256 واحفظ مسودات غير منشورة للأقسام الخمسة
-       بدون مهمة GPU جديدة. نسخ LOD مخففة تجريبيًا وليست معتمدة لللايف.
+       بدون مهمة GPU جديدة. نسخ LOD1 وLOD2 تحتوي حوافًا غير منتظمة
+       وتُعرض كمسودات تحتاج إعادة تبسيط وفحص بصري، وليست معتمدة لللايف أو AR.
       </p>
       <label className="mt-3 block text-slate-100">
        نسخة المجسم الخاصة
