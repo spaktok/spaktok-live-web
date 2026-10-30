@@ -57,6 +57,25 @@ describe('Spaktok objective Rodin-comparison evidence',()=>{
   }
   expect(buildSpaktokQualityEvidence(manifest).publicReleaseApproved).toBe(false)
  })
+ it('includes measured edge defects without claiming mesh integrity',()=>{
+  const evidence=buildSpaktokQualityEvidence(fixture(),{
+   status:'checked',triangles:100_000,edges:200_000,
+   boundaryEdges:40_000,nonManifoldEdges:825,
+   degenerateIndexTriangles:4,checkedPrimitives:1,
+   publishReady:false,
+  })
+  expect(evidence.topology.scanStatus).toBe('checked')
+  expect(evidence.topology.nonManifoldEdges).toBe(825)
+  expect(evidence.topology.boundaryEdges).toBe(40_000)
+  expect(evidence.topology.manifoldCertified).toBe(false)
+  expect(evidence.publicReleaseApproved).toBe(false)
+ })
+ it('marks unscanned meshes as unknown rather than safe',()=>{
+  const evidence=buildSpaktokQualityEvidence(fixture())
+  expect(evidence.topology.scanStatus).toBe('not-checked')
+  expect(evidence.topology.nonManifoldEdges).toBeNull()
+  expect(evidence.topology.manifoldCertified).toBe(false)
+ })
  it('identifies large models as outside mobile budgets',()=>{
   const report=buildSpaktokQualityEvidence(fixture(17*1024*1024))
   expect(report.mobile.under15MiB).toBe(false)
