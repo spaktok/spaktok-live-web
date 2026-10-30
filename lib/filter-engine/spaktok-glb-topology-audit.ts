@@ -89,12 +89,18 @@ export function inspectStudioGlbTopology(bytes:ArrayBuffer):StudioTopologyReport
   const positionAccessor=accessors[positionId]
   const count=accessor.count
   const vertices=positionAccessor.count
-  if(accessor.type!=='SCALAR'||![5121,5123,5125].includes(accessor.componentType??0)||
-    accessor.sparse!==undefined||
-    !validIndex(accessor.bufferView,views.length)||
-    !Number.isSafeInteger(count)||count!<3||count!%3||
-    !Number.isSafeInteger(vertices)||vertices!<3)
-   return noReport('unsupported_index_accessor')
+  if(accessor.type!=='SCALAR')
+   return noReport('unsupported_index_type')
+  if(![5121,5123,5125].includes(accessor.componentType??0))
+   return noReport('unsupported_index_component')
+  if(accessor.sparse!==undefined)
+   return noReport('unsupported_sparse_indices')
+  if(!validIndex(accessor.bufferView,views.length))
+   return noReport('invalid_index_buffer_view')
+  if(!Number.isSafeInteger(count)||count!<3||count!%3)
+   return noReport('invalid_index_count')
+  if(!Number.isSafeInteger(vertices)||vertices!<3)
+   return noReport('invalid_position_count')
   const nTriangles=count!/3
   if(triangles+nTriangles>MAX_TRIANGLES)
    return noReport('topology_scan_triangle_limit')
