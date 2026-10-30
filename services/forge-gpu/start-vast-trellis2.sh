@@ -6,7 +6,8 @@ umask 077
 if [[ "${SPAKTOK_FORGE_OPERATOR_APPROVED:-}" != yes ]]; then
   echo >&2 "operator_approval_required"; exit 2
 fi
-if [[ "${#FORGE_GPU_TOKEN}" -lt 32 ]]; then
+secret="${FORGE_GPU_TOKEN:-}"
+if [[ "${#secret}" -lt 32 ]]; then
   echo >&2 "FORGE_GPU_TOKEN_must_be_at_least_32_characters"; exit 2
 fi
 if [[ ! "${FORGE_GPU_ALLOWED_ORIGIN:-}" =~ ^https://[a-zA-Z0-9.-]+$ ]]; then
