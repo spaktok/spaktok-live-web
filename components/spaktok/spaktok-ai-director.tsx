@@ -6,6 +6,7 @@ import {
 } from '@/lib/filter-engine/spaktok-ai-director'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
 import {generateForgeGpuDirect} from '@/lib/filter-engine/spaktok-forge-direct-client'
+import {planForgeGpuGeneration} from '@/lib/filter-engine/spaktok-forge-gpu-plan'
 import {createDirectorReliefGlb} from '@/lib/filter-engine/spaktok-director-local-relief'
 import {
  createStudioFanoutManifest,type StudioFanoutManifest,
@@ -53,7 +54,7 @@ const STAGE_NAMES:Readonly<Record<string,string>>={
 const isImage=(file:File)=>/\.(png|jpe?g|webp)$/i.test(file.name)
 const isGlb=(file:File)=>/\.glb$/i.test(file.name)
 type GPUHealth=Readonly<{
- enabled:boolean;globalDailyCap:number|null
+ enabled:boolean;globalDailyCap:number|null;provider:string|null;engine:string|null
 }>
 export default function SpaktokAIDirector({
  sourceFile,onGeneratedGlb,
@@ -99,8 +100,10 @@ export default function SpaktokAIDirector({
    .then(x=>{if(active)setHealth({
     enabled:x.enabled===true,
     globalDailyCap:typeof x.globalDailyCap==='number'?x.globalDailyCap:null,
+    provider:typeof x.provider==='string'?x.provider:null,
+    engine:typeof x.engine==='string'?x.engine:null,
    })})
-   .catch(()=>{if(active)setHealth({enabled:false,globalDailyCap:null})})
+   .catch(()=>{if(active)setHealth({enabled:false,globalDailyCap:null,provider:null,engine:null})})
   return()=>{active=false}
  },[])
  const select=(event:ChangeEvent<HTMLInputElement>)=>{
@@ -212,15 +215,17 @@ export default function SpaktokAIDirector({
     return
    }
    if(!health?.enabled)throw Error('director_gpu_disabled')
+   if(health.provider!=='vast'||health.engine!=='trellis2')
+    throw Error('director_requires_operator_vast_trellis2')
    if(!gpuConsent||!transferConsent)
     throw Error('director_explicit_gpu_and_image_transfer_consent_required')
    if(source.size<128||source.size>8*1024*1024)
     throw Error('director_invalid_image_size')
-   setStatus('إرسال مهمة GPU واحدة بعد موافقتك، وتوليد GLB من الصورة…')
-   // Small authenticated D1 quota ticket goes to Vercel; the image
-   // and potentially 35MB GLB travel DIRECTLY to the licensed GPU host.
-   // Source text routes output departments but does not condition SF3D.
-   const generated=await generateForgeGpuDirect(source,rights)
+   const gpuPlan=planForgeGpuGeneration({description,targets:plan.targets})
+   setStatus('إرسال مهمة GPU آمنة إلى TRELLIS.2 على Vast.ai بملف واحد…')
+   // The Arabic prompt selects private destinations and safe output profile;
+   // TRELLIS.2 itself is image-conditioned, not arbitrary text/terminal control.
+   const generated=await generateForgeGpuDirect(source,rights,gpuPlan.profile)
    await commitGlb(generated.file,1,'ai-360-gpu')
   }catch(error){
    setStatus('لم تكتمل المهمة: '+(error instanceof Error?error.message:String(error))+
@@ -311,8 +316,8 @@ export default function SpaktokAIDirector({
   </div>
   <p className="text-xs leading-6 text-slate-300">
    يحلل طلبك لتوجيه العمل بين الأقسام، ويستخدم GLB الحالي دون GPU أو
-   يرسل صورة واحدة إلى Stable Fast 3D عند تفعيل خادم مرخص وموافقتك.
-   الوصف يحدد الاستخدامات حاليًا، ولا يغير شكل التوليد نفسه.
+   يرسل صورة واحدة إلى TRELLIS.2 على Vast.ai بعد تفعيل الخادم وموافقتك.
+   الوصف يحدد الأقسام ونمط جودة محدودًا، وليس أمرًا عامًا للترمنال.
    لا يوجد نشر جماهيري تلقائي ولا توليد وجه متحرك دون Rig حقيقي.
   </p>
   {show&&<>
@@ -405,7 +410,8 @@ export default function SpaktokAIDirector({
        GPU: {plan.estimatedGpuJobs} مهمة ·
        {sourceKind==='glb'?' إعادة استعمال GLB':
         imageMode==='local-2.5d'?' Forge المحلي المجاني 2.5D':
-        health?.enabled?' GPU مرخص متصل':' GPU متوقف'}
+        health?.enabled&&health.provider==='vast'&&health.engine==='trellis2'?
+        ' Vast.ai TRELLIS.2 متصل':' GPU متوقف'}
       </p>
       {plan.stages.map(step=><div key={step.id}
        className="mt-2 flex items-start justify-between gap-3">
@@ -431,7 +437,8 @@ export default function SpaktokAIDirector({
      </label>
      {sourceKind==='image'&&imageMode==='gpu-360'&&<div className="space-y-2 rounded-lg border border-amber-400/30 bg-amber-950/20 p-3">
       <p className="text-xs text-amber-100">
-       {health?.enabled?'الإنشاء الكامل GPU متصل لكنه قد يكون مدفوعًا للمشغّل.':
+       {health?.enabled&&health.provider==='vast'&&health.engine==='trellis2'?
+        'محرك TRELLIS.2 على Vast.ai متصل؛ GPU مدفوع للمشغّل.':
         'محرك AI 360° غير متصل بعد؛ يمكن إنشاء خطة أو استيراد GLB مجاني الآن.'}
       </p>
       {health?.enabled&&<>
