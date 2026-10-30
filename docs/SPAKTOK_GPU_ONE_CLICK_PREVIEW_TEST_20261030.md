@@ -44,6 +44,43 @@ available. For testing only, the repo accepts an explicit operator-pinned
 5. The owner is responsible for rented GPU cost and shutdown.
    Do not enable public user access or run more than one image test.
 
+## Cost-safe operator readiness check — do this FIRST
+
+Before launching the server or opening Quick Tunnel, on the existing Vast
+instance run:
+
+```bash
+cd /workspace/spaktok-live-web
+git pull --ff-only
+conda activate /workspace/trellis2-env
+export HF_HOME=/workspace/hf-cache
+export FORGE_GPU_ALLOWED_ORIGIN='https://v0-spaktok-elite-app-git-feat-forge-bbc71f-danialmq3s-projects.vercel.app'
+bash services/forge-gpu/start-preview-quick-tunnel.sh --preflight
+```
+
+This performs **zero image inference / zero downloads / zero token exposure**,
+though an active Vast rental still incurs time charges. Look for
+`CLOUDFLARED=OK`, `CONDA=OK`, `HF_HOME=OK`,
+`TRELLIS2_SOURCE=OK`, and `BROWSER_ORIGIN=VALID_PREVIEW_FORMAT`.
+If `CLOUDFLARED=MISSING`, use official
+[Cloudflare Linux downloads](https://developers.cloudflare.com/tunnel/downloads/)
+to install and repeat the preflight. Never paste API tokens in screenshots.
+
+**2026-10-30 CI caveat:** current GitHub Actions run logs show
+`runner_id=0`, blank runner name, and **no steps** despite status
+`failure`. This is a workflow scheduling/account issue pending operator
+review of GitHub Actions, not evidence that the TRELLIS.2 model tests
+executed and failed. Vercel Preview builds DO complete successfully and
+run the explicit Next.js/Vitest build gate.
+
+**Auth caveat:** `SPAKTOK_D1_BRIDGE_URL`,
+`SPAKTOK_D1_BRIDGE_SIGNING_KEY`, and
+`SPAKTOK_AUTH_PEPPER` currently exist only in Vercel production,
+not Preview. The GPU-ticket POST requires native login. Preview
+operator-only auth must be provisioned and tested separately before
+the first paid browser test. Never copy production secrets into
+unreviewed Preview by default.
+
 ## One-command setup variant (recommended)
 
 The repository also provides
