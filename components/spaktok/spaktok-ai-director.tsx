@@ -213,7 +213,8 @@ export default function SpaktokAIDirector({
  }
  const commitGlb=async(file:File,gpuJobsUsed:0|1,
   sourceEngine:'existing-glb'|'ai-360-gpu'|'browser-2.5d',
-  special?:{targets:DirectorTarget[];description:string;save:boolean;fromCloud?:boolean})=>{
+  special?:{targets:DirectorTarget[];description:string;save:boolean;fromCloud?:boolean},
+  gpuProfile?:ForgeGpuProfile)=>{
   const bytes=await file.arrayBuffer()
   const inspection=inspectWordGeneratedGlb(bytes,file.name)
   const checked=evaluateDirectorAsset(inspection.audit,bytes.byteLength,
@@ -225,7 +226,7 @@ export default function SpaktokAIDirector({
    fileName:file.name,sha256:hash,bytes:bytes.byteLength,
    audit:inspection.audit,description:special?.description??description,
    rights,targets:special?.targets??plan.targets,
-   gpuJobsUsed,sourceEngine,
+   gpuJobsUsed,sourceEngine,gpuProfile,
   })
   // GPU has already been billed once the GLB exists. A full browser
   // IndexedDB quota must NOT discard an otherwise valid successful result.
@@ -283,7 +284,7 @@ export default function SpaktokAIDirector({
    // The Arabic prompt selects private destinations and safe output profile;
    // TRELLIS.2 itself is image-conditioned, not arbitrary text/terminal control.
    const generated=await generateForgeGpuDirect(source,rights,gpuPlan.profile)
-   await commitGlb(generated.file,1,'ai-360-gpu')
+   await commitGlb(generated.file,1,'ai-360-gpu',undefined,gpuPlan.profile)
   }catch(error){
    setStatus('لم تكتمل المهمة: '+(error instanceof Error?error.message:String(error))+
     '. إذا بدأ تشغيل GPU فالمحاولة قد تُحتسب؛ لا تعاود الإرسال دون فحص الحالة.')
