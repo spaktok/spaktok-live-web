@@ -86,6 +86,25 @@ describe('Studio fan-out manifest GPU-free production contract',()=>{
    expect(()=>assertStudioFanoutManifest(bypass)).toThrow('studio_fanout_output_invalid')
   }
  })
+ it('blocks conservative private LODs whose requested budgets were not achieved',()=>{
+  for(const lod of [SPAKTOK_FIRST_GPU_LODS.lod1c,SPAKTOK_FIRST_GPU_LODS.lod2c]){
+   const report=make({
+    fileName:lod.fileName,sha256:lod.sha256,bytes:lod.bytes,
+    audit:{...audit,triangles:lod.triangles,textures:2},
+   })
+   const reason='conservative_lod_triangle_budget_unmet_requires_qa'
+   expect(report.outputs.every(o=>o.state==='needs-optimization')).toBe(true)
+   expect(report.outputs.every(o=>o.blockers.includes(reason))).toBe(true)
+   expect(report.outputs.every(o=>!o.blockers.includes(
+    'non_manifold_lod_requires_professional_retopology_and_visual_qa'
+   ))).toBe(true)
+   const forged={...report,outputs:report.outputs.map(o=>({
+    ...o,state:'private-preview' as const,
+    blockers:o.blockers.filter(b=>b!==reason),
+   }))}
+   expect(()=>assertStudioFanoutManifest(forged)).toThrow('studio_fanout_output_invalid')
+  }
+ })
  it('blocks unsupported topology scanning for all private Studio handoffs',()=>{
   const report=make({
    sha256:'f'.repeat(64),sourceEngine:'existing-glb',
