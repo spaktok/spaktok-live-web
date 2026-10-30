@@ -18,6 +18,30 @@ Post-upload GET and SHA-256 verification succeeded on all GLBs.
 Each GLB passed structural header / geometry count / PBR embedded WebP
 presence and byte-for-byte original WebP image retention checks.
 
+## A strict gltfpack topology gate is now in source (not yet run on production assets)
+
+The CPU-only `services/forge-gpu/glb_topology.py` now audits actual
+indexed triangle edges inside GLB binary chunks. It rejects unsupported
+indices, external geometry, out-of-range vertex IDs, non-manifold edges
+(>2 incident triangles per undirected edge), and degenerate index
+triangles. The separate professional LOD builder
+`services/forge-gpu/build_private_lods.py` now requires zero such
+defects for the input and **every** generated LOD before atomically
+revealing an output pack. It calls the official `gltfpack` with
+`-slb` (lock mesh borders) and `-sv` (simplify with attribute
+considerations), as well as the existing PBR preservation checks.
+These options and counts are **not** a promise that the mesh will render
+correctly: blind visual QA and mobile testing remain mandatory.
+
+The Python test fixtures were replaced with genuine GLB binary index,
+POSITION, UV, normal and embedded image views. Additional tests inject
+three triangles sharing an edge to prove bad LODs are rejected without
+leaving a partial pack. These tests are included in
+`Forge GPU Contract Checks (no GPU)`; GitHub Actions jobs are currently
+failing to start. There has been **no professional gltfpack run yet**
+on the owner's actual GLB: the two earlier experimental LOD1/LOD2
+remain present in private R2 but deliberately blocked.
+
 ## In-app private 3D viewer added to draft PR
 
 The new client-only `components/spaktok/private-studio-glb-preview.tsx`
