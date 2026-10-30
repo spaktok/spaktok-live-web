@@ -30,26 +30,29 @@ const allowed=(request:NextRequest)=>
  request.headers.get('origin')===request.nextUrl.origin&&
  request.headers.get('sec-fetch-site')!=='cross-site'
 
-async function gpuHealthy(cfg:ForgeGpuBackend):Promise<boolean>{
+async function gpuStatus(cfg:ForgeGpuBackend):Promise<{online:boolean;hdConfigured:boolean}>{
  try{
   const healthUrl=new URL('/health',cfg.url)
   const r=await fetch(healthUrl.toString(),{
    method:'GET',cache:'no-store',redirect:'error',
    signal:AbortSignal.timeout(4000),
   })
-  if(!r.ok)return false
+  if(!r.ok)return {online:false,hdConfigured:false}
   const raw=await r.text()
-  if(raw.length>1024)return false
+  if(raw.length>1024)return {online:false,hdConfigured:false}
   const parsed:unknown=JSON.parse(raw)
-  return !!parsed&&typeof parsed==='object'&&
-   (parsed as {ready?:unknown;engine?:unknown}).ready===true&&
-   (parsed as {ready?:unknown;engine?:unknown}).engine===cfg.engine
- }catch{return false}
+  const value=parsed as {ready?:unknown;engine?:unknown;hdConfigured?:unknown}
+  const online=!!value&&value.ready===true&&value.engine===cfg.engine
+  return {online,hdConfigured:online&&value.hdConfigured===true}
+ }catch{return {online:false,hdConfigured:false}}
 }
 
 export async function GET(request:NextRequest){
  const cfg=config(request.nextUrl.origin)
- const online=cfg?await gpuHealthy(cfg):false
+ const gpu=cfg?await gpuStatus(cfg):{online:false,hdConfigured:false}
+ const online=gpu.online
+ const hdAvailable=Boolean(cfg?.engine==='trellis2'&&gpu.hdConfigured&&
+  process.env.SPAKTOK_FORGE_GPU_HD_ENABLED==='true')
  return json({
   enabled:online,delivery:'direct-private-ticket',
   authConfigured:nativeAuthReady(),
@@ -58,6 +61,7 @@ export async function GET(request:NextRequest){
   previewQuickTunnel:Boolean(cfg?.provider==='vast'&&
    new URL(cfg.url).hostname.endsWith('.trycloudflare.com')),
   engine:cfg?.engine??null,provider:cfg?.provider??null,
+  hdAvailable,
   full360:true,dailyCapPerOwner:1,
   globalDailyCap:cfg?.globalCap??null,maxImageMB:8,
   maxResultMB:35,
@@ -68,7 +72,8 @@ export async function POST(request:NextRequest){
  if(!allowed(request))return json({error:'forge_invalid_origin'},403)
  const cfg=config(request.nextUrl.origin)
  if(!cfg)return json({error:'forge_gpu_disabled'},503)
- if(!await gpuHealthy(cfg))
+ const gpu=await gpuStatus(cfg)
+ if(!gpu.online)
   return json({error:'forge_gpu_provider_not_ready'},503)
  const length=Number(request.headers.get('content-length')??0)
  if(length>MAX_BODY)return json({error:'forge_ticket_too_large'},413)
@@ -89,8 +94,12 @@ export async function POST(request:NextRequest){
   size<128||size>MAX_IMAGE||
   !['image/png','image/jpeg','image/webp'].includes(String(mime)))
   return json({error:'forge_ticket_image_invalid'},422)
- if(!['mobile-preview','detail-preview'].includes(String(profile)))
+ if(!['mobile-preview','detail-preview','studio-hd'].includes(String(profile)))
   return json({error:'forge_ticket_profile_invalid'},422)
+ if(profile==='studio-hd'&&!(
+  cfg.engine==='trellis2'&&process.env.SPAKTOK_FORGE_GPU_HD_ENABLED==='true'&&
+  gpu.hdConfigured))
+  return json({error:'forge_gpu_hd_not_authorized'},403)
  if(!['original','licensed'].includes(String(data.rights))||
   data.approveCompute!=='yes'||data.approveTransfer!=='yes')
   return json({error:'forge_approvals_required'},422)
