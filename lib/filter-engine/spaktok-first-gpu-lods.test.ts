@@ -4,13 +4,13 @@ import {
  isSpaktokFirstLodId,
 } from './spaktok-first-gpu-lods'
 describe('Verified owner-private first GPU LOD registry',()=>{
- it('has exactly three distinct, pinned immutable GLBs',()=>{
-  expect(SPAKTOK_FIRST_GPU_LOD_IDS).toEqual(['lod0','lod1','lod2'])
+ it('has five distinct pinned private QA GLBs',()=>{
+  expect(SPAKTOK_FIRST_GPU_LOD_IDS).toEqual(['lod0','lod1c','lod2c','lod1','lod2'])
   const models=SPAKTOK_FIRST_GPU_LOD_IDS.map(id=>SPAKTOK_FIRST_GPU_LODS[id])
-  expect(new Set(models.map(m=>m.objectKey)).size).toBe(3)
-  expect(new Set(models.map(m=>m.sha256)).size).toBe(3)
+  expect(new Set(models.map(m=>m.objectKey)).size).toBe(5)
+  expect(new Set(models.map(m=>m.sha256)).size).toBe(5)
   expect(models.every(m=>/^[a-f0-9]{64}$/.test(m.sha256))).toBe(true)
-  expect(models.every(m=>m.objectKey.startsWith('studio/private/pilot-20261030/lods/')))
+  expect(models.every(m=>m.objectKey.startsWith('studio/private/pilot-20261030/')))
    .toBe(true)
  })
  it('keeps reference original and strictly decreasing topology/size',()=>{
@@ -38,6 +38,26 @@ describe('Verified owner-private first GPU LOD registry',()=>{
   expect(lod1.vertices).toBeGreaterThan(lod2.vertices)
   expect(lod0.bytes).toBeGreaterThan(lod1.bytes)
   expect(lod1.bytes).toBeGreaterThan(lod2.bytes)
+ })
+ it('pins real CPU-conservative GLBs but refuses invented fidelity scores',()=>{
+  const {lod0,lod1c,lod2c,lod1,lod2}=SPAKTOK_FIRST_GPU_LODS
+  expect(lod1c.sha256).toBe('765011185736c0d2f53e9252b51346b10f4107d3128934ccbbbee7b1f9cd3bbd')
+  expect(lod2c.sha256).toBe('6b434a87299c2ad653efe10969cffb11b14c9608fb5574eb40b0228d2444ca23')
+  expect(lod1c.bytes).toBe(5_087_128)
+  expect(lod2c.bytes).toBe(4_992_732)
+  expect(lod0.triangles).toBeGreaterThan(lod1c.triangles)
+  expect(lod1c.triangles).toBeGreaterThan(lod2c.triangles)
+  expect(lod2c.triangles).toBeGreaterThan(100_000)
+  expect(lod1c.nonManifoldEdges).toBe(0)
+  expect(lod2c.nonManifoldEdges).toBe(0)
+  expect(lod1.nonManifoldEdges).toBeGreaterThan(0)
+  expect(lod2.nonManifoldEdges).toBeGreaterThan(0)
+  expect(lod1c.meanVertexDriftPercent).toBeNull()
+  expect(lod2c.p95VertexDriftPercent).toBeNull()
+  expect(lod1c.uvAreaSumChangePercent).toBeNull()
+  expect(lod2c.uvAreaSumChangePercent).toBeNull()
+  expect(lod1c.objectKey).toContain('professional-candidates-v1/')
+  expect(lod2c.objectKey).toContain('professional-candidates-v1/')
  })
  it('rejects unknown or prototype-injection selections',()=>{
   expect(isSpaktokFirstLodId('lod2')).toBe(true)
