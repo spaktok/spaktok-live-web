@@ -115,7 +115,7 @@ class StudioProductionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             source = self.make_source(root)
             output = Path(root)/"private"
-            with patch.object(studio.shutil, "which", return_value="/usr/bin/gltfpack"), \
+            with patch.object(studio.shutil, "which", return_value="/bin/true"), \
                  patch.object(studio, "generate_lods",
                               side_effect=ValueError("lod_topology_invalid")) as lod:
                 manifest = studio.produce_private_draft(
