@@ -18,6 +18,30 @@ Post-upload GET and SHA-256 verification succeeded on all GLBs.
 Each GLB passed structural header / geometry count / PBR embedded WebP
 presence and byte-for-byte original WebP image retention checks.
 
+## In-app private 3D viewer added to draft PR
+
+The new client-only `components/spaktok/private-studio-glb-preview.tsx`
+uses Three.js GLTFLoader and supports embedded `EXT_texture_webp`
+textures, touch rotation, constrained automatic turntable, and a PBR ↔
+Wireframe switch. It loads only the already-audited private `File`
+in browser memory; it does NOT create public R2 URLs, trigger GPU,
+claim automatic rigging or pass source images to services.
+
+`SpaktokAIDirector` now displays this viewer once an owner imports a
+validated GLB. For the known defective prototype LOD1/LOD2 hashes,
+`createStudioFanoutManifest` and `assertStudioFanoutManifest`
+both require `needs-optimization` and
+`non_manifold_lod_requires_professional_retopology_and_visual_qa`.
+The operator can still examine their local turntables and download
+the GLB, but outbound buttons into the five Studios remain disabled
+until a later verified, professionally simplified replacement is
+produced. This is a **safety/QA boundary**, not proof that the current
+prototype LOD meshes look correct.
+
+The code is currently in the unmerged draft PR and has NOT been
+verified in the published Preview app. Vercel latest READY deployment
+still lags the latest branch head. Do not claim end-user availability.
+
 ## Additional topology audit (performed after creating the assets)
 
 The Cloudflare R2 file hashes were reverified. A second pass counted
