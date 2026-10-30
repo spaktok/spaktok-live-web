@@ -9,6 +9,7 @@ export function buildSpaktokQualityEvidence(manifest:StudioFanoutManifest){
   schema:'spaktok-3d-quality-evidence-v1' as const,
   generatedAt:new Date().toISOString(),
   asset:{fileName:s.fileName,sha256:s.sha256,bytes:s.bytes},
+  generationProfile:manifest.project.gpuProfile??null,
   measured:{
    triangleCount:s.triangles,
    embeddedTextureImageCount:s.textureImages,
