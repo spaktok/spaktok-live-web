@@ -27,11 +27,15 @@ jobs:
       - name: Validate Python syntax without third-party dependencies
         run: |
           python3 -m py_compile services/forge-gpu/gpu_preflight.py services/forge-gpu/gpu_ticket.py services/forge-gpu/server.py services/forge-gpu/trellis_v1_engine.py services/forge-gpu/trellis2_engine.py services/forge-gpu/one_image_e2e.py services/forge-gpu/one_click_vast_a100.py services/forge-gpu/trellis2_open_rembg.py services/forge-gpu/diagnose_trellis2_conditioning.py services/forge-gpu/trellis2_dinov3_compat.py services/forge-gpu/trellis2_quality.py services/forge-gpu/benchmark_glb_quality.py services/forge-gpu/glb_topology.py services/forge-gpu/glb_uv_surface.py services/forge-gpu/glb_position_weld_audit.py services/forge-gpu/test_glb_position_weld_audit.py services/forge-gpu/test_glb_topology.py services/forge-gpu/test_benchmark_glb_quality.py services/forge-gpu/build_private_lods.py services/forge-gpu/test_build_private_lods.py services/forge-gpu/spaktok_studio_production.py services/forge-gpu/test_spaktok_studio_production.py services/forge-gpu/rodin_blind_benchmark.py services/forge-gpu/test_rodin_blind_benchmark.py services/forge-gpu/wireframe_review_views.py services/forge-gpu/test_wireframe_review_views.py
+      - name: Install CPU-only glTF normal and texture test dependencies
+        run: python3 -m pip install --user 'trimesh==4.6.5' 'numpy>=1.24,<3' 'Pillow>=10,<12'
       - name: Run Blackwell CUDA and direct-ticket contract tests
         working-directory: services/forge-gpu
-        run: python3 -m unittest test_gpu_preflight test_gpu_ticket test_trellis_v1_engine test_trellis2_engine test_trellis2_open_rembg test_trellis2_dinov3_compat test_one_image_e2e test_benchmark_glb_quality test_glb_topology test_glb_position_weld_audit test_glb_uv_surface test_build_private_lods test_spaktok_studio_production test_rodin_blind_benchmark test_wireframe_review_views -v
+        run: python3 -m unittest test_gpu_preflight test_gpu_ticket test_gpu_health test_trellis1_engine test_glb_quality test_glb_mobile_finalize test_trellis_v1_engine test_trellis2_engine test_trellis2_open_rembg test_trellis2_dinov3_compat test_one_image_e2e test_benchmark_glb_quality test_glb_topology test_glb_position_weld_audit test_glb_uv_surface test_build_private_lods test_spaktok_studio_production test_rodin_blind_benchmark test_wireframe_review_views -v
       - name: Validate Vast operator startup script syntax
         run: bash -n services/forge-gpu/start-vast-trellis-v1.sh services/forge-gpu/start-vast-trellis2.sh services/forge-gpu/start-preview-quick-tunnel.sh
+      - name: Validate legacy A100 operator startup shell syntax
+        run: bash -n scripts/vast-a100-trellis1.sh scripts/vast-a100-trellis2.sh
   provider-contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 10
