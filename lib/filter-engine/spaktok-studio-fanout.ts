@@ -86,6 +86,7 @@ export function createStudioFanoutManifest(input:Readonly<{
  gpuProfile?:ForgeGpuProfile
  // Explicit QA blocker for prototype cluster LODs with non-manifold edges.
  previewTopologyBlocked?:boolean
+ topologyScanUnverified?:boolean
  sourceEngine?:'existing-glb'|'ai-360-gpu'|'browser-2.5d'
 }>):StudioFanoutManifest{
  if(!safeFile(input.fileName)||!validHash(input.sha256)||
@@ -107,6 +108,7 @@ export function createStudioFanoutManifest(input:Readonly<{
   throw Error('studio_fanout_project_invalid')
  const knownInvalidTopology=INSECURE_PREVIEW_LOD_SHA256.has(input.sha256)
  const topologyBlocked=Boolean(input.previewTopologyBlocked||knownInvalidTopology)
+ const topologyUnknown=input.topologyScanUnverified===true
  const mobileBlocked=input.bytes>15*1024*1024||
   input.audit.triangles>150000||input.audit.textures>12||
   !input.audit.hasUV||!input.audit.hasNormals||
@@ -123,6 +125,8 @@ export function createStudioFanoutManifest(input:Readonly<{
   const blockers=[...technicalReasons]
   if(topologyBlocked)
    blockers.push('non_manifold_lod_requires_professional_retopology_and_visual_qa')
+  if(topologyUnknown)
+   blockers.push('glb_topology_scan_unverified_requires_professional_review')
   const avatar=target==='avatar'||target==='live'
   if(input.sourceEngine==='browser-2.5d')
    blockers.push('local_relief_is_not_a_full_360_reconstruction')
@@ -136,7 +140,7 @@ export function createStudioFanoutManifest(input:Readonly<{
   blockers.push('human_rights_and_publication_review_required')
   return {
    target,destination:DESTINATIONS[target],
-   state:mobileBlocked||topologyBlocked?
+   state:mobileBlocked||topologyBlocked||topologyUnknown?
     'needs-optimization':'private-preview',
    visualScale:'auto-fit-preview',
    anchor:avatar?'head':target==='filter'?'nose_bridge':
