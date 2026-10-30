@@ -1,5 +1,6 @@
 'use client'
 import {useEffect,useMemo,useState,type ChangeEvent} from 'react'
+import dynamic from 'next/dynamic'
 import {
  DIRECTOR_TARGETS,detectDirectorTargets,evaluateDirectorAsset,
  planSpaktokDirector,type DirectorTarget,type DirectorAssetQA,
@@ -22,6 +23,10 @@ import {
  loadLocalStudioGlb,clearLocalStudioGlb,saveActiveOwnerRodinHead,
  loadActiveOwnerRodinHead,clearActiveOwnerRodinHead,
 } from '@/lib/filter-engine/reality-local-asset-handoff'
+
+const PrivateStudioGlbPreview=dynamic(
+ ()=>import('./private-studio-glb-preview'),{ssr:false},
+)
 
 const TARGET_LABELS:Readonly<Record<DirectorTarget,string>>={
  avatar:'أفاتار',live:'لايف',filter:'فلتر AR',
@@ -433,7 +438,8 @@ export default function SpaktokAIDirector({
  }
  const send=(target:DirectorTarget)=>async()=>{
   if(!asset||!manifest||!qa?.previewReady||busy||
-   !manifest.project.outputTargets.includes(target))return
+   !manifest.project.outputTargets.includes(target)||
+   manifest.outputs.find(out=>out.target===target)?.state!=='private-preview')return
   setBusy(true)
   try{
    await saveStudioFanoutBundle(asset,manifest)
@@ -736,6 +742,9 @@ export default function SpaktokAIDirector({
      {' · '}Morph Targets: {qa.morphs}
      {' · '}صور الخامات: {qa.textureImages}
     </p>
+    <PrivateStudioGlbPreview file={asset}
+     topologyWarning={manifest?.outputs.some(o=>o.state==='needs-optimization'&&
+      o.blockers.includes('non_manifold_lod_requires_professional_retopology_and_visual_qa'))===true}/>
     <div className="flex flex-wrap gap-2">
      <button type="button" onClick={download}
       className="rounded-lg border border-white/25 px-3 py-2 text-xs">
@@ -757,7 +766,8 @@ export default function SpaktokAIDirector({
       حفظ مسودة GLB وخطة الأقسام
      </button>
      {manifest?.project.outputTargets.map(target=><button key={target} type="button"
-      disabled={!qa.previewReady||busy||!manifest}
+      disabled={!qa.previewReady||busy||!manifest||
+       manifest.outputs.find(o=>o.target===target)?.state!=='private-preview'}
       onClick={()=>void send(target)()}
       className="rounded-lg bg-indigo-600 px-3 py-2 text-xs disabled:opacity-40">
       معاينة {TARGET_LABELS[target]}
