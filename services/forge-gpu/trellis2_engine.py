@@ -34,10 +34,14 @@ def load_model_once(torch_module) -> None:
     _pipeline = pipeline
 
 
-def make_glb(photo: bytes) -> bytes:
+def make_glb(photo: bytes, profile: str = "mobile-preview") -> bytes:
     """Produce a private GLB; do not execute any user-provided shell commands."""
     if _pipeline is None:
         raise RuntimeError("trellis2_model_not_ready")
+    if profile not in ("mobile-preview", "detail-preview"):
+        raise ValueError("unsupported_trellis2_profile")
+    decimation_target = 120000 if profile == "mobile-preview" else 200000
+    texture_size = 1024 if profile == "mobile-preview" else 2048
     from PIL import Image, ImageOps
     import torch
     import o_voxel
@@ -51,7 +55,9 @@ def make_glb(photo: bytes) -> bytes:
     # Use official default resolution for this first experimental bridge.
     # Higher resolutions require measured VRAM, runtime and size gates.
     with torch.inference_mode():
-        mesh = _pipeline.run(image)[0]
+        # The upstream default is 1024_cascade. Force 512 on the rented
+        # A100 40 GiB trial until measured 512 mode passes.
+        mesh = _pipeline.run(image, pipeline_type="512")[0]
         mesh.simplify(16777216)
         scene = o_voxel.postprocess.to_glb(
             vertices=mesh.vertices,
@@ -61,8 +67,8 @@ def make_glb(photo: bytes) -> bytes:
             attr_layout=mesh.layout,
             voxel_size=mesh.voxel_size,
             aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
-            decimation_target=200000,
-            texture_size=2048,
+            decimation_target=decimation_target,
+            texture_size=texture_size,
             remesh=True,
             remesh_band=1,
             remesh_project=0,
