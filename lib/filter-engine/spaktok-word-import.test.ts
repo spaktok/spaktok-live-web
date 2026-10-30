@@ -1,9 +1,10 @@
 import {describe,expect,it} from 'vitest'
 import {inspectWordGeneratedGlb,WORD_MAX_RESULT_BYTES} from './spaktok-word-import'
-function fixture(){
+function fixture(requiredExtensions:string[]=[]){
  const bytes=new Uint8Array(104)
  const data={
   asset:{version:'2.0'},
+  extensionsRequired:requiredExtensions,
   buffers:[{byteLength:104}],
   bufferViews:[
    {buffer:0,byteOffset:0,byteLength:36},
@@ -56,6 +57,12 @@ describe('Spaktok Word Rodin result ingestion',()=>{
   expect(info.audit.rigTargets).toBe(0)
   expect(info.canOpenInAvatar).toBe(true)
   expect(info.requiresMobileOptimization).toBe(false)
+ })
+ it('accepts GPU PBR WebP required extension, rejects unknown decoder requirements',()=>{
+  expect(inspectWordGeneratedGlb(fixture(['EXT_texture_webp'])).audit.valid)
+   .toBe(true)
+  expect(()=>inspectWordGeneratedGlb(fixture(['EXT_unsafe_unknown'])))
+   .toThrow('word_generated_glb_failed_structural_qa')
  })
  it('fails closed on file-like gibberish and oversized payload',()=>{
   expect(()=>inspectWordGeneratedGlb(new ArrayBuffer(2048)))
