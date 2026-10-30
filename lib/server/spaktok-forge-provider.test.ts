@@ -9,15 +9,15 @@ const base={
  SPAKTOK_FORGE_GPU_BROWSER_ORIGIN:origin,
  SPAKTOK_FORGE_GPU_TOKEN:'z'.repeat(48),
  SPAKTOK_FORGE_GPU_PROVIDER:'vast',
- SPAKTOK_FORGE_GPU_ENGINE:'trellis2',
+ SPAKTOK_FORGE_GPU_ENGINE:'trellis-v1',
  SPAKTOK_FORGE_GPU_HOST:'gpu.creator-domain.com',
  SPAKTOK_FORGE_GPU_VAST_HOSTNAME:'gpu.creator-domain.com',
  SPAKTOK_FORGE_GPU_URL:'https://gpu.creator-domain.com/v1/generate',
 }
 describe('Spaktok Forge GPU provider pinning',()=>{
- it('allows explicitly pinned Vast HTTPS tunnel + TRELLIS.2',()=>{
+ it('allows explicitly pinned Vast HTTPS tunnel + original TRELLIS',()=>{
   expect(resolveForgeGpuBackend(base,origin)).toMatchObject({
-   provider:'vast',engine:'trellis2',globalCap:1,
+   provider:'vast',engine:'trellis-v1',globalCap:1,
   })
  })
  it('refuses unapproved or insecure Vast endpoints',()=>{
@@ -32,6 +32,7 @@ describe('Spaktok Forge GPU provider pinning',()=>{
     SPAKTOK_FORGE_GPU_VAST_HOSTNAME:'gpu.trycloudflare.com',
     SPAKTOK_FORGE_GPU_URL:'https://gpu.trycloudflare.com/v1/generate'},
    {SPAKTOK_FORGE_GPU_ENGINE:'untrusted-shell'},
+   {SPAKTOK_FORGE_GPU_ENGINE:'trellis2'},
    {SPAKTOK_FORGE_GPU_PROVIDER:'random'},
    {SPAKTOK_FORGE_GPU_ENABLED:'false'},
   ]
