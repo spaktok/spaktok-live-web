@@ -77,7 +77,7 @@ def validate_gpu_ticket(
     # Exact, signed server-side model profile. Never accept runtime code,
     # shell commands, user model URLs or arbitrary pipeline settings.
     if claim.get("profile", "mobile-preview") not in (
-        "mobile-preview", "detail-preview"
+        "mobile-preview", "detail-preview", "studio-hd"
     ):
         raise InvalidGPUTicket("ticket_invalid_profile")
     return claim
