@@ -8,8 +8,10 @@ GPU compatibility, model licensing and real inference remain unverified.
 from __future__ import annotations
 
 import io
+import json
 import os
 import tempfile
+import time
 
 MODEL_ID = "microsoft/TRELLIS.2-4B"
 MAX_GLB_BYTES = 35 * 1024 * 1024
@@ -34,7 +36,15 @@ def load_model_once(torch_module) -> None:
     _pipeline = pipeline
 
 
-def make_glb(photo: bytes, profile: str = "mobile-preview") -> bytes:
+def _stage(name: str, job_id: str, **detail) -> None:
+    """Operator-readable progress WITHOUT source images, names or tokens."""
+    print(json.dumps({"event": "spaktok_gpu_stage", "job": job_id,
+                      "stage": name, "at": int(time.time()), **detail}),
+          flush=True)
+
+
+def make_glb(photo: bytes, profile: str = "mobile-preview",
+             job_id: str = "operator-direct") -> bytes:
     """Produce a private GLB; do not execute any user-provided shell commands."""
     if _pipeline is None:
         raise RuntimeError("trellis2_model_not_ready")
@@ -50,6 +60,7 @@ def make_glb(photo: bytes, profile: str = "mobile-preview") -> bytes:
         if src.width < 64 or src.height < 64 or src.width * src.height > 4096**2:
             raise ValueError("unsupported_dimensions")
         image = ImageOps.exif_transpose(src).convert("RGBA")
+    _stage("image_validated", job_id, profile=profile, bytes=len(photo))
 
     # Official inference shape (microsoft/TRELLIS.2 README, Oct 2026).
     # Use official default resolution for this first experimental bridge.
@@ -57,8 +68,11 @@ def make_glb(photo: bytes, profile: str = "mobile-preview") -> bytes:
     with torch.inference_mode():
         # The upstream default is 1024_cascade. Force 512 on the rented
         # A100 40 GiB trial until measured 512 mode passes.
+        _stage("dinov3_conditioning_and_generation_started", job_id)
         mesh = _pipeline.run(image, pipeline_type="512")[0]
+        _stage("geometry_and_pbr_generated", job_id)
         mesh.simplify(16777216)
+        _stage("glb_texture_baking_started", job_id)
         scene = o_voxel.postprocess.to_glb(
             vertices=mesh.vertices,
             faces=mesh.faces,
@@ -80,11 +94,15 @@ def make_glb(photo: bytes, profile: str = "mobile-preview") -> bytes:
     with tempfile.TemporaryDirectory(prefix="spaktok-trellis2-") as folder:
         path = os.path.join(folder, "generated.glb")
         scene.export(path, extension_webp=True)
+        _stage("glb_exported", job_id, bytes=os.path.getsize(path))
         byte_size = os.path.getsize(path)
         if not 28 <= byte_size <= MAX_GLB_BYTES:
             raise ValueError("invalid_or_oversized_glb")
         with open(path, "rb") as binary:
             result = binary.read(MAX_GLB_BYTES + 1)
-    if result[:4] != b"glTF" or len(result) > MAX_GLB_BYTES:
+    if (result[:4] != b"glTF" or len(result) > MAX_GLB_BYTES or
+            int.from_bytes(result[4:8], "little") != 2 or
+            int.from_bytes(result[8:12], "little") != len(result)):
         raise ValueError("invalid_glb_header_or_size")
+    _stage("glb_ready_for_private_import", job_id, bytes=len(result))
     return result
