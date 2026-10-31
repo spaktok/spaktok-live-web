@@ -7,15 +7,15 @@ on:
       - 'cloudflare/workers/spaktok-vast-operator.mjs'
       - 'migrations/native/0005_vast_remote_control.sql'
       - 'wrangler.vast-operator.toml'
-      - 'cloudflare/workers/spaktok-vast-operator.mjs'
-      - 'migrations/native/0005_vast_remote_control.sql'
-      - 'wrangler.vast-operator.toml'
       - 'lib/server/spaktok-forge-provider*'
       - 'app/api/spaktok-forge/gpu-ticket/**'
       - '.github/workflows/forge-gpu-contract.yml'
   pull_request:
     paths:
       - 'services/forge-gpu/**'
+      - 'cloudflare/workers/spaktok-vast-operator.mjs'
+      - 'migrations/native/0005_vast_remote_control.sql'
+      - 'wrangler.vast-operator.toml'
       - '.github/workflows/forge-gpu-contract.yml'
 
 permissions:
