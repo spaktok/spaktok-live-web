@@ -1,6 +1,7 @@
 'use client'
 
 import {useEffect,useRef,useState} from 'react'
+import {glbToUsdz} from '@/lib/filter-engine/spaktok-usdz-export'
 
 const MAX_UPLOAD=4*1024*1024
 const MAX_RESULT=256*1024*1024
@@ -79,6 +80,9 @@ export default function SpaktokForgeStudioJob({
  const [doneHandle,setDoneHandle]=useState<string|null>(null)
  const [library,setLibrary]=useState<'idle'|'saving'|'saved'>('idle')
  const [libraryNote,setLibraryNote]=useState('')
+ const [resultFile,setResultFile]=useState<File|null>(null)
+ const [usdzBusy,setUsdzBusy]=useState(false)
+ const [usdzNote,setUsdzNote]=useState('')
  const abortRef=useRef<AbortController|null>(null)
  useEffect(()=>()=>abortRef.current?.abort(),[])
 
@@ -144,7 +148,9 @@ export default function SpaktokForgeStudioJob({
     if(data.job.sha256&&await sha256Hex(bytes)!==data.job.sha256)
      throw Error('forge_job_result_integrity_failed')
     const tag=mode==='retexture'?'retexture':profile
-    onResult(new File([bytes],'spaktok-forge-'+tag+'.glb',{type:'model/gltf-binary'}))
+    const result=new File([bytes],'spaktok-forge-'+tag+'.glb',{type:'model/gltf-binary'})
+    setResultFile(result);setUsdzNote('')
+    onResult(result)
     setDoneHandle(handle)
     setNote('اكتمل: '+(bytes.byteLength/1024/1024).toFixed(1)+' MB'+
      (mode==='retexture'?' · خامات PBR جديدة على شكلك الأصلي.':
@@ -177,6 +183,22 @@ export default function SpaktokForgeStudioJob({
    setLibrary('idle')
    setLibraryNote(LIBRARY_ERRORS_AR[code]??'تعذّر الحفظ: '+code)
   }
+ }
+
+ const exportUsdz=async()=>{
+  if(!resultFile||usdzBusy)return
+  setUsdzBusy(true);setUsdzNote('تحويل محلي إلى USDZ داخل المتصفح…')
+  try{
+   const usdz=await glbToUsdz(resultFile)
+   const url=URL.createObjectURL(usdz)
+   const a=document.createElement('a')
+   a.href=url;a.download=usdz.name;a.rel='noopener'
+   a.click()
+   setTimeout(()=>URL.revokeObjectURL(url),30_000)
+   setUsdzNote('جاهز: '+(usdz.size/1024/1024).toFixed(1)+' MB · افتحه على iPhone/iPad لمعاينة AR Quick Look. لم يُرفع أي شيء.')
+  }catch(error){
+   setUsdzNote('تعذّر التحويل: '+(error instanceof Error?error.message:String(error)))
+  }finally{setUsdzBusy(false)}
  }
 
  const cancel=()=>{
@@ -257,5 +279,10 @@ export default function SpaktokForgeStudioJob({
    {library==='saved'?'محفوظ في مكتبتك الخاصة':library==='saving'?'جارٍ الحفظ…':'حفظ في مكتبتي الخاصة (R2)'}
   </button>}
   {libraryNote&&<p className="text-[11px] leading-5 text-slate-300" aria-live="polite">{libraryNote}</p>}
+  {resultFile&&<button type="button" onClick={()=>void exportUsdz()} disabled={usdzBusy}
+   className="rounded-lg border border-white/25 px-3 py-2 text-xs font-semibold text-slate-100 disabled:opacity-50">
+   {usdzBusy?'جارٍ التحويل…':'تصدير USDZ (iOS AR)'}
+  </button>}
+  {usdzNote&&<p className="text-[11px] leading-5 text-slate-300" aria-live="polite">{usdzNote}</p>}
  </div>
 }

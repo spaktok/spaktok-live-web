@@ -60,8 +60,8 @@ Env: `FORGE_GPU_JOB_DIR`, `FORGE_GPU_JOB_QUEUE`, `FORGE_GPU_JOB_TTL`.
 Then push the GLB to R2 with `push_first_glb_to_spaktok_r2.py`.
 
 ## Remaining Rodin gaps (not built yet)
-1. ~~Studio UI + Next route for `/v1/jobs`~~ built. Still open: automatic
-   push of results to R2.
+1. ~~Studio UI + Next route for `/v1/jobs`~~ built. ~~Push to R2~~ built as
+   opt-in `POST /api/spaktok-forge/jobs/save` (owner-private library).
 2. ~~Multi-view~~ built (shape only): `trellis2_multiview.py` applies
    stochastic view fusion (the TRELLIS v1 `run_multi_image` technique) to the
    TRELLIS.2 sparse-structure and shape flows: positive CFG branch is
@@ -78,5 +78,7 @@ Then push the GLB to R2 with `push_first_glb_to_spaktok_r2.py`.
    sniffed, <=2M faces). Opt-in `FORGE_GPU_RETEXTURE_ENABLED=yes`, requires
    >=40 GiB VRAM (second pipeline). Web upload cap 4.25 MB image+mesh total
    (Vercel body limit). Studio panel has a "إعادة تلوين مجسّم" mode.
-5. Quad remesh, rigging, FBX/USDZ export.
+5. ~~USDZ export~~ built: browser-local GLB→USDZ (three `USDZExporter`,
+   Quick Look compatible, textures capped at 2048) from the Studio panel; no
+   upload. Still open: quad remesh, rigging, FBX export.
 6. Blind study (20+ images, 5+ raters) before any "≥ Rodin" claim.
