@@ -64,6 +64,7 @@
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
     "framer-motion": "latest",
+    "hls.js": "1.7.3",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
     "next": "16.0.10",
@@ -77,12 +78,12 @@
     "recharts": "2.15.4",
     "sonner": "^1.7.4",
     "stripe": "^22.6.2",
+    "swr": "^2.5.1",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
+    "three": "^0.186.1",
     "vaul": "^1.1.2",
-    "zod": "3.25.76",
-    "hls.js": "1.7.3",
-    "three": "^0.186.1"
+    "zod": "3.25.76"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.60.2",
@@ -92,6 +93,7 @@
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.186.0",
     "@vinext/cloudflare": "1.0.0-beta.10",
     "@vitejs/plugin-rsc": "^0.5.35",
     "pg": "^8.23.0",
@@ -102,8 +104,7 @@
     "vinext": "1.0.0-beta.12",
     "vite": "^8.3.1",
     "vitest": "^5.0.2",
-    "wrangler": "^4.141.0",
-    "@types/three": "^0.186.0"
+    "wrangler": "^4.141.0"
   },
   "type": "module"
 }
