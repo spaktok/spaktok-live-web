@@ -82,3 +82,18 @@ Then push the GLB to R2 with `push_first_glb_to_spaktok_r2.py`.
    Quick Look compatible, textures capped at 2048) from the Studio panel; no
    upload. Still open: quad remesh, rigging, FBX export.
 6. Blind study (20+ images, 5+ raters) before any "≥ Rodin" claim.
+   Tooling built (`rodin_blind_pack.py`); the study itself is still unrun:
+
+       # fill the spec from --create-template, then build the rater pack
+       python rodin_blind_pack.py --pack spec.json --out /workspace/blind-pack \
+         --key /workspace/owner/blind-key.json   # key never goes to raters
+       cd /workspace/blind-pack && python -m http.server 8080
+       # each rater exports votes-<id>.json from the page
+       python rodin_blind_pack.py --merge spec.json --key /workspace/owner/blind-key.json \
+         --votes votes-*.json --output spec-voted.json
+       python rodin_blind_benchmark.py --audit spec-voted.json
+
+   The pack shuffles cases and randomizes A/B order with a CSPRNG. It strips
+   `asset.generator`/`copyright`, `extras`, and `name` from both GLBs so the
+   source can't be read from the file. Merging rejects a key from a different
+   pack, a rater who appears twice, and more than 5 raters per case.
