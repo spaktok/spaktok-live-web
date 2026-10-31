@@ -16,7 +16,7 @@ export type RealityAuditFamily =
 export type RealityAuditState = 'disabled' | 'prototype' | 'device-qa-required'
 /** Architectural truth, not a perceptual-quality score or mobile certification. */
 export type RealityVisualStage =
-  | 'geometric-prototype' | 'illustrated-2d' | 'tracked-cosmetic'
+  | 'disabled' | 'geometric-prototype' | 'illustrated-2d' | 'tracked-cosmetic'
   | 'pbr-approximation' | 'authored-3d' | 'tracked-deformation'
   | 'color-grade' | 'post-process' | 'background' | 'beauty'
 export type RealityAuditCheck =
@@ -61,6 +61,7 @@ export function realityAuditFamily(effect: RealityEffectManifest): RealityAuditF
 
 /** Every catalog effect receives a concrete photographic upgrade path. */
 export function photographicStage(effect:RealityEffectManifest):RealityVisualStage{
+  if(effect.id==='3d-photo-face')return 'disabled'
   if(effect.quality==='procedural-preview')return 'geometric-prototype'
   if(effect.quality==='authored-glb')return 'authored-3d'
   if(effect.kind==='face-surface')
@@ -75,6 +76,7 @@ export function photographicStage(effect:RealityEffectManifest):RealityVisualSta
     :effect.kind==='background'?'background':'beauty'
 }
 export const PHOTOGRAPHIC_UPGRADE_PATHS:Readonly<Record<RealityVisualStage,string>>={
+ 'disabled':'Legacy photo-over-face replacement is blocked. Use real-user live mesh deformation instead.',
  'geometric-prototype':'Replace procedural geometry with an original rigged GLB, calibrated PBR textures, depth and motion QA.',
  'illustrated-2d':'Author an original detailed face-bound mesh or texture with soft edges and pose-aware occlusion.',
  'tracked-cosmetic':'Improve anatomical UV cosmetics, physically plausible color and finish across skin tones and expressions.',
