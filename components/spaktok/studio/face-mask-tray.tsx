@@ -17,6 +17,7 @@ const tabs:{id:Category;label:string}[]=[
 const STORAGE_KEY='spaktok.face-ar.favorites.v1'
 const auditById=new Map(REALITY_EFFECT_AUDIT.map(effect=>[effect.id,effect]))
 const photographicStageLabels:Readonly<Record<RealityVisualStage,string>>={
+ 'disabled':'معطّل',
  'geometric-prototype':'هندسي تجريبي',
  'illustrated-2d':'رسم 2D',
  'tracked-cosmetic':'مكياج متتبّع',
