@@ -1,4 +1,5 @@
 import 'server-only'
+import { ensureSchema } from '@/lib/server/spaktok-schema'
 import { randomUUID } from 'node:crypto'
 import { batchD1, oneD1, queryD1, validId } from '@/lib/native/d1'
 import {
@@ -25,6 +26,7 @@ const audit = (reportId: string, actor: string, event: string, detail = '') => (
 type CreateResult = { ok: true; id: string } | { ok: false; error: 'target_not_found' | 'self_report' | 'already_reported' }
 
 export async function createReport(reporterId: string, input: ReportInput): Promise<CreateResult> {
+  await ensureSchema('reports')
   const target = await oneD1<{ owner: string }>(OWNER_SQL[input.targetType], [input.targetId])
   if (!target) return { ok: false, error: 'target_not_found' }
   if (target.owner === reporterId) return { ok: false, error: 'self_report' }
@@ -60,6 +62,7 @@ const toPublic = (r: ReportRow, viewer: string) => ({
 
 /** Reporter sees their notices; the content owner sees decisions taken against them (Art. 17). */
 export async function listMine(userId: string) {
+  await ensureSchema('reports')
   const { rows } = await queryD1<ReportRow>(
     `SELECT ${COLS} FROM content_reports WHERE reporter_id=? OR (target_owner_id=? AND status<>'open')
      ORDER BY created_at_ms DESC LIMIT 50`, [userId, userId])
@@ -67,6 +70,7 @@ export async function listMine(userId: string) {
 }
 
 export async function fileAppeal(userId: string, reportId: string, text: string): Promise<'ok' | 'not_found' | 'not_appealable'> {
+  await ensureSchema('reports')
   const r = await oneD1<ReportRow>(`SELECT ${COLS} FROM content_reports WHERE id=? AND (reporter_id=? OR target_owner_id=?)`,
     [reportId, userId, userId])
   if (!r) return 'not_found'
@@ -83,6 +87,7 @@ export async function fileAppeal(userId: string, reportId: string, text: string)
 }
 
 export async function moderationQueue() {
+  await ensureSchema('reports')
   const { rows } = await queryD1<ReportRow>(
     `SELECT ${COLS} FROM content_reports WHERE status='open' OR appeal_status='pending'
      ORDER BY CASE WHEN category='child_safety' THEN 0 WHEN category='illegal_content' THEN 1 ELSE 2 END, created_at_ms LIMIT 50`)
@@ -100,6 +105,7 @@ function enforcement(r: ReportRow, hide: boolean) {
 }
 
 export async function decide(actor: string, d: DecisionInput): Promise<'ok' | 'not_found'> {
+  await ensureSchema('reports')
   const r = await oneD1<ReportRow>(`SELECT ${COLS} FROM content_reports WHERE id=? AND status='open'`, [d.reportId])
   if (!r) return 'not_found'
   await batchD1([
@@ -113,6 +119,7 @@ export async function decide(actor: string, d: DecisionInput): Promise<'ok' | 'n
 
 export async function decideAppeal(actor: string, reportId: string, outcome: 'upheld' | 'reversed', reason: string):
   Promise<'ok' | 'not_found' | 'self_review'> {
+  await ensureSchema('reports')
   const r = await oneD1<ReportRow>(`SELECT ${COLS} FROM content_reports WHERE id=? AND appeal_status='pending'`, [reportId])
   if (!r) return 'not_found'
   if (r.appeal_by === actor) return 'self_review'
