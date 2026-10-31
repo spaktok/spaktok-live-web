@@ -5,6 +5,7 @@ import {faceFxCatalog,type FaceFxParams,type FaceFxId} from '@/lib/filter-engine
 import {cn} from '@/lib/utils'
 import {FIRST_GPU_LIVE_FILTER_ID,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION} from '@/lib/filter-engine/spaktok-first-gpu-live'
 import {SPAKTOK_ORIGINAL_PACK_INFO} from '@/lib/filter-engine/spaktok-original-face-filters'
+import {REALITY_EFFECT_AUDIT,type RealityVisualStage} from '@/lib/filter-engine/reality-effect-audit'
 import {getMakeupPalette,type MakeupLookId} from '@/lib/filter-engine/makeup3d'
 
 type Category='beauty'|'makeup'|'3d'|'all'|'fashion'|'animal'|'fantasy'|'fun'|'reactive'|'saved'
@@ -14,6 +15,19 @@ const tabs:{id:Category;label:string}[]=[
  {id:'fantasy',label:'الخيال'},{id:'fun',label:'المرح'},
 ]
 const STORAGE_KEY='spaktok.face-ar.favorites.v1'
+const auditById=new Map(REALITY_EFFECT_AUDIT.map(effect=>[effect.id,effect]))
+const photographicStageLabels:Readonly<Record<RealityVisualStage,string>>={
+ 'geometric-prototype':'هندسي تجريبي',
+ 'illustrated-2d':'رسم 2D',
+ 'tracked-cosmetic':'مكياج متتبّع',
+ 'pbr-approximation':'PBR تقريبي',
+ 'authored-3d':'GLB أصلي',
+ 'tracked-deformation':'نحت متتبّع',
+ 'color-grade':'تدرّج لوني',
+ 'post-process':'مؤثر رقمي',
+ 'background':'خلفية',
+ 'beauty':'تجميل',
+}
 
 
 /** Scalable true SVG thumbnail (not a font emoji). The actual lens uses a
@@ -171,7 +185,7 @@ export function FaceMaskTray({
       {liveMode&&tab==='3d'&&(
        <p dir="rtl" className="mb-2 rounded-lg border border-indigo-300/20 bg-indigo-300/10 px-2 py-1.5 text-[10px] leading-4 text-indigo-100">
         ✨ حزمة Spaktok الأصلية: {SPAKTOK_ORIGINAL_PACK_INFO.addedFilters} خامة PBR جديدة
-        بدون تنزيل مجسمات إضافية. جودة ومعدل الإطارات قيد اختبار الهاتف.
+        بدون تنزيل مجسمات إضافية. الخامات PBR تقريبية، وليست تصويرًا فوتوغرافيًا مثبتًا؛ جودة الهاتف قيد الاختبار.
        </p>
       )}
       {liveMode&&tab==='3d'&&(
@@ -200,7 +214,9 @@ export function FaceMaskTray({
           {visibleMasks.map(mask=>(
             <div key={mask.id} className={cn('relative flex min-w-[63px] max-w-[70px] shrink-0 snap-start flex-col items-center rounded-[14px] border px-1 pb-1 pt-1',
               value.id===mask.id?'border-[#abc3ff] bg-[#425cae]/55':'border-white/10 bg-white/[.05]')}>
-              <button type="button" className="flex w-full flex-col items-center gap-1" onClick={()=>{
+              <button type="button" className="flex w-full flex-col items-center gap-1"
+                title={auditById.get(mask.id)?.photographicUpgrade}
+                onClick={()=>{
                 if(mask.id===FIRST_GPU_LIVE_FILTER_ID&&!firstGpuReady){
                   void onFetchFirstGpu?.()
                   return
@@ -214,6 +230,9 @@ export function FaceMaskTray({
                 <span className="h-7 w-full overflow-hidden text-center text-[9px] leading-[14px] text-white/85">
                   {mask.name}{mask.id===FIRST_GPU_LIVE_FILTER_ID?(firstGpuReady?' ✓':' 🔒'):''}
                 </span>
+                {auditById.get(mask.id)&&<span className="max-w-full truncate rounded-md bg-black/25 px-1 text-[8px] text-cyan-100/80">
+                  {photographicStageLabels[auditById.get(mask.id)!.visualStage]}
+                </span>}
               </button>
               {mask.id!=='none'&&<button type="button" aria-label={favorites.includes(mask.id)?'إزالة من المفضلة':'إضافة إلى المفضلة'} aria-pressed={favorites.includes(mask.id)}
                 onClick={()=>toggleFavorite(mask.id)}
