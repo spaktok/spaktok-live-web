@@ -1,3 +1,4 @@
+import {isPhotorealSurfaceId} from './reality-precision-face-mask'
 import {
   REALITY_EFFECTS,
   assertRealityEffect,
@@ -13,6 +14,11 @@ export type RealityAuditFamily =
   | 'background' | 'beauty'
 
 export type RealityAuditState = 'disabled' | 'prototype' | 'device-qa-required'
+/** Architectural truth, not a perceptual-quality score or mobile certification. */
+export type RealityVisualStage =
+  | 'geometric-prototype' | 'illustrated-2d' | 'tracked-cosmetic'
+  | 'pbr-approximation' | 'authored-3d' | 'tracked-deformation'
+  | 'color-grade' | 'post-process' | 'background' | 'beauty'
 export type RealityAuditCheck =
   | 'manifest-invalid' | 'legacy-photo-overlay-disabled'
   | 'original-3d-asset-needed' | 'verify-asset-rights'
@@ -26,6 +32,8 @@ export type RealityEffectAudit = Readonly<{
   id: string
   name: string
   family: RealityAuditFamily
+  visualStage: RealityVisualStage
+  photographicUpgrade: string
   state: RealityAuditState
   quality: RealityEffectManifest['quality']
   anchor: RealityEffectManifest['anchor']
@@ -49,6 +57,31 @@ export function realityAuditFamily(effect: RealityEffectManifest): RealityAuditF
   if (effect.kind === 'face-surface') return 'makeup-3d'
   if (effect.kind === 'wearable-3d' || effect.kind === 'expression-3d') return 'accessory-3d'
   return 'face-overlay'
+}
+
+/** Every catalog effect receives a concrete photographic upgrade path. */
+export function photographicStage(effect:RealityEffectManifest):RealityVisualStage{
+  if(effect.quality==='procedural-preview')return 'geometric-prototype'
+  if(effect.quality==='authored-glb')return 'authored-3d'
+  if(effect.kind==='face-surface')
+    return isPhotorealSurfaceId(effect.id)?'pbr-approximation':'tracked-cosmetic'
+  if(effect.kind==='face-overlay')return 'illustrated-2d'
+  if(effect.kind==='face-deform')return 'tracked-deformation'
+  return effect.kind==='color-grade'?'color-grade'
+    :effect.kind==='post-process'?'post-process'
+    :effect.kind==='background'?'background':'beauty'
+}
+export const PHOTOGRAPHIC_UPGRADE_PATHS:Readonly<Record<RealityVisualStage,string>>={
+ 'geometric-prototype':'Replace procedural geometry with an original rigged GLB, calibrated PBR textures, depth and motion QA.',
+ 'illustrated-2d':'Author an original detailed face-bound mesh or texture with soft edges and pose-aware occlusion.',
+ 'tracked-cosmetic':'Improve anatomical UV cosmetics, physically plausible color and finish across skin tones and expressions.',
+ 'pbr-approximation':'Add licensed high-resolution normal/roughness maps and real-device multi-angle lighting tests.',
+ 'authored-3d':'Verify asset rights, per-angle occlusion, UV/texture fidelity, latency and thermal stability.',
+ 'tracked-deformation':'Improve identity-preserving landmark stability, natural warps, and high-motion boundary QA.',
+ 'color-grade':'Camera-metered exposure and white balance, highlight protection, and photo/recording color parity.',
+ 'post-process':'Resolve temporal jitter and GPU costs; preserve intentional artistic effects rather than mislabel photoreal.',
+ 'background':'Improve hair/hand edge matting, natural defocus, and low-light segmentation.',
+ 'beauty':'Preserve pores and identity with bounded, opt-in tone-neutral skin enhancements.',
 }
 
 /** Warning/checklist, not a claim that any camera/device has been tested. */
@@ -90,6 +123,8 @@ export function auditRealityEffect(effect: RealityEffectManifest): RealityEffect
   checks.push('recording-parity','real-device-performance')
   return {
     id:effect.id,name:effect.name,family,
+    visualStage:photographicStage(effect),
+    photographicUpgrade:PHOTOGRAPHIC_UPGRADE_PATHS[photographicStage(effect)],
     state:disabled || checks.includes('manifest-invalid')
       ? 'disabled'
       : effect.quality === 'procedural-preview' ? 'prototype' : 'device-qa-required',
@@ -110,6 +145,9 @@ export function summarizeRealityAudit(items: readonly RealityEffectAudit[]) {
     disabled:items.filter(item=>item.state==='disabled').length,
     prototypes:items.filter(item=>item.state==='prototype').length,
     needingDeviceQa:items.filter(item=>item.state==='device-qa-required').length,
+    visualStages:Array.from(new Set(items.map(item=>item.visualStage))).map(stage=>({
+      stage,count:items.filter(item=>item.visualStage===stage).length,
+    })),
     families:REALITY_AUDIT_FAMILIES.map(family=>({
       family,count:items.filter(item=>item.family===family).length,
     })),
