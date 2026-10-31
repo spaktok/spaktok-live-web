@@ -3,7 +3,7 @@ import {useEffect,useMemo,useRef,useState} from 'react'
 import {ChevronDown,ChevronUp,Heart,Search,ScanFace,X} from 'lucide-react'
 import {faceFxCatalog,type FaceFxParams,type FaceFxId} from '@/lib/filter-engine/params'
 import {cn} from '@/lib/utils'
-import {FIRST_GPU_LIVE_FILTER_ID} from '@/lib/filter-engine/spaktok-first-gpu-live'
+import {FIRST_GPU_LIVE_FILTER_ID,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION} from '@/lib/filter-engine/spaktok-first-gpu-live'
 import {getMakeupPalette,type MakeupLookId} from '@/lib/filter-engine/makeup3d'
 
 type Category='beauty'|'makeup'|'3d'|'all'|'fashion'|'animal'|'fantasy'|'fun'|'reactive'|'saved'
@@ -215,6 +215,37 @@ export function FaceMaskTray({
           ))}
         </div>
       ):<div className="py-4 text-center text-xs text-white/60">{tab==='saved'?'لم تحفظ أي مؤثر بعد':'لا توجد مؤثرات مطابقة'}</div>}
+      {liveMode&&value.id===FIRST_GPU_LIVE_FILTER_ID&&firstGpuReady&&
+       <section aria-label="معايرة أول مجسم GPU" className="mt-2 space-y-2 border-t border-white/15 pt-2">
+        <div className="flex items-center justify-between gap-2">
+         <strong className="text-[11px] text-cyan-100">ضبط مكان مجسم GPU</strong>
+         <button type="button" onClick={()=>onChange({...value,pilot:DEFAULT_FIRST_GPU_CALIBRATION})}
+          className="rounded-lg bg-white/10 px-2 py-1 text-[10px] text-white">إعادة الضبط</button>
+        </div>
+        {([
+          {key:'scale',name:'الحجم',min:.4,max:1.8,step:.05},
+          {key:'vertical',name:'الارتفاع',min:-.5,max:.5,step:.02},
+          {key:'depth',name:'العمق',min:-.35,max:.35,step:.02},
+          {key:'rotation',name:'الدوران',min:-90,max:90,step:5},
+        ] as const).map(item=>{
+         const p=normalizeFirstGpuCalibration(value.pilot)
+         return <label key={item.key} className="flex items-center gap-2 text-[11px] text-white/80">
+          <span className="w-14 shrink-0">{item.name}</span>
+          <input type="range" min={item.min} max={item.max} step={item.step}
+           value={p[item.key]}
+           onChange={event=>onChange({...value,
+            pilot:normalizeFirstGpuCalibration({...p,[item.key]:Number(event.target.value)})})}
+           className="min-w-0 flex-1 accent-cyan-400"
+           aria-label={'ضبط '+item.name+' للمجسم'}/>
+          <span className="w-10 text-left font-mono tabular-nums">
+           {p[item.key].toFixed(item.key==='rotation'?0:2)}
+          </span>
+         </label>
+        })}
+        <p className="text-[10px] leading-4 text-white/50">
+         المعايرة تُحفظ على هذا الجهاز فقط، ولا تعدّل ملف GLB الأصلي.
+        </p>
+       </section>}
       {value.id.startsWith('3d-makeup-')&&
         <label className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2 text-[11px] text-white/75">
           <span className="shrink-0 font-semibold">قوة المكياج</span>

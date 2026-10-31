@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { Camera, Download, Radio, RefreshCw, Send, SlidersHorizontal, Timer, X, Zap, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { createStudioState } from '@/lib/filter-engine/params'
+import { createStudioState,type FaceFxParams } from '@/lib/filter-engine/params'
 import {NEUTRAL_LIVE_SCULPT,type LiveSculptControls} from '@/lib/filter-engine/reality-live-sculpt-warp'
 import {
  DEFAULT_REALITY_UNIFIED_CONFIG,resolveUnifiedRealityLook,
  type RealityLook,
 } from '@/lib/filter-engine/reality-unified-profile'
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
-import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,loadFirstGpuOwnerR2,firstGpuErrorMessage} from '@/lib/filter-engine/spaktok-first-gpu-live'
+import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,loadFirstGpuOwnerR2,firstGpuErrorMessage,normalizeFirstGpuCalibration,FIRST_GPU_CALIBRATION_STORAGE_KEY} from '@/lib/filter-engine/spaktok-first-gpu-live'
 import {inspectPhotoFacePickerFile,photoFacePickerArabicError} from '@/lib/filter-engine/reality-photo-file-picker'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
 import { StudioPanel } from './studio/studio-panel'
@@ -102,6 +102,22 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const [liveSeconds, setLiveSeconds] = useState(0)
   const [liveTitle, setLiveTitle] = useState('')
   const [firstGpuPilotFile,setFirstGpuPilotFile]=useState<File|null>(null)
+  useEffect(()=>{
+   try{
+    const stored=localStorage.getItem(FIRST_GPU_CALIBRATION_STORAGE_KEY)
+    if(!stored)return
+    const calibration=normalizeFirstGpuCalibration(JSON.parse(stored) as unknown)
+    setStudio(prev=>({...prev,face:{...prev.face,pilot:calibration}}))
+   }catch{/* No camera failure when device storage is blocked or corrupted. */}
+  },[])
+  const onFaceChange=(face:FaceFxParams)=>{
+   setStudio(prev=>({...prev,face}))
+   if(face.id!==FIRST_GPU_LIVE_FILTER_ID||!face.pilot)return
+   try{
+    localStorage.setItem(FIRST_GPU_CALIBRATION_STORAGE_KEY,
+     JSON.stringify(normalizeFirstGpuCalibration(face.pilot)))
+   }catch{/* Device settings are optional. */}
+  }
   const [firstGpuBusy,setFirstGpuBusy]=useState(false)
   const [firstGpuMessage,setFirstGpuMessage]=useState('أول مجسم GPU موجود في R2 الخاص؛ يمكن استيراد النسخة الأصلية للتجربة.')
   const activateFirstGpu=async(file:File)=>{
@@ -569,7 +585,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
         )}
 
         {!camera.recording && !captured && !showPanel &&
-          <FaceMaskTray value={studio.face} onChange={face=>setStudio(prev=>({...prev,face}))}
+          <FaceMaskTray value={studio.face} onChange={onFaceChange}
             visible={showFaceTray} onToggle={()=>setShowFaceTray(v=>!v)}
             liveMode={mode==='live'} activeLive={isLive}
             firstGpuReady={Boolean(firstGpuPilotFile)}
