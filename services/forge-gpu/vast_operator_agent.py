@@ -354,10 +354,11 @@ def execute(job: dict, device: dict) -> dict:
         if not 128 <= len(data) <= MAX_IMAGE:
             raise OperatorError("image_size_not_allowed")
         source_name = image_filename(data)
+        # Only an explicitly approved paid generation job may launch the
+        # fixed localhost TRELLIS.2 service. Never start on gpu_info/probe.
+        from vast_local_trellis_service import ensure_local_trellis2
         from one_image_e2e import post_one_image
-        token = os.environ.get("FORGE_GPU_TOKEN", "")
-        if len(token) < 32:
-            raise OperatorError("local_gpu_server_not_configured")
+        token = ensure_local_trellis2()
         result = post_one_image(data, source_name, token)
         store_output(device, job, result)
         return {"produced": True, "bytes": len(result),
