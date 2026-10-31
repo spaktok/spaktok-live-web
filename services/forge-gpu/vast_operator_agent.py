@@ -225,8 +225,24 @@ def execute(job: dict, device: dict) -> dict:
         first = [part.strip() for part in lines[0].split(",")]
         if len(first) != 3:
             raise OperatorError("unexpected_gpu_info")
+        model_repo = Path("/workspace/TRELLIS.2/trellis2/pipelines/trellis2_image_to_3d.py")
+        python_env = Path("/workspace/trellis2-env/bin/python")
+        api_ready, api_engine = False, "unknown"
+        try:
+            with request.urlopen("http://127.0.0.1:8000/health", timeout=2) as resp:
+                health = json.load(resp)
+            if isinstance(health, dict):
+                api_ready = health.get("ready") is True
+                claimed_engine = health.get("engine")
+                if claimed_engine in {"trellis2", "trellis-v1", "stable-fast-3d"}:
+                    api_engine = claimed_engine
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
         return {"name": first[0][:100], "memoryMiB": int(first[1]),
-                "driver": first[2][:50], "deviceCount": len(lines)}
+                "driver": first[2][:50], "deviceCount": len(lines),
+                "trellis2Checkout": model_repo.is_file(),
+                "trellis2Environment": python_env.is_file(),
+                "localGpuApiReady": api_ready, "localGpuEngine": api_engine}
     if action == "preflight":
         return run_checked([sys.executable, str(HERE / "gpu_preflight.py")])
     if action == "diagnose_dinov3":
