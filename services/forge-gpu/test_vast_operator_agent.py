@@ -55,9 +55,9 @@ class VastAgentContractTests(unittest.TestCase):
             agent.validate_job(base)
 
     def test_image_content_type_magic(self):
-        self.assertEqual(agent.image_filename(b"\\x89PNG\\r\\n\\x1a\\n"), "source.png")
-        self.assertEqual(agent.image_filename(b"\\xff\\xd8\\xff"), "source.jpg")
-        self.assertEqual(agent.image_filename(b"RIFF" + b"\\x00" * 4 + b"WEBP"), "source.webp")
+        self.assertEqual(agent.image_filename(b"\x89PNG\r\n\x1a\n"), "source.png")
+        self.assertEqual(agent.image_filename(b"\xff\xd8\xff"), "source.jpg")
+        self.assertEqual(agent.image_filename(b"RIFF" + b"\x00" * 4 + b"WEBP"), "source.webp")
         with self.assertRaises(agent.OperatorError):
             agent.image_filename(b"not-image")
 
