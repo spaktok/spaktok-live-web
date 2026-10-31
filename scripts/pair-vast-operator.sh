@@ -32,4 +32,18 @@ test -f "$ROOT/services/forge-gpu/vast_operator_agent.py" ||
 
 echo "PAIRING_DEVICE_TO_PRIVATE_WORKER"
 echo "This performs no GPU inference. The operator must verify and approve device."
-exec python3 "$ROOT/services/forge-gpu/vast_operator_agent.py" enroll --worker "$WORKER"
+python3 "$ROOT/services/forge-gpu/vast_operator_agent.py" enroll --worker "$WORKER"
+
+# Start outbound polling automatically; the agent does not run paid work
+# until the operator separately approves a specific D1 compute job.
+LOG_DIR="/workspace/.spaktok-vast-agent"
+mkdir -p "$LOG_DIR"
+chmod 700 "$LOG_DIR"
+command -v nohup >/dev/null || { echo "ERROR: nohup_missing" >&2; exit 2; }
+nohup python3 -u "$ROOT/services/forge-gpu/vast_operator_agent.py" poll --interval 20 \
+  </dev/null >"$LOG_DIR/agent.log" 2>&1 &
+pid=$!
+(umask 077; printf '%s\\n' "$pid" >"$LOG_DIR/agent.pid")
+echo "AGENT_POLLING=STARTED"
+echo "AGENT_PID=$pid"
+echo "SEND_DEVICE_ID_AND_PAIR_CODE_ONLY; NEVER_SEND_DEVICE_TOKEN_OR_CONFIG"
