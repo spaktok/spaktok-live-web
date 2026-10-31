@@ -198,10 +198,10 @@ def image_filename(blob: bytes) -> str:
     raise OperatorError("unsupported_image_magic")
 
 
-def run_checked(args: list[str], timeout: int = 180) -> dict:
+def run_checked(args: list[str], timeout: int = 180, env: dict | None = None) -> dict:
     try:
         completed = subprocess.run(args, cwd=HERE, capture_output=True,
-                                   text=True, timeout=timeout, check=False)
+                                   text=True, timeout=timeout, check=False, env=env)
     except subprocess.TimeoutExpired:
         raise OperatorError("diagnostic_timeout") from None
     if completed.returncode != 0:
@@ -243,11 +243,23 @@ def execute(job: dict, device: dict) -> dict:
                 "trellis2Checkout": model_repo.is_file(),
                 "trellis2Environment": python_env.is_file(),
                 "localGpuApiReady": api_ready, "localGpuEngine": api_engine}
-    if action == "preflight":
-        return run_checked([sys.executable, str(HERE / "gpu_preflight.py")])
-    if action == "diagnose_dinov3":
-        return run_checked([sys.executable, str(HERE / "diagnose_trellis2_conditioning.py"),
-                            "--execute"], timeout=900)
+    if action in {"preflight", "diagnose_dinov3"}:
+        model_python = Path("/workspace/trellis2-env/bin/python")
+        interpreter = str(model_python) if model_python.is_file() else sys.executable
+        if action == "preflight":
+            return run_checked([interpreter, str(HERE / "gpu_preflight.py")])
+        if not model_python.is_file():
+            raise OperatorError("trellis2_environment_missing")
+        if not Path("/workspace/TRELLIS.2/trellis2/pipelines/trellis2_image_to_3d.py").is_file():
+            raise OperatorError("trellis2_checkout_missing")
+        env = os.environ.copy()
+        env["CONDA_PREFIX"] = "/workspace/trellis2-env"
+        env["PYTHONPATH"] = os.pathsep.join((str(HERE), "/workspace/TRELLIS.2",
+                                               env.get("PYTHONPATH", "")))
+        if not env.get("HF_HOME") and Path("/workspace/hf-cache").is_dir():
+            env["HF_HOME"] = "/workspace/hf-cache"
+        return run_checked([interpreter, str(HERE / "diagnose_trellis2_conditioning.py"),
+                            "--execute"], timeout=900, env=env)
     data = retrieve_input(device, job)
     if action == "generate_one":
         if not 128 <= len(data) <= MAX_IMAGE:
