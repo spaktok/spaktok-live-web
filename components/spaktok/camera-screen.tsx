@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Download, Radio, RefreshCw, Send, SlidersHorizontal, Timer, X, Zap, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createStudioState,faceFxCatalog,type FaceFxId,type FaceFxParams } from '@/lib/filter-engine/params'
+import {shouldRunExtraLiveMesh} from '@/lib/filter-engine/reality-live-performance'
 import {NEUTRAL_LIVE_SCULPT,type LiveSculptControls} from '@/lib/filter-engine/reality-live-sculpt-warp'
 import {
  DEFAULT_REALITY_UNIFIED_CONFIG,resolveUnifiedRealityLook,
@@ -160,7 +161,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
    paused:Boolean(captured),
    // Existing 3D AR already tracks the 478-point face. A second
    // subdivided mesh runs only for optional sculpt / QA wireframes.
-   liveFaceMesh:isLive&&mode==='live'&&(liveFaceOptIn||liveMeshQa),
+   liveFaceMesh:shouldRunExtraLiveMesh(isLive,mode==='live',liveFaceOptIn,liveMeshQa),
    liveMeshDebug:liveMeshQa&&isLive,
    liveSculpt:isLive&&liveFaceOptIn?liveSculpt:NEUTRAL_LIVE_SCULPT,
   })

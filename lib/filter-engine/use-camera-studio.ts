@@ -12,6 +12,7 @@ import type {FaceMesh3DEngine,Face3DFrame} from './face3d'
 import type {TrackedHand} from './reality-hand-physics'
 import {stabilizeFaceMesh,hasFreshFace} from './face3d-tracking'
 import {cameraSurfaceDimensions} from './preview-surface'
+import {choosePreviewSurfaceHeight} from './reality-live-performance'
 import {cameraMorphForEffect} from './reality-face-morph'
 import {buildLiveSculptWarp,hasLiveSculpt,normalizeLiveSculpt,
  type LiveSculptControls,type LiveSculptFrame} from './reality-live-sculpt-warp'
@@ -46,12 +47,11 @@ type VideoWithFrameCallback = HTMLVideoElement & {
 
 // Use a smaller WebGL surface on lower-end devices to avoid UI jank.
 const chooseOutputHeight = (livePreview=false) => {
-  // On touch phones, LIVE AR uses a smaller GPU surface for responsive tracking.
-  if (livePreview && typeof window !== 'undefined' &&
-      window.matchMedia?.('(pointer:coarse)').matches) return 720
-  const cpu = navigator.hardwareConcurrency || 4
-  const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
-  return cpu <= 4 || (memory !== undefined && memory <= 3) ? 960 : 1280
+  const touch=typeof window!=='undefined'&&
+   Boolean(window.matchMedia?.('(pointer:coarse)').matches)
+  return choosePreviewSurfaceHeight(livePreview,touch,
+   navigator.hardwareConcurrency||4,
+   (navigator as Navigator&{deviceMemory?:number}).deviceMemory)
 }
 
 /**
