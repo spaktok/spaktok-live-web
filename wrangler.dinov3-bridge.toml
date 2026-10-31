@@ -1,0 +1,14 @@
+# Private Hugging Face DINOv3 checkpoint stream to paired Vast GPU.
+# Required Cloudflare secret (NOT in this file): HF_DINOV3_READ_TOKEN.
+# Set the secret with the account owner's least-privileged fine-grained
+# Hugging Face access token, explicitly granted to the gated DINOv3 repo.
+# No public downloads; all model access requires a time-limited D1 grant.
+name = "spaktok-dinov3-bridge"
+main = "cloudflare/workers/spaktok-dinov3-bridge.mjs"
+compatibility_date = "2026-10-31"
+workers_dev = true
+
+[[d1_databases]]
+binding = "VAST_DB"
+database_name = "spaktok-primary"
+database_id = "e18619f5-76ec-42e5-b601-3e5f06ae7731"
