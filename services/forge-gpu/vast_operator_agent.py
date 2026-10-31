@@ -356,9 +356,13 @@ def execute(job: dict, device: dict) -> dict:
         source_name = image_filename(data)
         # Only an explicitly approved paid generation job may launch the
         # fixed localhost TRELLIS.2 service. Never start on gpu_info/probe.
-        from vast_local_trellis_service import ensure_local_trellis2
+        from vast_local_trellis_service import (ensure_local_trellis2,
+                                                   LocalServiceError)
         from one_image_e2e import post_one_image
-        token = ensure_local_trellis2()
+        try:
+            token = ensure_local_trellis2()
+        except LocalServiceError as exc:
+            raise OperatorError(str(exc)) from None
         result = post_one_image(data, source_name, token)
         store_output(device, job, result)
         return {"produced": True, "bytes": len(result),
