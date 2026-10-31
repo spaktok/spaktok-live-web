@@ -61,6 +61,50 @@ class VastAgentContractTests(unittest.TestCase):
         with self.assertRaises(agent.OperatorError):
             agent.image_filename(b"not-image")
 
+
+    def test_curl_transport_keeps_device_token_off_process_argv(self):
+        import subprocess
+
+        base = "https://spaktok-vast-operator.spaktok.workers.dev"
+        secret = "TESTSECRETONLY" * 5
+        device = {"deviceId": "a" * 32, "token": secret}
+        captured = {}
+
+        def mocked_curl(args, **kwargs):
+            captured["args"] = list(args)
+            captured["config"] = kwargs["input"].decode("utf-8")
+            # curl's private response file is configured through stdin only.
+            output_line = next(line for line in captured["config"].splitlines()
+                               if line.startswith("output = "))
+            output = Path(json.loads(output_line.split(" = ", 1)[1]))
+            output.write_bytes(b'{"paired":true,"job":null}')
+            return subprocess.CompletedProcess(args, 0, stdout=b"200",
+                                               stderr=b"")
+
+        with patch.object(agent.subprocess, "run", side_effect=mocked_curl):
+            raw = agent.api(base, "/v1/agent/claim", method="POST",
+                            body=b"{}", device=device)
+        self.assertEqual(json.loads(raw)["paired"], True)
+        self.assertNotIn(secret, " ".join(captured["args"]))
+        self.assertIn(secret, captured["config"])
+        self.assertEqual(captured["args"][:2], ["curl", "-q"])
+
+    def test_curl_bounded_error_code_is_reported(self):
+        import subprocess
+
+        def rejected(args, **kwargs):
+            config = kwargs["input"].decode("utf-8")
+            line = next(x for x in config.splitlines() if x.startswith("output = "))
+            Path(json.loads(line.split(" = ", 1)[1])).write_bytes(
+                b'{"error":"enrollment_closed"}')
+            return subprocess.CompletedProcess(args, 0, stdout=b"403", stderr=b"")
+
+        with patch.object(agent.subprocess, "run", side_effect=rejected):
+            with self.assertRaisesRegex(agent.OperatorError,
+                                        "remote_http_403_enrollment_closed"):
+                agent.api("https://spaktok-vast-operator.spaktok.workers.dev",
+                          "/v1/agent/enroll", method="POST", body=b"{}")
+
     def test_enrollment_never_prints_secret(self):
         url = "https://spaktok-vast-operator.spaktok.workers.dev"
         with tempfile.TemporaryDirectory() as folder:
