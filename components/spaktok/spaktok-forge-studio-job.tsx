@@ -6,6 +6,7 @@ const MAX_UPLOAD=4*1024*1024
 const MAX_RESULT=256*1024*1024
 const POLL_MS=4000
 const MAX_RETEXTURE_UPLOAD=4*1024*1024+256*1024
+const MAX_EXTRA_VIEWS=3
 const PROFILES={
  'studio-hd':{label:'Studio HD · 1024 · نسيج 2K',budgets:[50000,120000,200000,300000]},
  'studio-ultra':{label:'Studio Ultra · 1536 · نسيج 4K',budgets:[120000,200000,300000,500000]},
@@ -25,17 +26,17 @@ const sleep=(ms:number,signal:AbortSignal)=>new Promise<void>((resolve,reject)=>
 
 /** Shrinks oversize photos below the 4MB Vercel request cap, preserving the
  * longest edge up to 2048px (TRELLIS.2 conditions at 518-1024px anyway). */
-async function fitForUpload(file:File):Promise<File>{
- if(file.size<=MAX_UPLOAD)return file
+async function fitForUpload(file:File,limit=MAX_UPLOAD):Promise<File>{
+ if(file.size<=limit)return file
  const bitmap=await createImageBitmap(file)
  try{
-  for(const edge of [2048,1600,1280]){
+  for(const edge of [2048,1600,1280,1024,768]){
    const k=Math.min(1,edge/Math.max(bitmap.width,bitmap.height))
    const canvas=document.createElement('canvas')
    canvas.width=Math.round(bitmap.width*k);canvas.height=Math.round(bitmap.height*k)
    canvas.getContext('2d')?.drawImage(bitmap,0,0,canvas.width,canvas.height)
    const blob=await new Promise<Blob|null>(r=>canvas.toBlob(r,'image/webp',.92))
-   if(blob&&blob.size<=MAX_UPLOAD)return new File([blob],'source.webp',{type:'image/webp'})
+   if(blob&&blob.size<=limit)return new File([blob],'source.webp',{type:'image/webp'})
   }
  }finally{bitmap.close()}
  throw Error('forge_job_image_too_large')
@@ -57,6 +58,7 @@ export default function SpaktokForgeStudioJob({
 }>){
  const [mode,setMode]=useState<'generate'|'retexture'>('generate')
  const [mesh,setMesh]=useState<File|null>(null)
+ const [views,setViews]=useState<File[]>([])
  const [profile,setProfile]=useState<Profile>('studio-hd')
  const [budget,setBudget]=useState<number>(200000)
  const [consent,setConsent]=useState(false)
@@ -79,9 +81,12 @@ export default function SpaktokForgeStudioJob({
   abortRef.current?.abort();abortRef.current=controller
   setRunning(true);setJob(null);setNote('تجهيز الصورة وإرسال المهمة إلى A100…')
   try{
-   const image=await fitForUpload(source)
+   const extra=mode==='generate'?views:[]
+   const share=extra.length?Math.floor(MAX_RETEXTURE_UPLOAD/(1+extra.length))-8192:MAX_UPLOAD
+   const image=await fitForUpload(source,share)
    const form=new FormData()
    form.set('image',image)
+   for(const view of extra)form.append('views',await fitForUpload(view,share))
    if(mode==='retexture'&&mesh){
     if(image.size+mesh.size>MAX_RETEXTURE_UPLOAD)throw Error('forge_job_mesh_too_large')
     form.set('kind','retexture');form.set('mesh',mesh)
@@ -180,6 +185,16 @@ export default function SpaktokForgeStudioJob({
     {PROFILES[profile].budgets.map(b=><option key={b} value={b}>{b.toLocaleString()} وجه</option>)}
    </select>
   </label>
+  <label className="flex flex-col gap-1 text-xs">زوايا إضافية (اختياري، حتى {MAX_EXTRA_VIEWS})
+   <input type="file" multiple accept="image/png,image/jpeg,image/webp" disabled={running}
+    onChange={e=>setViews(Array.from(e.target.files??[]).slice(0,MAX_EXTRA_VIEWS))}
+    className="rounded-lg border border-white/20 bg-slate-950 p-2 text-[11px]"/>
+  </label>
+  <p className="text-[11px] leading-5 text-slate-400">
+   {views.length?
+    'سيُبنى الشكل من '+(views.length+1)+' صور للجسم نفسه (أمام، جانب، خلف) لتقليل التخمين في الجهات المخفية.':
+    'أضف صورًا للجسم نفسه من الجانب أو الخلف لشكل أدق من الجهات التي لا تظهر في الصورة الرئيسية.'}
+  </p>
   </>}
   <label className="flex gap-2 text-xs leading-5 text-amber-100">
    <input type="checkbox" checked={consent} disabled={running}

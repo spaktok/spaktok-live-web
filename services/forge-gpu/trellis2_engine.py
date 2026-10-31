@@ -75,7 +75,8 @@ def make_glb(photo: bytes, profile: str = "mobile-preview",
 MAX_ASYNC_GLB_BYTES = 256 * 1024 * 1024
 
 
-def make_glb_async_job(photo: bytes, profile: str, poly_budget, job_id: str) -> bytes:
+def make_glb_async_job(photo: bytes, profile: str, poly_budget, job_id: str,
+                       views: tuple = ()) -> bytes:
     """Operator async queue entry: permits async-only presets (studio-ultra)."""
     if _pipeline is None:
         raise RuntimeError("trellis2_model_not_ready")
@@ -91,26 +92,38 @@ def make_glb_async_job(photo: bytes, profile: str, poly_budget, job_id: str) -> 
     )
     if poly_budget is not None:
         quality = with_poly_budget(quality, int(poly_budget))
+    if views:
+        import trellis2_multiview
+        if not trellis2_multiview.enabled():
+            raise PermissionError("multiview_not_enabled")
+        trellis2_multiview.validate_view_count(1 + len(views))
     return generate_with_quality(photo, quality, job_id=job_id,
-                                 max_bytes=MAX_ASYNC_GLB_BYTES)
+                                 max_bytes=MAX_ASYNC_GLB_BYTES, views=views)
+
+
+def _open_rgba(data: bytes):
+    from PIL import Image, ImageOps
+    with Image.open(io.BytesIO(data)) as src:
+        if src.width < 64 or src.height < 64 or src.width * src.height > 4096**2:
+            raise ValueError("unsupported_dimensions")
+        return ImageOps.exif_transpose(src).convert("RGBA")
 
 
 def generate_with_quality(photo: bytes, quality, *, job_id: str,
-                          max_bytes: int = MAX_GLB_BYTES) -> bytes:
+                          max_bytes: int = MAX_GLB_BYTES, views: tuple = ()) -> bytes:
     """Shared generation core. Callers MUST pass an already-selected preset."""
     if _pipeline is None:
         raise RuntimeError("trellis2_model_not_ready")
     profile = quality.profile
     import torch
-    from PIL import Image, ImageOps
     import o_voxel
+    from contextlib import nullcontext
 
-    with Image.open(io.BytesIO(photo)) as src:
-        if src.width < 64 or src.height < 64 or src.width * src.height > 4096**2:
-            raise ValueError("unsupported_dimensions")
-        image = ImageOps.exif_transpose(src).convert("RGBA")
+    image = _open_rgba(photo)
+    extra_images = [_open_rgba(view) for view in views]
     _stage("image_validated", job_id, profile=profile,
-           resolution=quality.pipeline_type, bytes=len(photo))
+           resolution=quality.pipeline_type, bytes=len(photo),
+           views=1 + len(extra_images))
 
     # Official TRELLIS.2 pipeline names: 512 / 1024_cascade.
     # A100 HD remains opt-in and UNBENCHMARKED. Never auto-upgrade a job.
@@ -120,12 +133,21 @@ def generate_with_quality(photo: bytes, quality, *, job_id: str,
         # Identical official preprocessing, but split from generation so
         # operator can locate 503 causes before resubmitting expensive jobs.
         prepared = _pipeline.preprocess_image(image)
+        prepared_views = [_pipeline.preprocess_image(view) for view in extra_images]
         _stage("background_segmentation_completed", job_id)
         _stage("dinov3_conditioning_and_generation_started", job_id)
-        mesh = _pipeline.run(
-            prepared, pipeline_type=quality.pipeline_type,
-            preprocess_image=False
-        )[0]
+        if prepared_views:
+            import trellis2_multiview
+            conditioning = trellis2_multiview.multiview_conditioning(
+                _pipeline, [prepared, *prepared_views],
+                torch.nn.Module, torch.zeros_like)
+        else:
+            conditioning = nullcontext()
+        with conditioning:
+            mesh = _pipeline.run(
+                prepared, pipeline_type=quality.pipeline_type,
+                preprocess_image=False
+            )[0]
         _stage("geometry_and_pbr_generated", job_id)
         mesh.simplify(16777216)
         _stage("glb_texture_baking_started", job_id)

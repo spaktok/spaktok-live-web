@@ -6,7 +6,7 @@ import {queryD1} from '@/lib/native/d1'
 import {FORGE_QUOTA_CLAIM_SQL} from '@/lib/server/spaktok-forge-budget'
 import {
  FORGE_JOB_MAX_IMAGE,forgeJobsBase,isForgeJobProfile,isForgePolyBudget,
- parseForgeGpuJobStatus,signForgeJobHandle,FORGE_RETEXTURE_MAX_TOTAL,sniffForgeMesh,signForgeJobReadTicket,
+ parseForgeGpuJobStatus,signForgeJobHandle,FORGE_RETEXTURE_MAX_TOTAL,FORGE_JOB_MAX_EXTRA_VIEWS,sniffForgeMesh,signForgeJobReadTicket,
  verifyForgeJobHandle,
 } from '@/lib/server/spaktok-forge-jobs'
 
@@ -62,6 +62,11 @@ export async function POST(request:NextRequest){
   meshBytes=Buffer.from(await mesh.arrayBuffer())
   if(!sniffForgeMesh(meshBytes))return json({error:'forge_job_mesh_invalid'},422)
  }
+ const viewFiles=retexture?[]:form.getAll('views')
+ if(viewFiles.length>FORGE_JOB_MAX_EXTRA_VIEWS||viewFiles.some(v=>!(v instanceof File)||
+  !MIME.includes(v.type)||v.size<128)||
+  viewFiles.reduce((n,v)=>n+(v as File).size,image.size)>FORGE_RETEXTURE_MAX_TOTAL)
+  return json({error:'forge_job_views_invalid'},422)
  if(!isForgeJobProfile(profile))return json({error:'forge_job_profile_invalid'},422)
  if(polyBudget!==null&&!isForgePolyBudget(polyBudget))
   return json({error:'forge_job_poly_budget_invalid'},422)
@@ -90,6 +95,8 @@ export async function POST(request:NextRequest){
  else{
   upstream.set('profile',profile)
   if(polyBudget!==null)upstream.set('poly_budget',String(polyBudget))
+  for(const view of viewFiles as File[])
+   upstream.append('views',new Blob([await view.arrayBuffer()],{type:view.type}),'view')
  }
  let status
  try{

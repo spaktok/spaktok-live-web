@@ -62,8 +62,12 @@ Then push the GLB to R2 with `push_first_glb_to_spaktok_r2.py`.
 ## Remaining Rodin gaps (not built yet)
 1. ~~Studio UI + Next route for `/v1/jobs`~~ built. Still open: automatic
    push of results to R2.
-2. Multi-view (up to 5 references): TRELLIS.2 is single-image only.
-   Options are TRELLIS v1 `run_multi_image` or view fusion.
+2. ~~Multi-view~~ built (shape only): `trellis2_multiview.py` applies
+   stochastic view fusion (the TRELLIS v1 `run_multi_image` technique) to the
+   TRELLIS.2 sparse-structure and shape flows: positive CFG branch is
+   averaged over 2-4 views, negative branch runs once. Texture stays
+   conditioned on the primary view. Studio accepts up to 3 extra views inside
+   the same 4.25MB envelope. Not yet validated on A100 output quality.
 3. ~~Text-to-3D~~ built: `/api/spaktok-forge/text-image` (AI Gateway
    `openai/gpt-image-2`, 1024², single-object clean-background prompt,
    auth + 6/15min rate limit). The user reviews the concept image, then it
