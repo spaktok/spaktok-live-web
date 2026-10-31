@@ -462,7 +462,7 @@ def upgrade_existing_poller() -> None:
         if not item.name.isdigit() or int(item.name) == current:
             continue
         try:
-            args = (item / "cmdline").read_bytes().decode("utf-8").split("\\x00")
+            args = (item / "cmdline").read_bytes().decode("utf-8").split("\x00")
         except (OSError, UnicodeDecodeError):
             continue
         if (script_path in args and "poll" in args
