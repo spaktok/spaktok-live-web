@@ -1,0 +1,106 @@
+{
+  "assetId": "spaktok-studio/filters/crown/royal-crown-01",
+  "version": "2026-11-01.1",
+  "state": "reference-prepared-generation-not-run",
+  "source": {
+    "filename": "crown_reference_original.png",
+    "sha256": "883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e",
+    "width": 1448,
+    "height": 1086,
+    "hasAlpha": true,
+    "originalStoredInConversationReferencePack": true,
+    "r2Uploaded": false
+  },
+  "input": {
+    "filename": "trellis_input_1024.png",
+    "size": [
+      1024,
+      1024
+    ],
+    "aspectPreserving": true,
+    "background": "transparent"
+  },
+  "referenceRequirements": [
+    "Preserve mirrored ornamental gold scrolls",
+    "Preserve count and layout of colored and clear gems",
+    "One prominent vertical multicolor center jewel",
+    "Keep central crest and flowing gold headband",
+    "No fake additional parts",
+    "Treat unseen depth as artist-reviewed reconstruction"
+  ],
+  "materialSlots": [
+    "metal_base",
+    "gem_main_center",
+    "gem_secondary",
+    "diamond_small",
+    "sparkle_layer"
+  ],
+  "mobile": {
+    "maxTriangles": 150000,
+    "tracking": "forehead",
+    "faceAnchoringCalibrated": false,
+    "liveApproved": false
+  },
+  "presets": [
+    {
+      "id": "royal-rainbow",
+      "metal": "#E9A72B",
+      "mainGem": "#EFBFCF",
+      "secondaryGems": "#8EF1FF"
+    },
+    {
+      "id": "rose-princess",
+      "metal": "#D899A2",
+      "mainGem": "#F8A7E9",
+      "secondaryGems": "#F9D6FF"
+    },
+    {
+      "id": "ice-queen",
+      "metal": "#CFDEE9",
+      "mainGem": "#96DAFF",
+      "secondaryGems": "#D1EFFF"
+    },
+    {
+      "id": "sapphire",
+      "metal": "#E8B437",
+      "mainGem": "#1E5CD8",
+      "secondaryGems": "#53B7FD"
+    },
+    {
+      "id": "emerald",
+      "metal": "#E2AC2B",
+      "mainGem": "#20AD7A",
+      "secondaryGems": "#63E4BA"
+    },
+    {
+      "id": "ruby",
+      "metal": "#E4AC2D",
+      "mainGem": "#C92051",
+      "secondaryGems": "#FA6580"
+    },
+    {
+      "id": "amethyst",
+      "metal": "#D5D2EB",
+      "mainGem": "#8F46CC",
+      "secondaryGems": "#C99BFF"
+    },
+    {
+      "id": "dark-luxury",
+      "metal": "#383032",
+      "mainGem": "#7136B1",
+      "secondaryGems": "#9F70E6"
+    }
+  ],
+  "desiredPrivateR2Keys": {
+    "master": "studio/private/filters/crown/royal-crown-01/master.glb",
+    "mobile": "studio/private/filters/crown/royal-crown-01/mobile.glb",
+    "manifest": "studio/private/filters/crown/royal-crown-01/manifest.json"
+  },
+  "gates": {
+    "gpuGeneration": false,
+    "meshMatchedToReference": false,
+    "materialSlotMappingVerified": false,
+    "faceTrackingQA": false,
+    "ownerRightsVerified": false
+  }
+}
