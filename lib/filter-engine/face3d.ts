@@ -35,6 +35,7 @@ import {segmentHandOnce,semanticHandMaskFresh,type RealitySemanticHand} from './
 import {RealityLivePhotoFace,LOCAL_PHOTO_FACE_ID} from './reality-live-photo-face'
 import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION,type FirstGpuPilotCalibration} from './spaktok-first-gpu-live'
 import {centeredPreviewTransform} from './spaktok-glb-preview-transform'
+import {PRECISION_FACE_MASK_ID,PrecisionFaceSurfaceMask} from './reality-precision-face-mask'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -44,6 +45,7 @@ export const face3DPresets = [
  {id:'3d-crystal',name:'جوهرة ثلاثية',icon:'💎',group:'3d'},
  {id:FIRST_GPU_LIVE_FILTER_ID,name:'أول مجسم GPU الخاص',icon:'🧬',group:'3d'},
  {id:'3d-expression',name:'قناع التعبيرات',icon:'🎭',group:'3d'},
+ {id:PRECISION_FACE_MASK_ID,name:'قناع سيبراني دقيق • AR V2',icon:'🛡️',group:'3d'},
  {id:'3d-photo-face',name:'وجه GLB محلي متحرك',icon:'🧑',group:'3d'},
  ...makeupLooks,
 ] as const
@@ -262,6 +264,7 @@ export class FaceMesh3DEngine{
  readonly depthMesh:THREE.Mesh
  readonly depthPositions:THREE.BufferAttribute
  readonly makeup:FaceMakeupLayer
+ readonly precisionMask:PrecisionFaceSurfaceMask
  readonly topology:DenseFaceTopology
  readonly semanticAtlas:FaceSemanticAtlas
  readonly meshDebug:THREE.Mesh
@@ -367,6 +370,9 @@ export class FaceMesh3DEngine{
   this.scene.add(this.depthMesh)
   this.makeup=new FaceMakeupLayer(meshGeo,triangles)
   this.scene.add(this.makeup.mesh)
+  // Exactly the same dynamic vertices, normals, crop and mirror as face depth.
+  this.precisionMask=new PrecisionFaceSurfaceMask(meshGeo,this.topology,this.semanticAtlas)
+  this.scene.add(this.precisionMask.mesh)
   // Explicit local QA overlay; never visible to ordinary creators/viewers.
   this.meshDebug=new THREE.Mesh(meshGeo,new THREE.MeshBasicMaterial({
    color:0x8749ff,wireframe:true,transparent:true,opacity:.65,
@@ -412,6 +418,7 @@ export class FaceMesh3DEngine{
   this.surfaceBinding=null
   this.surfaceBoundId=null
   this.lensReady=false
+  this.precisionMask.setActive(false)
   this.modelQuality='none'
   const token=++this.request
   if(this.model){this.mount.remove(this.model);disposeObject(this.model);this.model=null}
@@ -420,6 +427,12 @@ export class FaceMesh3DEngine{
   try{
    const definition=getFaceRealityEffect(id)
    if(!definition)throw Error('reality_effect_not_registered:'+id)
+   if(id===PRECISION_FACE_MASK_ID){
+    // No GLB or photo is uploaded; only the live tracked face geometry is used.
+    this.lensReady=true
+    this.modelQuality='fallback'
+    return true
+   }
    if(id===FIRST_GPU_LIVE_FILTER_ID){
     if(!pilotFile)throw Error('first_gpu_private_file_required')
     const buffer=await verifiedFirstGpuBuffer(pilotFile)
@@ -549,6 +562,7 @@ export class FaceMesh3DEngine{
    this.depthMesh.visible=false;this.mount.visible=false
    this.crownContact.visible=false
    this.makeup.setStyle(id,false)
+   this.precisionMask.setActive(false)
    if(integrated)this.renderer.render(this.scene,this.camera)
    else this.renderer.clear()
    this.finishGpuStats(started,integrated?1:0)
@@ -572,6 +586,7 @@ export class FaceMesh3DEngine{
    this.mount.visible=false
    this.crownContact.visible=false
    this.makeup.setStyle(id,false)
+   this.precisionMask.setActive(false)
    if(integrated)this.renderer.render(this.scene,this.camera)
    else this.renderer.clear()
    this.finishGpuStats(started,integrated?1:0)
@@ -582,6 +597,7 @@ export class FaceMesh3DEngine{
   this.meshDebug.visible=typeof window!=='undefined'&&
    new URLSearchParams(window.location.search).get('realityMesh')==='1'
   this.makeup.setStyle(id,this.lensReady,makeup)
+  this.precisionMask.setActive(id===PRECISION_FACE_MASK_ID&&this.lensReady&&!heldFaceMissing,strength)
   // Update 478 surface vertices only on a *new* inference, not 30-60 times/sec.
   if(frame.timestamp!==this.lastFrame||this.lastSourceW!==sourceW||
     this.lastSourceH!==sourceH||mirror!==this.lastMirror){
@@ -614,6 +630,7 @@ export class FaceMesh3DEngine{
     this.mount.visible=false
     this.depthMesh.visible=false
     this.makeup.setStyle(id,false)
+   this.precisionMask.setActive(false)
     if(integrated)this.renderer.render(this.scene,this.camera)
     else this.renderer.clear()
     this.finishGpuStats(started,integrated?1:0)
@@ -660,6 +677,7 @@ export class FaceMesh3DEngine{
     this.mount.visible=false
     this.crownContact.visible=false
     this.makeup.setStyle(id,false)
+   this.precisionMask.setActive(false)
     if(integrated)this.renderer.render(this.scene,this.camera)
     else this.renderer.clear()
     this.finishGpuStats(started,integrated?1:0)
@@ -734,7 +752,7 @@ export class FaceMesh3DEngine{
     }
    })
   }
-  this.mount.visible=this.lensReady&&id!==LOCAL_PHOTO_FACE_ID
+  this.mount.visible=this.lensReady&&id!==LOCAL_PHOTO_FACE_ID&&id!==PRECISION_FACE_MASK_ID
   // Segmentation is not delivered by HandLandmarker. Until a true per-pixel
   // hand model is available we use a conservative landmark-derived matte.
   // Keep this behind a SECOND QA flag; never fade/cancel the wearable.
@@ -806,15 +824,18 @@ export class FaceMesh3DEngine{
     ()=>this.renderer.render(this.scene,this.camera),
     ()=>{
      const oldMount=this.mount.visible,oldDepth=this.depthMesh.visible
-     const oldMakeup=this.makeup.mesh.visible,oldDebug=this.meshDebug.visible
+     const oldMakeup=this.makeup.mesh.visible,oldPrecision=this.precisionMask.mesh.visible
+     const oldDebug=this.meshDebug.visible
      const oldContact=this.crownContact.visible
      this.mount.visible=false;this.depthMesh.visible=false
-     this.makeup.mesh.visible=false;this.meshDebug.visible=false
+     this.makeup.mesh.visible=false;this.precisionMask.mesh.visible=false
+     this.meshDebug.visible=false
      this.crownContact.visible=false
      try{this.renderer.render(this.scene,this.camera)}
      finally{
       this.mount.visible=oldMount;this.depthMesh.visible=oldDepth
-      this.makeup.mesh.visible=oldMakeup;this.meshDebug.visible=oldDebug
+      this.makeup.mesh.visible=oldMakeup;this.precisionMask.mesh.visible=oldPrecision
+      this.meshDebug.visible=oldDebug
       this.crownContact.visible=oldContact
      }
     },hasHandPass?handMatte:undefined)
@@ -831,6 +852,8 @@ export class FaceMesh3DEngine{
   this.photoFace=null
   if(this.model){this.mount.remove(this.model);disposeObject(this.model)}
   this.makeup.dispose()
+  this.scene.remove(this.precisionMask.mesh)
+  this.precisionMask.dispose()
   this.scene.remove(this.meshDebug)
   ;(this.meshDebug.material as THREE.Material).dispose()
   this.gpuCamera?.dispose()
