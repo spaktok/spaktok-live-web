@@ -1,4 +1,4 @@
-import {isPhotorealSurfaceId} from './reality-precision-face-mask'
+import {isOriginalFaceFinishId} from './spaktok-original-face-filters'
 import {
   REALITY_EFFECTS,
   assertRealityEffect,
@@ -64,8 +64,11 @@ export function photographicStage(effect:RealityEffectManifest):RealityVisualSta
   if(effect.quality==='procedural-preview')return 'geometric-prototype'
   if(effect.quality==='authored-glb')return 'authored-3d'
   if(effect.kind==='face-surface')
-    return isPhotorealSurfaceId(effect.id)?'pbr-approximation':'tracked-cosmetic'
+    return effect.id==='3d-precision-cyber-mask'||
+      effect.id==='3d-photoreal-porcelain-mask'||
+      isOriginalFaceFinishId(effect.id)?'pbr-approximation':'tracked-cosmetic'
   if(effect.kind==='face-overlay')return 'illustrated-2d'
+  if(effect.id.startsWith('beauty:'))return 'beauty'
   if(effect.kind==='face-deform')return 'tracked-deformation'
   return effect.kind==='color-grade'?'color-grade'
     :effect.kind==='post-process'?'post-process'
