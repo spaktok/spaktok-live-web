@@ -628,6 +628,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
                           : '✓ مؤثر ثنائي الأبعاد'}`
                      : camera.liveMeshInfo?.tracking?'الصورة الأصلية · ✓ الوجه متتبَّع'
                        :camera.vision==='loading'?'تحميل التتبع…':'الصورة الأصلية · وجّه وجهك نحو الكاميرا'}
+                  </span>
                   <button type="button" onClick={()=>setShowLiveMeshDetails(v=>!v)}
                    aria-expanded={showLiveMeshDetails}
                    className="rounded-lg bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white/80">
