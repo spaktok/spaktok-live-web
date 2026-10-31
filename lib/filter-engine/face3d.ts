@@ -35,7 +35,7 @@ import {segmentHandOnce,semanticHandMaskFresh,type RealitySemanticHand} from './
 import {RealityLivePhotoFace,LOCAL_PHOTO_FACE_ID} from './reality-live-photo-face'
 import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION,type FirstGpuPilotCalibration} from './spaktok-first-gpu-live'
 import {centeredPreviewTransform} from './spaktok-glb-preview-transform'
-import {PRECISION_FACE_MASK_ID,PrecisionFaceSurfaceMask} from './reality-precision-face-mask'
+import {PRECISION_FACE_MASK_ID,PORCELAIN_FACE_MASK_ID,PrecisionFaceSurfaceMask} from './reality-precision-face-mask'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -45,7 +45,8 @@ export const face3DPresets = [
  {id:'3d-crystal',name:'جوهرة ثلاثية',icon:'💎',group:'3d'},
  {id:FIRST_GPU_LIVE_FILTER_ID,name:'أول مجسم GPU الخاص',icon:'🧬',group:'3d'},
  {id:'3d-expression',name:'قناع التعبيرات',icon:'🎭',group:'3d'},
- {id:PRECISION_FACE_MASK_ID,name:'قناع سيبراني دقيق • AR V2',icon:'🛡️',group:'3d'},
+ {id:PRECISION_FACE_MASK_ID,name:'قناع تيتانيوم PBR • AR V2',icon:'🛡️',group:'3d'},
+ {id:PORCELAIN_FACE_MASK_ID,name:'قناع سيراميك PBR • AR V2',icon:'🤍',group:'3d'},
  {id:'3d-photo-face',name:'وجه GLB محلي متحرك',icon:'🧑',group:'3d'},
  ...makeupLooks,
 ] as const
@@ -427,7 +428,7 @@ export class FaceMesh3DEngine{
   try{
    const definition=getFaceRealityEffect(id)
    if(!definition)throw Error('reality_effect_not_registered:'+id)
-   if(id===PRECISION_FACE_MASK_ID){
+   if(id===PRECISION_FACE_MASK_ID||id===PORCELAIN_FACE_MASK_ID){
     // No GLB or photo is uploaded; only the live tracked face geometry is used.
     this.lensReady=true
     this.modelQuality='fallback'
@@ -523,6 +524,7 @@ export class FaceMesh3DEngine{
    this.rimLight.intensity=light.rim
    this.keyLight.position.x=-250+light.horizontalOffset
    this.keyLight.color.setRGB(light.red,light.green,light.blue)
+   this.precisionMask.setLighting(next)
   }catch{ /* Keep studio lighting if camera sampling is unsupported. */ }
  }
  private finishGpuStats(start:number,passes:number){
@@ -597,7 +599,9 @@ export class FaceMesh3DEngine{
   this.meshDebug.visible=typeof window!=='undefined'&&
    new URLSearchParams(window.location.search).get('realityMesh')==='1'
   this.makeup.setStyle(id,this.lensReady,makeup)
-  this.precisionMask.setActive(id===PRECISION_FACE_MASK_ID&&this.lensReady&&!heldFaceMissing,strength)
+  const photoMask=id===PRECISION_FACE_MASK_ID||id===PORCELAIN_FACE_MASK_ID
+  if(photoMask)this.precisionMask.setFinish(id===PORCELAIN_FACE_MASK_ID?'porcelain':'titanium')
+  this.precisionMask.setActive(photoMask&&this.lensReady&&!heldFaceMissing,strength)
   // Update 478 surface vertices only on a *new* inference, not 30-60 times/sec.
   if(frame.timestamp!==this.lastFrame||this.lastSourceW!==sourceW||
     this.lastSourceH!==sourceH||mirror!==this.lastMirror){
@@ -752,7 +756,7 @@ export class FaceMesh3DEngine{
     }
    })
   }
-  this.mount.visible=this.lensReady&&id!==LOCAL_PHOTO_FACE_ID&&id!==PRECISION_FACE_MASK_ID
+  this.mount.visible=this.lensReady&&id!==LOCAL_PHOTO_FACE_ID&&id!==PRECISION_FACE_MASK_ID&&id!==PORCELAIN_FACE_MASK_ID
   // Segmentation is not delivered by HandLandmarker. Until a true per-pixel
   // hand model is available we use a conservative landmark-derived matte.
   // Keep this behind a SECOND QA flag; never fade/cancel the wearable.
