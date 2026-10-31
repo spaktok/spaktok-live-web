@@ -52,6 +52,49 @@ async function respond(req,env){
  if(!path.startsWith('/v1/agent/'))return json({error:'not_found'},404);
  const device=await authenticate(req,env);
  if(!device)return json({error:'unauthorized'},401);
+ // V2 setup jobs are separate from the known-working GLB job ledger.
+ // No shell/path argument is accepted from the caller; fixed tasks only.
+ if(path==='/v1/agent/setup/claim'&&req.method==='POST'){
+  if(device.state!=='approved')return json({paired:false,status:device.state});
+  await env.VAST_DB.prepare('UPDATE vast_agent_devices SET last_seen=? WHERE device_id=?').bind(clock(),device.device_id).run();
+  const next=await env.VAST_DB.prepare(
+   "UPDATE vast_setup_jobs SET state='leased',lease_until=? WHERE id=("+
+   "SELECT id FROM vast_setup_jobs WHERE device_id=? AND state='queued' "+
+   "AND action IN ('probe_environment','fetch_trellis2_source','prepare_trellis2_runtime') "+
+   "AND (action='probe_environment' OR approved_compute=1) "+
+   "ORDER BY created_at ASC LIMIT 1) AND state='queued' "+
+   "RETURNING id,action,approved_compute,lease_until"
+  ).bind(clock()+7200,device.device_id).first();
+  if(!next)return json({paired:true,job:null});
+  return json({paired:true,job:{
+   id:next.id,action:next.action,approvedCompute:next.approved_compute,
+   leaseUntil:next.lease_until
+  }});
+ }
+ const completeSetup=path.match(/^\\/v1\\/agent\\/setup\\/([a-f0-9-]{36})\\/complete$/);
+ if(completeSetup&&req.method==='POST'){
+  if(device.state!=='approved')return json({error:'device_not_approved'},403);
+  const id=completeSetup[1];
+  const job=await env.VAST_DB.prepare(
+   "SELECT id,action,state,lease_until FROM vast_setup_jobs "+
+   "WHERE id=? AND device_id=? AND state='leased' AND lease_until>?"
+  ).bind(id,device.device_id,clock()).first();
+  if(!job)return json({error:'no_active_setup_job'},409);
+  let body;try{body=await limitedJson(req,4096)}catch{return json({error:'invalid_result'},400)}
+  const state=body?.status==='succeeded'?'succeeded':body?.status==='failed'?'failed':null;
+  if(!state)return json({error:'invalid_result_state'},422);
+  const summary=body?.result&&typeof body.result==='object'&&!Array.isArray(body.result)?JSON.stringify(body.result):'{}';
+  if(summary.length>3000)return json({error:'result_too_large'},413);
+  const errorCode=body?.errorCode;
+  if(state==='failed'&&errorCode!==undefined&&
+      (typeof errorCode!=='string'||!/^[a-z0-9_]{1,64}$/.test(errorCode)))
+   return json({error:'bad_error_code'},422);
+  const updated=await env.VAST_DB.prepare(
+   "UPDATE vast_setup_jobs SET state=?,finished_at=?,result_json=?,error_code=? "+
+   "WHERE id=? AND state='leased' AND lease_until>?"
+  ).bind(state,clock(),summary,state==='failed'?(errorCode||'setup_failed'):null,id,clock()).run();
+  return json({accepted:updated.meta?.changes===1});
+ }
  if(path==='/v1/agent/claim'&&req.method==='POST'){
   if(device.state!=='approved')return json({paired:false,status:device.state},200);
   await env.VAST_DB.prepare('UPDATE vast_agent_devices SET last_seen=? WHERE device_id=?').bind(clock(),device.device_id).run();
