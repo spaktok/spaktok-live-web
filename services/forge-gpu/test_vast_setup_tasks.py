@@ -49,8 +49,8 @@ class VastSetupTests(unittest.TestCase):
                 ["conda", "env", "list", "--json"], 0,
                 stdout=json.dumps({"envs": ["/venv/main", str(prefix)]}),
                 stderr="")
-            with patch.object(setup, "ENV_PYTHON", Path(td) / "workspace" / "python"), \\
-                 patch.object(setup.shutil, "which", return_value="/venv/main/bin/conda"), \\
+            with patch.object(setup, "ENV_PYTHON", Path(td) / "workspace" / "python"), \
+                 patch.object(setup.shutil, "which", return_value="/venv/main/bin/conda"), \
                  patch.object(setup, "_run", return_value=response):
                 self.assertEqual(setup.locate_trellis_python(), py)
 
@@ -61,8 +61,8 @@ class VastSetupTests(unittest.TestCase):
             ["conda", "env", "list", "--json"], 0,
             stdout=json.dumps({"envs": ["/venv/main", "/venv/envs/not-trellis"]}),
             stderr="")
-        with patch.object(setup, "ENV_PYTHON", Path("/missing-py/bin/python")), \\
-             patch.object(setup.shutil, "which", return_value="conda"), \\
+        with patch.object(setup, "ENV_PYTHON", Path("/missing-py/bin/python")), \
+             patch.object(setup.shutil, "which", return_value="conda"), \
              patch.object(setup, "_run", return_value=response):
             self.assertIsNone(setup.locate_trellis_python())
 
