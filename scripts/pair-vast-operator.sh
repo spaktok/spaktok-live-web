@@ -30,6 +30,8 @@ fi
 test -f "$ROOT/services/forge-gpu/vast_operator_agent.py" ||
   { echo "ERROR: missing_vast_operator_agent" >&2;exit 3; }
 
+echo "CPU_ONLY_OPERATOR_CONTRACT_TESTS"
+python3 -m unittest discover -s "$ROOT/services/forge-gpu" -p test_vast_operator_agent.py -q
 echo "PAIRING_DEVICE_TO_PRIVATE_WORKER"
 echo "This performs no GPU inference. The operator must verify and approve device."
 python3 "$ROOT/services/forge-gpu/vast_operator_agent.py" enroll --worker "$WORKER"
