@@ -16,6 +16,7 @@ import {cameraMorphForEffect} from './reality-face-morph'
 import {buildLiveSculptWarp,hasLiveSculpt,normalizeLiveSculpt,
  type LiveSculptControls,type LiveSculptFrame} from './reality-live-sculpt-warp'
 import {createDenseFaceTopology,type DenseFaceTopology} from './reality-face-topology'
+import {FIRST_GPU_LIVE_FILTER_ID} from './spaktok-first-gpu-live'
 import {createLiveFaceMeshTemplate,updateLiveFaceMesh,chooseLiveMeshLevel,
  type LiveMeshTemplate} from './reality-live-personal-mesh'
 
@@ -26,6 +27,7 @@ export type VisionStatus = 'off' | 'loading' | 'ready' | 'tracking' | 'no-face' 
 interface Options {
   state: StudioState
   localPhotoFaceFile?:File|null
+  firstGpuPilotFile?:File|null
   audio?: boolean
   paused?: boolean
   liveFaceMesh?:boolean
@@ -52,7 +54,7 @@ const chooseOutputHeight = () => {
  * Face mesh and person segmentation run on-device (MediaPipe) so reshape and
  * background effects follow the face frame-by-frame.
  */
-export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false, liveSculpt }: Options) {
+export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotFile=null, audio = false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false, liveSculpt }: Options) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -337,7 +339,8 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
       if(!layer||!base)return
       let engine=threeEngineRef.current
       if(!engine){engine=new FaceMesh3DEngine(layer,base.width,base.height);threeEngineRef.current=engine}
-      const loaded=await engine.setLens(state.face.id)
+      const loaded=await engine.setLens(state.face.id,
+       state.face.id===FIRST_GPU_LIVE_FILTER_ID?firstGpuPilotFile:null)
       if(state.face.id==='3d-photo-face'){
        if(!cancelled){setPhotoFaceStatus(localPhotoFaceFile?'loading':'idle');setPhotoFaceError(null)}
        try{
@@ -358,7 +361,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, audio = false,
       if(!cancelled){setThreeQuality(loaded?engine.modelQuality:'none');setThreeStatus(loaded?'ready':'unavailable')}
     }).catch(()=>{if(!cancelled){setThreeQuality('none');setThreeStatus('unavailable')}})
     return()=>{cancelled=true}
-  },[state.face.id,localPhotoFaceFile])
+  },[state.face.id,localPhotoFaceFile,firstGpuPilotFile])
   useEffect(()=>()=>{threeEngineRef.current?.dispose();threeEngineRef.current=null},[])
 
   useEffect(() => {

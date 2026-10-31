@@ -33,6 +33,8 @@ import {planRealityRenderGraph,type RealityRenderNode} from './reality-render-gr
 import {loadInteractiveHandSegmentation} from './vision'
 import {segmentHandOnce,semanticHandMaskFresh,type RealitySemanticHand} from './reality-hand-segmentation'
 import {RealityLivePhotoFace,LOCAL_PHOTO_FACE_ID} from './reality-live-photo-face'
+import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer} from './spaktok-first-gpu-live'
+import {centeredPreviewTransform} from './spaktok-glb-preview-transform'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -40,6 +42,7 @@ export const face3DPresets = [
  {id:'3d-space-visor',name:'خوذة فضاء',icon:'🪐',group:'3d'},
  {id:'3d-metal-cap',name:'قبعة معدنية',icon:'🧢',group:'3d'},
  {id:'3d-crystal',name:'جوهرة ثلاثية',icon:'💎',group:'3d'},
+ {id:FIRST_GPU_LIVE_FILTER_ID,name:'أول مجسم GPU الخاص',icon:'🧬',group:'3d'},
  {id:'3d-expression',name:'قناع التعبيرات',icon:'🎭',group:'3d'},
  {id:'3d-photo-face',name:'وجه GLB محلي متحرك',icon:'🧑',group:'3d'},
  ...makeupLooks,
@@ -265,6 +268,7 @@ export class FaceMesh3DEngine{
  readonly crownContact=makeCrownContactShadow()
  private readonly loader=new GLTFLoader()
  private model:THREE.Object3D|null=null
+ private pilotFile:File|null=null
  private photoFace:RealityLivePhotoFace|null=null
  private photoLoadToken=0
  private current:Face3DId|null=null
@@ -387,8 +391,10 @@ export class FaceMesh3DEngine{
    this.scene.environment=null
   }
  }
- async setLens(id:Face3DId):Promise<boolean>{
-  if(this.current===id)return this.lensReady
+ async setLens(id:Face3DId,pilotFile:File|null=null):Promise<boolean>{
+  if(this.current===id&&(id!==FIRST_GPU_LIVE_FILTER_ID||this.pilotFile===pilotFile))
+   return this.lensReady
+  this.pilotFile=id===FIRST_GPU_LIVE_FILTER_ID?pilotFile:null
   this.current=id
   this.handPhysics.reset()
   this.lastHandInteraction=null
@@ -403,6 +409,26 @@ export class FaceMesh3DEngine{
   try{
    const definition=getFaceRealityEffect(id)
    if(!definition)throw Error('reality_effect_not_registered:'+id)
+   if(id===FIRST_GPU_LIVE_FILTER_ID){
+    if(!pilotFile)throw Error('first_gpu_private_file_required')
+    const buffer=await verifiedFirstGpuBuffer(pilotFile)
+    const gltf=await this.loader.parseAsync(buffer,'')
+    const model=gltf.scene
+    const bbox=new THREE.Box3().setFromObject(model)
+    if(bbox.isEmpty())throw Error('first_gpu_empty_mesh')
+    const fit=centeredPreviewTransform(
+     bbox.getCenter(new THREE.Vector3()),bbox.getSize(new THREE.Vector3()),.58)
+    const wrapper=new THREE.Group()
+    wrapper.name='SpaktokFirstGpuPrivateHeadProp'
+    model.scale.setScalar(fit.scale)
+    model.position.set(fit.offset.x,fit.offset.y,fit.offset.z)
+    wrapper.position.y=-.18
+    wrapper.add(model)
+    if(!this.alive||token!==this.request){disposeObject(wrapper);return false}
+    this.model=wrapper;this.mount.add(wrapper)
+    this.lensReady=true;this.modelQuality='hd'
+    return true
+   }
    const runtime=new RealityEffectRuntime<THREE.Object3D>({
     loadAuthoredGLB:async uri=>(await this.loader.loadAsync(uri)).scene,
     createProceduralPreview:effect=>

@@ -106,6 +106,7 @@ export const faceFxCatalog = [
   { id: '3d-space-visor', name: 'خوذة فضاء', icon: '🪐', group: '3d' },
   { id: '3d-metal-cap', name: 'قبعة معدنية', icon: '🧢', group: '3d' },
   { id: '3d-crystal', name: 'جوهرة ثلاثية', icon: '💎', group: '3d' },
+  { id: '3d-first-gpu-pilot', name: 'أول GPU • خاص', icon: '🧬', group: '3d' },
   { id: '3d-expression', name: 'قناع التعبيرات', icon: '🎭', group: '3d' },
   { id: '3d-photo-face', name: 'وجه GLB محلي متحرك', icon: '🧑', group: '3d' },
 

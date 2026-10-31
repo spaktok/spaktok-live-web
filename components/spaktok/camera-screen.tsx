@@ -10,6 +10,7 @@ import {
  type RealityLook,
 } from '@/lib/filter-engine/reality-unified-profile'
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
+import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,loadFirstGpuOwnerR2,firstGpuErrorMessage} from '@/lib/filter-engine/spaktok-first-gpu-live'
 import {inspectPhotoFacePickerFile,photoFacePickerArabicError} from '@/lib/filter-engine/reality-photo-file-picker'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
 import { StudioPanel } from './studio/studio-panel'
@@ -100,9 +101,38 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   const [showLiveMeshDetails,setShowLiveMeshDetails]=useState(false)
   const [liveSeconds, setLiveSeconds] = useState(0)
   const [liveTitle, setLiveTitle] = useState('')
+  const [firstGpuPilotFile,setFirstGpuPilotFile]=useState<File|null>(null)
+  const [firstGpuBusy,setFirstGpuBusy]=useState(false)
+  const [firstGpuMessage,setFirstGpuMessage]=useState('أول مجسم GPU موجود في R2 الخاص؛ يمكن استيراد النسخة الأصلية للتجربة.')
+  const activateFirstGpu=async(file:File)=>{
+   setFirstGpuBusy(true)
+   try{
+    await verifiedFirstGpuBuffer(file)
+    setFirstGpuPilotFile(file)
+    setStudio(prev=>({...prev,face:{...prev.face,id:FIRST_GPU_LIVE_FILTER_ID,strength:.85}}))
+    setFirstGpuMessage('✓ تحققنا من المجسم الأصلي. هذه معاينة زينة تتبع الرأس، وليست أفاتارًا مزودًا بالتعابير.')
+    setShowFaceTray(false)
+   }catch(error){setFirstGpuMessage(firstGpuErrorMessage(error))}
+   finally{setFirstGpuBusy(false)}
+  }
+  const fetchFirstGpu=async()=>{
+   if(firstGpuBusy)return
+   setFirstGpuBusy(true)
+   setFirstGpuMessage('جارٍ فحص رابط R2 الموقّع للمالك…')
+   try{
+    const file=await loadFirstGpuOwnerR2()
+    await verifiedFirstGpuBuffer(file)
+    setFirstGpuPilotFile(file)
+    setStudio(prev=>({...prev,face:{...prev.face,id:FIRST_GPU_LIVE_FILTER_ID,strength:.85}}))
+    setFirstGpuMessage('✓ تم جلب GLB الخاص والتحقق من بصمته.')
+    setShowFaceTray(false)
+   }catch(error){setFirstGpuMessage(firstGpuErrorMessage(error))}
+   finally{setFirstGpuBusy(false)}
+  }
+
 
   const camera = useCameraStudio({
-   state:studio,localPhotoFaceFile,audio:mode!=='photo'&&mode!=='live',
+   state:studio,localPhotoFaceFile,firstGpuPilotFile,audio:mode!=='photo'&&mode!=='live',
    paused:Boolean(captured),liveFaceMesh:isLive&&mode==='live',
    liveMeshDebug:liveMeshQa&&isLive,
    liveSculpt:isLive&&liveFaceOptIn?liveSculpt:NEUTRAL_LIVE_SCULPT,
@@ -538,9 +568,19 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
           </div>
         )}
 
-        {!camera.recording && !captured && !showPanel && !isLive && mode!=='live' &&
+        {!camera.recording && !captured && !showPanel &&
           <FaceMaskTray value={studio.face} onChange={face=>setStudio(prev=>({...prev,face}))}
-            visible={showFaceTray} onToggle={()=>setShowFaceTray(v=>!v)}/>}
+            visible={showFaceTray} onToggle={()=>setShowFaceTray(v=>!v)}
+            liveMode={mode==='live'} activeLive={isLive}
+            firstGpuReady={Boolean(firstGpuPilotFile)}
+            firstGpuBusy={firstGpuBusy} firstGpuMessage={firstGpuMessage}
+            onImportFirstGpu={activateFirstGpu} onFetchFirstGpu={fetchFirstGpu}/>}
+        {mode==='live'&&studio.face.id===FIRST_GPU_LIVE_FILTER_ID&&
+          <p dir="rtl" role="status" className="pointer-events-none absolute inset-x-4 top-[max(4.75rem,env(safe-area-inset-top))] z-20 rounded-lg bg-black/70 px-3 py-2 text-center text-[11px] text-cyan-100">
+           {camera.threeStatus==='ready'?'✓ مجسم GPU الخاص مثبت بالرأس':
+            camera.threeStatus==='unavailable'?'تعذّر عرض GLB الخاص؛ استخدم التاج أو الجوهرة للتجربة':
+            'جارٍ تحميل GLB الخاص…'}
+          </p>}
         {faceHint&&(
           <div className="pointer-events-none absolute inset-x-0 top-[max(4.75rem,env(safe-area-inset-top))] z-10 flex justify-center px-3">
             <span role="status" className="max-w-[85%] rounded-full border border-amber-200/25 bg-[#1a1c29]/80 px-3 py-1.5 text-center text-[11px] font-semibold text-amber-100 backdrop-blur-md">

@@ -3,6 +3,7 @@ import {useEffect,useMemo,useRef,useState} from 'react'
 import {ChevronDown,ChevronUp,Heart,Search,ScanFace,X} from 'lucide-react'
 import {faceFxCatalog,type FaceFxParams,type FaceFxId} from '@/lib/filter-engine/params'
 import {cn} from '@/lib/utils'
+import {FIRST_GPU_LIVE_FILTER_ID} from '@/lib/filter-engine/spaktok-first-gpu-live'
 import {getMakeupPalette,type MakeupLookId} from '@/lib/filter-engine/makeup3d'
 
 type Category='beauty'|'makeup'|'3d'|'all'|'fashion'|'animal'|'fantasy'|'fun'|'reactive'|'saved'
@@ -73,13 +74,24 @@ function MakeupPreview({id}:{id:MakeupLookId}){
  </svg>
 }
 
-export function FaceMaskTray({value,onChange,visible,onToggle}:{
+export function FaceMaskTray({
+ value,onChange,visible,onToggle,liveMode=false,activeLive=false,
+ firstGpuReady=false,firstGpuBusy=false,firstGpuMessage='',
+ onImportFirstGpu,onFetchFirstGpu,
+}:{
  value:FaceFxParams
  onChange:(value:FaceFxParams)=>void
  visible:boolean
  onToggle:()=>void
+ liveMode?:boolean
+ activeLive?:boolean
+ firstGpuReady?:boolean
+ firstGpuBusy?:boolean
+ firstGpuMessage?:string
+ onImportFirstGpu?:(file:File)=>void|Promise<void>
+ onFetchFirstGpu?:()=>void|Promise<void>
 }){
- const [tab,setTab]=useState<Category>('makeup')
+ const [tab,setTab]=useState<Category>(liveMode?'3d':'makeup')
  const [search,setSearch]=useState('')
  const [showSearch,setShowSearch]=useState(false)
  const [showCustomMakeup,setShowCustomMakeup]=useState(false)
@@ -97,11 +109,12 @@ export function FaceMaskTray({value,onChange,visible,onToggle}:{
   const q=search.trim().toLocaleLowerCase('ar')
   return faceFxCatalog.filter(fx=>{
     if(fx.id==='3d-photo-face')return false // rejected legacy photo overlay
+   if(fx.id===FIRST_GPU_LIVE_FILTER_ID&&!liveMode)return false
    if(tab==='saved'&&!favorites.includes(fx.id))return false
    if(tab!=='all'&&tab!=='saved'&&fx.group!==tab)return false
    return !q||fx.name.toLocaleLowerCase('ar').includes(q)||fx.id.includes(q)
   })
- },[search,tab,favorites])
+ },[search,tab,favorites,liveMode])
  const visibleMasks=filtered.slice(0,renderCount)
  useEffect(()=>{setRenderCount(18);if(listRef.current)listRef.current.scrollLeft=0},[tab,search])
  const toggleFavorite=(id:FaceFxId)=>{
@@ -116,7 +129,7 @@ export function FaceMaskTray({value,onChange,visible,onToggle}:{
    setRenderCount(n=>Math.min(n+12,filtered.length))
  }
  return <div className="pointer-events-none absolute inset-x-2 z-20 flex flex-col items-center"
-   style={{bottom:'clamp(186px,23dvh,235px)'}} dir="rtl">
+   style={{bottom:activeLive?'clamp(345px,54dvh,590px)':'clamp(186px,23dvh,235px)'}} dir="rtl">
    {!visible?(
     <button type="button" onClick={onToggle}
       className="pointer-events-auto flex items-center gap-2 rounded-full border border-[#adc4ff]/35 bg-[#0d1837]/85 px-4 py-2.5 text-sm font-bold text-white shadow-xl backdrop-blur-lg">
@@ -152,6 +165,25 @@ export function FaceMaskTray({value,onChange,visible,onToggle}:{
           {item.label}
         </button>)}
       </div>
+      {liveMode&&tab==='3d'&&(
+       <div dir="rtl" className="mb-2 space-y-2 rounded-xl border border-cyan-400/20 bg-[#101c36]/75 p-2.5 text-xs text-cyan-100">
+        <p className="font-bold">🧬 أول فلتر GPU • معاينة خاصة</p>
+        <p className="text-[11px] leading-5 text-white/65">GLB أصلي يتبع الرأس للتجربة فقط؛ ليس أفاتارًا بوجه متحرك ولا بثًا عامًا.</p>
+        <div className="flex flex-wrap gap-2">
+         <button type="button" onClick={()=>{void onFetchFirstGpu?.()}}
+          disabled={firstGpuBusy} className="rounded-lg bg-cyan-800/70 px-3 py-2 text-xs text-white disabled:opacity-50">جلب خاص من R2</button>
+         <label className="cursor-pointer rounded-lg bg-white/10 px-3 py-2 text-xs text-white">
+          استيراد أول GLB من الهاتف
+          <input type="file" accept=".glb,model/gltf-binary" className="sr-only"
+           disabled={firstGpuBusy} onChange={event=>{
+            const file=event.target.files?.[0];event.target.value=''
+            if(file)void onImportFirstGpu?.(file)
+           }}/>
+         </label>
+        </div>
+        <p role="status" className="text-[10px] leading-4 text-amber-100">{firstGpuMessage}</p>
+       </div>
+      )}
       {visibleMasks.length?(
         <div ref={listRef} onScroll={loadMore}
           className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 scrollbar-hide"
@@ -159,12 +191,20 @@ export function FaceMaskTray({value,onChange,visible,onToggle}:{
           {visibleMasks.map(mask=>(
             <div key={mask.id} className={cn('relative flex min-w-[63px] max-w-[70px] shrink-0 snap-start flex-col items-center rounded-[14px] border px-1 pb-1 pt-1',
               value.id===mask.id?'border-[#abc3ff] bg-[#425cae]/55':'border-white/10 bg-white/[.05]')}>
-              <button type="button" className="flex w-full flex-col items-center gap-1" onClick={()=>onChange({...value,id:mask.id,strength:Math.max(.85,value.strength)})}
+              <button type="button" className="flex w-full flex-col items-center gap-1" onClick={()=>{
+                if(mask.id===FIRST_GPU_LIVE_FILTER_ID&&!firstGpuReady){
+                  void onFetchFirstGpu?.()
+                  return
+                }
+                onChange({...value,id:mask.id,strength:Math.max(.85,value.strength)})
+              }}
                 aria-label={'تفعيل '+mask.name} aria-pressed={value.id===mask.id}>
                 <span className="flex size-10 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#34456f]/50 to-[#101626]/40 text-[26px]" aria-hidden="true">
                    {mask.id==='3d-gold-crown'?<RoyalCrownSvg/>:mask.group==='makeup'?<MakeupPreview id={mask.id as MakeupLookId}/>:mask.icon}
                  </span>
-                <span className="h-7 w-full overflow-hidden text-center text-[9px] leading-[14px] text-white/85">{mask.name}</span>
+                <span className="h-7 w-full overflow-hidden text-center text-[9px] leading-[14px] text-white/85">
+                  {mask.name}{mask.id===FIRST_GPU_LIVE_FILTER_ID?(firstGpuReady?' ✓':' 🔒'):''}
+                </span>
               </button>
               {mask.id!=='none'&&<button type="button" aria-label={favorites.includes(mask.id)?'إزالة من المفضلة':'إضافة إلى المفضلة'} aria-pressed={favorites.includes(mask.id)}
                 onClick={()=>toggleFavorite(mask.id)}

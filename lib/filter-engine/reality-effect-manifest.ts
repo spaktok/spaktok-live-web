@@ -57,6 +57,7 @@ const threeConfigs: Readonly<Record<string, ThreeConfig>> = {
     asset:{uri:UPLOADED_CROWN_MOBILE,format:'glb',
       localAnchor:[0,-.55,0],calibration:'owner-crown-v1'},
   },
+  '3d-first-gpu-pilot': {anchor:'head_top'},
   '3d-crystal': {
     anchor:'forehead_center',
     asset:{uri:'/face-assets/spaktok-crystal.glb',format:'glb',
