@@ -52,6 +52,8 @@ class Job:
     kind: str = "generate"
     photo: Optional[bytes] = field(default=None, repr=False)
     mesh: Optional[bytes] = field(default=None, repr=False)
+    views: tuple = field(default=(), repr=False)
+    view_count: int = 1
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
     error: Optional[str] = None
@@ -65,7 +67,7 @@ class Job:
             "startedAt": int(self.started_at) if self.started_at else None,
             "finishedAt": int(self.finished_at) if self.finished_at else None,
             "error": self.error, "bytes": self.result_bytes,
-            "sha256": self.result_sha256,
+            "sha256": self.result_sha256, "views": self.view_count,
         }
         if queue_position is not None:
             data["queuePosition"] = queue_position
@@ -119,10 +121,15 @@ class JobQueue:
     def supports_retexture(self) -> bool:
         return self._retexture is not None
 
-    def submit(self, photo: bytes, profile: str, poly_budget: Optional[int] = None) -> dict:
+    def submit(self, photo: bytes, profile: str, poly_budget: Optional[int] = None,
+               views: tuple = ()) -> dict:
+        """``views``: optional extra reference photos (multi-view conditioning)."""
+        views = tuple(views)
+        if len(views) > 4:
+            raise ValueError("unsupported_view_count")
         return self._enqueue(Job(id=secrets.token_urlsafe(18), profile=profile,
                                  poly_budget=poly_budget, created_at=self._clock(),
-                                 photo=photo))
+                                 photo=photo, views=views, view_count=1 + len(views)))
 
     def submit_retexture(self, photo: bytes, mesh: bytes) -> dict:
         """Shape-conditioned PBR re-texturing of a creator-supplied mesh."""
@@ -195,12 +202,17 @@ class JobQueue:
             return
         photo, job.photo = job.photo, None
         mesh, job.mesh = job.mesh, None
+        views, job.views = job.views, ()
         async with self._lock:
             job.state, job.started_at = "running", self._clock()
             self._emit({"event": "spaktok_gpu_job", "job": job.id, "stage": "running"})
             try:
                 if job.kind == "retexture":
                     result = await asyncio.to_thread(self._retexture, photo, mesh, job.id)
+                elif views:
+                    result = await asyncio.to_thread(
+                        self._generate, photo, job.profile, job.poly_budget, job.id,
+                        views=views)
                 else:
                     result = await asyncio.to_thread(
                         self._generate, photo, job.profile, job.poly_budget, job.id)
@@ -217,7 +229,7 @@ class JobQueue:
             except Exception as exc:  # noqa: BLE001 - categorized, never leaked
                 job.state, job.error = "failed", categorize(exc)
             finally:
-                del photo, mesh
+                del photo, mesh, views
                 job.finished_at = self._clock()
         self._emit({"event": "spaktok_gpu_job", "job": job.id, "stage": job.state,
                     "error": job.error, "bytes": job.result_bytes})

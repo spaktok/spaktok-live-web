@@ -20,7 +20,7 @@ import time
 import json
 
 import torch
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -86,8 +86,9 @@ async def admission_guard(request: Request, call_next):
             raw_length = request.headers.get("content-length", "")
             if not raw_length.isdigit():
                 return Response(status_code=411, content="content_length_required")
-            limit = MAX_MULTIPART + (64 * 1024 * 1024
-                                     if request.url.path == "/v1/jobs/retexture" else 0)
+            extra = {"/v1/jobs/retexture": 64 * 1024 * 1024,
+                     "/v1/jobs": 4 * (MAX_PHOTO + 4096)}
+            limit = MAX_MULTIPART + extra.get(request.url.path, 0)
             if not 128 <= int(raw_length) <= limit:
                 return Response(status_code=413, content="request_too_large")
         return await call_next(request)
@@ -206,12 +207,15 @@ async def health():
                 os.environ.get("FORGE_GPU_HD_ENABLED") == "yes",
             "asyncJobs": _job_queue is not None,
             "retexture": bool(_job_queue and _job_queue.supports_retexture),
+            "multiview": _job_queue is not None and
+                os.environ.get("FORGE_GPU_MULTIVIEW_ENABLED") == "yes",
             "no_persistent_images": True}
 
 
 @app.post("/v1/jobs", status_code=202)
 async def submit_job(image: UploadFile = File(...), profile: str = Form("studio-hd"),
-                     poly_budget: Optional[int] = Form(None)):
+                     poly_budget: Optional[int] = Form(None),
+                     views: List[UploadFile] = File(default=[])):
     if _job_queue is None:
         raise HTTPException(status_code=503, detail="async_jobs_unavailable")
     if profile not in JOB_PROFILES:
@@ -233,9 +237,18 @@ async def submit_job(image: UploadFile = File(...), profile: str = Form("studio-
                 raise ValueError("unsupported image encoding")
     except (ValueError, UnidentifiedImageError):
         raise HTTPException(status_code=422, detail="image_or_glb_invalid")
+    extra_views: list = []
+    if views:
+        import trellis2_multiview
+        if not trellis2_multiview.enabled():
+            raise HTTPException(status_code=403, detail="multiview_not_enabled")
+        if not 1 <= len(views) <= trellis2_multiview.MAX_VIEWS - 1:
+            raise HTTPException(status_code=422, detail="unsupported_view_count")
+        for view in views:
+            extra_views.append(await _read_reference_image(view))
     from forge_jobs import QueueFull
     try:
-        return _job_queue.submit(data, profile, poly_budget)
+        return _job_queue.submit(data, profile, poly_budget, views=tuple(extra_views))
     except QueueFull:
         raise HTTPException(status_code=429, detail="gpu_job_queue_full")
 

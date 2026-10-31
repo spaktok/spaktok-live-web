@@ -17,6 +17,8 @@ export const FORGE_JOB_READ_SECONDS=240
 export const FORGE_JOB_MAX_IMAGE=4*1024*1024
 /** Retexture sends image + mesh through the same 4.5MB function body. */
 export const FORGE_RETEXTURE_MAX_TOTAL=4*1024*1024+256*1024
+// Extra reference photos share the same <4.5MB Vercel request envelope.
+export const FORGE_JOB_MAX_EXTRA_VIEWS=3
 export type ForgeJobHandleProfile=ForgeJobProfile|'retexture'
 const isHandleProfile=(v:unknown):v is ForgeJobHandleProfile=>
  v==='retexture'||isForgeJobProfile(v)
