@@ -161,14 +161,14 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
         a.href=url;a.download='spaktok-account-export.json'
         document.body.appendChild(a);a.click();a.remove()
       }finally{window.setTimeout(()=>URL.revokeObjectURL(url),1000)}
-      showFeedback('تم تجهيز ملف الحساب. النسخة جزئية؛ يمكن طلب نسخة أشمل من المسؤول عن المنصة.')
-    }catch{showFeedback('تعذر تجهيز ملف بياناتك حاليًا. حاول مجددًا.')}
+      showFeedback(t('settings.exportReady'))
+    }catch{showFeedback(t('settings.exportFailed'))}
     finally{setExporting(false)}
   }
 
   const toggleSetting = (key: keyof typeof settings) => {
     if (key === 'privateAccount' || key === 'twoFactor') {
-      showFeedback('هذا الخيار لا يمكن تفعيله بعد؛ لم يتم ربط الحماية مع الخادم.')
+      showFeedback(t('settings.serverLocked'))
       return
     }
     setSettings((prev) => {
@@ -182,7 +182,10 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
         window.dispatchEvent(new Event(SPAKTOK_PREFERENCES_EVENT))
       }catch{/* UI state still works in private mode. */}
       if(key==='darkMode')document.documentElement.classList.toggle('dark',nextValue)
-      setFeedback(`${key==='darkMode'?'الوضع الليلي':key==='notifications'?'تفضيل الإشعارات':key==='dataSaver'?'توفير بيانات الفيديو':'الإعداد'} ${nextValue?'مفعّل':'متوقف'}`)
+      const setting = key === 'darkMode' ? t('settings.darkMode') :
+        key === 'notifications' ? t('settings.enableNotifications') :
+        key === 'dataSaver' ? t('settings.dataSaver') : t('settings.title')
+      setFeedback(t(nextValue ? 'settings.toggledOn' : 'settings.toggledOff', { setting }))
       return next
     })
   };
@@ -216,7 +219,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
             </Avatar>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h2 className="font-bold text-lg">{account?.displayName || 'حسابي'}</h2>
+                <h2 className="font-bold text-lg">{account?.displayName || t('settings.myAccount')}</h2>
                 {account?.isVerified && <div className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center">
                   <Check className="w-3 h-3 text-white" />
                 </div>}
@@ -224,16 +227,16 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
               <p className="text-sm text-muted-foreground">@{account?.username || '...'}</p>
               <div className="flex items-center gap-4 mt-2">
                 <div className="text-center">
-                  <p className="font-bold text-sm">{account ? `${Math.round(account.followers / 1000)}K` : '—'}</p>
-                  <p className="text-[10px] text-muted-foreground">متابع</p>
+                  <p className="font-bold text-sm">{account ? compact(account.followers) : '—'}</p>
+                  <p className="text-[10px] text-muted-foreground">{t('settings.followers')}</p>
                 </div>
                 <div className="text-center">
-                  <p className="font-bold text-sm">{account ? account.following.toLocaleString('ar') : '—'}</p>
-                  <p className="text-[10px] text-muted-foreground">متابَع</p>
+                  <p className="font-bold text-sm">{account ? integer(account.following) : '—'}</p>
+                  <p className="text-[10px] text-muted-foreground">{t('settings.following')}</p>
                 </div>
                 <div className="text-center">
-                  <p className="font-bold text-sm">{account ? account.likes.toLocaleString('ar') : '—'}</p>
-                  <p className="text-[10px] text-muted-foreground">إعجاب</p>
+                  <p className="font-bold text-sm">{account ? integer(account.likes) : '—'}</p>
+                  <p className="text-[10px] text-muted-foreground">{t('settings.likes')}</p>
                 </div>
               </div>
             </div>
@@ -275,18 +278,18 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                       return;
                     }
   if (item.action === "navigate") {
-          if(item.label===languageLabel)return
-          if(item.label==='تحميل بياناتي'){void downloadMyData();return}
-          showFeedback(`${item.label}: غير مفعّل على الخادم بعد`);
+          if(item.id==='language')return
+          if(item.id==='exportData'){void downloadMyData();return}
+          showFeedback(t('settings.notAvailable', { feature: item.label }));
           return;
         }
                     if (item.action === "danger") {
-                      if (item.label === "تسجيل الخروج") {
-                        showFeedback("جارٍ تسجيل الخروج...");
-                        void signOut().catch(() => showFeedback('تعذر تسجيل الخروج. حاول مرة أخرى.'));
+                      if (item.id === 'signOut') {
+                        showFeedback(t('settings.signingOut'));
+                        void signOut().catch(() => showFeedback(t('settings.signOutFailed')));
                         return;
                       }
-                      showFeedback('حذف الحساب يتطلب آلية تحقق وحذف بيانات؛ غير متاح بعد.');
+                      showFeedback(t('settings.deleteUnavailable'));
                     }
                   }}
                 >
@@ -301,16 +304,16 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                     {item.icon}
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-sm">{item.label}{item.label==='تحميل بياناتي'&&exporting?' — جارٍ التجهيز…':''}</p>
+                    <p className="font-medium text-sm">{item.label}{item.id==='exportData'&&exporting?' — '+t('settings.exportPreparing'):''}</p>
                     {item.description && (
                       <p className="text-xs text-muted-foreground">{item.description}</p>
                     )}
                   </div>
-          {item.label === languageLabel ? (
+          {item.id === 'language' ? (
             <select
-              aria-label="اختيار اللغة"
+              aria-label={t('settings.chooseLanguage')}
               value={language}
-              onChange={(event) => setLanguage(event.target.value as LanguageCode)}
+              onChange={(event) => { void setLanguage(event.target.value as LanguageCode).catch(() => showFeedback(t('common.retry'))) }}
               onClick={(event) => event.stopPropagation()}
               className="max-w-32 rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground"
             >
@@ -319,7 +322,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
           ) : item.badge ? (
             <span className="text-sm text-muted-foreground">{item.badge}</span>
           ) : null}
-          {item.action === "navigate" && item.label !== 'اللغة' && (
+          {item.action === "navigate" && item.id !== 'language' && (
                     <ChevronRight className="w-5 h-5 text-muted-foreground" />
                   )}
                   {item.action === "toggle" && (
@@ -352,7 +355,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
         {/* App Version */}
         <div className="text-center py-6 text-muted-foreground">
           <p className="text-sm">{APP_NAME}</p>
-          <p className="text-xs">الإصدار 1.0.0</p>
+          <p className="text-xs">{t('settings.version', {version: '1.0.0'})}</p>
         </div>
       </div>
     </div>
