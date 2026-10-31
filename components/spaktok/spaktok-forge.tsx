@@ -12,6 +12,7 @@ import {generateForgeGpuDirect} from '@/lib/filter-engine/spaktok-forge-direct-c
 import {FORGE_GPU_READINESS_AR,type ForgeGpuReadiness} from '@/lib/filter-engine/spaktok-forge-readiness'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
 import SpaktokForgeStudioJob from './spaktok-forge-studio-job'
+import SpaktokForgeTextConcept from './spaktok-forge-text-concept'
 
 const MAX_PHOTO_BYTES=8*1024*1024
 const isImage=(file:File|null):file is File=>
@@ -295,6 +296,8 @@ export default function SpaktokForge({
      <input type="file" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
       onChange={select} className="mt-2 block w-full rounded-lg border border-white/20 bg-slate-950 p-3"/>
     </label>
+    <SpaktokForgeTextConcept disabled={busy}
+     onConcept={file=>{setSelected(file);setSourceRights('original')}}/>
     {source&&<p className="break-all text-xs text-cyan-200">
      {source.name} · {(source.size/1024/1024).toFixed(2)} MB
     </p>}

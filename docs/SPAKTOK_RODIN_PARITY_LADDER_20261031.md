@@ -64,7 +64,10 @@ Then push the GLB to R2 with `push_first_glb_to_spaktok_r2.py`.
    streams the result to R2 automatically.
 2. Multi-view (up to 5 references): TRELLIS.2 is single-image only.
    Options are TRELLIS v1 `run_multi_image` or view fusion.
-3. Text-to-3D: text → image (AI Gateway) → TRELLIS.2.
+3. ~~Text-to-3D~~ built: `/api/spaktok-forge/text-image` (AI Gateway
+   `openai/gpt-image-2`, 1024², single-object clean-background prompt,
+   auth + 6/15min rate limit). The user reviews the concept image, then it
+   becomes the source for the A100 Studio HD/Ultra job.
 4. Shape-conditioned re-texturing (official `Trellis2TexturingPipeline`).
 5. Quad remesh, rigging, FBX/USDZ export.
 6. Blind study (20+ images, 5+ raters) before any "≥ Rodin" claim.
