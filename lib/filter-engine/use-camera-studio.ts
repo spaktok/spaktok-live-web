@@ -19,8 +19,8 @@ import {buildLiveSculptWarp,hasLiveSculpt,normalizeLiveSculpt,
 import {createDenseFaceTopology,type DenseFaceTopology} from './reality-face-topology'
 import {FIRST_GPU_LIVE_FILTER_ID} from './spaktok-first-gpu-live'
 import {isPhotorealSurfaceId} from './reality-precision-face-mask'
-import {estimateAmbientLight} from './lighting3d'
-import {NEUTRAL_PHOTOGRAPHIC_CORRECTION,targetPhotographicCorrection,smoothPhotographicCorrection,applyPhotographicCorrection} from './reality-photographic-meter'
+
+import {NEUTRAL_PHOTOGRAPHIC_CORRECTION,targetPhotographicCorrection,smoothPhotographicCorrection,applyPhotographicCorrection,estimatePortraitPhotographicLight} from './reality-photographic-meter'
 import {createLiveFaceMeshTemplate,updateLiveFaceMesh,chooseLiveMeshLevel,
  type LiveMeshTemplate} from './reality-live-personal-mesh'
 
@@ -578,7 +578,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
             if(ctx){
               ctx.drawImage(video,0,0,32,18)
               const image=ctx.getImageData(0,0,32,18)
-              const target=targetPhotographicCorrection(estimateAmbientLight(image.data,32,18))
+              const target=targetPhotographicCorrection(estimatePortraitPhotographicLight(image.data,32,18,faceRef.current))
               photoCorrectionRef.current=smoothPhotographicCorrection(
                 photoCorrectionRef.current,target,elapsed)
             }
