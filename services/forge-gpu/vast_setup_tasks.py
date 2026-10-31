@@ -119,6 +119,33 @@ def _torch_in_runtime(python: Path) -> dict:
             "available": info.get("available") is True}
 
 
+def _local_dinov3_cache() -> dict:
+    """Inspect the owner's on-device HF cache without reading OAuth tokens."""
+    import re
+    expected = 1212559808
+    bases = (
+        WORKSPACE / ".hf_home" / "hub",
+        WORKSPACE / "hf-cache" / "hub",
+    )
+    checked = 0
+    for base in bases:
+        snapshots = base / "models--facebook--dinov3-vitl16-pretrain-lvd1689m" / "snapshots"
+        if not snapshots.is_dir():
+            continue
+        for commit in snapshots.iterdir():
+            checked += 1
+            if checked > 15:
+                break
+            if not commit.is_dir() or not re.fullmatch(r"[0-9a-f]{40}", commit.name):
+                continue
+            weights = commit / "model.safetensors"
+            config = commit / "config.json"
+            if (weights.is_file() and config.is_file()
+                    and weights.stat().st_size == expected):
+                return {"present": True, "weightsBytes": expected}
+    return {"present": False}
+
+
 def probe_environment() -> dict:
     out = _disk()
     # No account credentials, environment variables or home paths are reported.
@@ -126,6 +153,7 @@ def probe_environment() -> dict:
              "cmake", "ninja", "curl", "nvidia-smi")
     out["tools"] = {name: shutil.which(name) is not None for name in tools}
     out["pythonVersion"] = sys.version.split()[0][:20]
+    out["dinov3LocalCache"] = _local_dinov3_cache()
     out["torch"] = _torch()
     out["trellisSourcePresent"] = (
         TRELLIS / "trellis2" / "pipelines" / "trellis2_image_to_3d.py").is_file()
