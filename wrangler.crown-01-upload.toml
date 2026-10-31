@@ -1,0 +1,15 @@
+# One-time, owner-approved upload of the EXACT supplied Royal Crown 01 PNG.
+# R2 remains private and the Worker cannot serve images publicly.
+name = "spaktok-crown-01-upload"
+main = "cloudflare/workers/spaktok-crown-01-upload.mjs"
+compatibility_date = "2026-10-31"
+workers_dev = true
+
+[[d1_databases]]
+binding = "VAST_DB"
+database_name = "spaktok-primary"
+database_id = "e18619f5-76ec-42e5-b601-3e5f06ae7731"
+
+[[r2_buckets]]
+binding = "VAST_ASSETS"
+bucket_name = "spaktok-private-drafts"
