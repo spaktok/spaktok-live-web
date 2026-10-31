@@ -74,7 +74,9 @@ def post_one_image(image: bytes, name: str, token: str) -> bytes:
         "Content-Length": str(len(form)),
     })
     try:
-        with request.urlopen(req, timeout=240) as response:
+        # One approved paid job; large TRELLIS.2 inference may exceed 4 minutes.
+        # Do not auto-retry if the connection fails.
+        with request.urlopen(req, timeout=1200) as response:
             if response.headers.get_content_type() != "model/gltf-binary":
                 raise ValueError("wrong_result_content_type")
             declared = int(response.headers.get("Content-Length") or "0")
