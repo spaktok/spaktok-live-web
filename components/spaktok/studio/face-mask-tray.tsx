@@ -128,8 +128,10 @@ export function FaceMaskTray({
   if(Math.abs(el.scrollLeft)+el.clientWidth>=el.scrollWidth-230)
    setRenderCount(n=>Math.min(n+12,filtered.length))
  }
+ // LIVE now opens filters from its footer; no centered pill over the face.
+ if(liveMode&&activeLive&&!visible)return null
  return <div className="pointer-events-none absolute inset-x-2 z-20 flex flex-col items-center"
-   style={{bottom:activeLive?'clamp(345px,54dvh,590px)':'clamp(186px,23dvh,235px)'}} dir="rtl">
+   style={{bottom:activeLive?'clamp(140px,21dvh,260px)':'clamp(186px,23dvh,235px)'}} dir="rtl">
    {!visible?(
     <button type="button" onClick={onToggle}
       className="pointer-events-auto flex items-center gap-2 rounded-full border border-[#adc4ff]/35 bg-[#0d1837]/85 px-4 py-2.5 text-sm font-bold text-white shadow-xl backdrop-blur-lg">
