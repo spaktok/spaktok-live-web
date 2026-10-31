@@ -338,9 +338,16 @@ def execute(job: dict, device: dict) -> dict:
         env["CONDA_PREFIX"] = str(model_python.parent.parent)
         env["PYTHONPATH"] = os.pathsep.join((str(HERE), "/workspace/TRELLIS.2",
                                                env.get("PYTHONPATH", "")))
-        if not env.get("HF_HOME") and Path("/workspace/hf-cache").is_dir():
-            env["HF_HOME"] = "/workspace/hf-cache"
-        return run_checked([interpreter, str(HERE / "diagnose_trellis2_conditioning.py"),
+        # The GPU owner authenticated via Hugging Face Device OAuth with
+        # HF_HOME=/workspace/.hf_home. Reuse that local cache; do not read,
+        # forward, or log the stored OAuth credential.
+        if not env.get("HF_HOME"):
+            for cache in ("/workspace/.hf_home", "/workspace/hf-cache"):
+                if Path(cache).is_dir():
+                    env["HF_HOME"] = cache
+                    break
+        return run_checked([str(model_python),
+                            str(HERE / "diagnose_trellis2_conditioning.py"),
                             "--execute"], timeout=900, env=env)
     data = retrieve_input(device, job)
     if action == "generate_one":
