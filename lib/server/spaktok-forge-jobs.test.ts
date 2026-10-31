@@ -41,3 +41,21 @@ describe('forge async job handles',()=>{
   expect(parseForgeGpuJobStatus({id:jobId,state:'hacked'})).toBeNull()
  })
 })
+
+import {sniffForgeMesh,signForgeJobHandle as signH,verifyForgeJobHandle as verifyH} from './spaktok-forge-jobs'
+describe('retexture contract',()=>{
+ const glb=(n:number,v=2)=>{const b=new Uint8Array(n);b.set([0x67,0x6c,0x54,0x46]);const d=new DataView(b.buffer);d.setUint32(4,v,true);d.setUint32(8,n,true);return b}
+ it('sniffs GLB v2 with exact length and PLY only',()=>{
+  expect(sniffForgeMesh(glb(128))).toBe('glb')
+  expect(sniffForgeMesh(glb(128,1))).toBeNull()
+  const bad=glb(128);new DataView(bad.buffer).setUint32(8,999,true)
+  expect(sniffForgeMesh(bad)).toBeNull()
+  expect(sniffForgeMesh(new TextEncoder().encode('ply\n'+'x'.repeat(80)))).toBe('ply')
+  expect(sniffForgeMesh(new TextEncoder().encode('obj '+'x'.repeat(80)))).toBeNull()
+ })
+ it('signs retexture handles',()=>{
+  const s='s'.repeat(40)
+  const h=signH(s,{jobId:'a'.repeat(24),uid:'u1',profile:'retexture'})
+  expect(verifyH(s,h,'u1')?.profile).toBe('retexture')
+ })
+})

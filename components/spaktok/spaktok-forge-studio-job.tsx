@@ -5,6 +5,7 @@ import {useEffect,useRef,useState} from 'react'
 const MAX_UPLOAD=4*1024*1024
 const MAX_RESULT=256*1024*1024
 const POLL_MS=4000
+const MAX_RETEXTURE_UPLOAD=4*1024*1024+256*1024
 const PROFILES={
  'studio-hd':{label:'Studio HD · 1024 · نسيج 2K',budgets:[50000,120000,200000,300000]},
  'studio-ultra':{label:'Studio Ultra · 1536 · نسيج 4K',budgets:[120000,200000,300000,500000]},
@@ -54,6 +55,8 @@ export default function SpaktokForgeStudioJob({
  disabled:boolean
  onResult:(file:File)=>void
 }>){
+ const [mode,setMode]=useState<'generate'|'retexture'>('generate')
+ const [mesh,setMesh]=useState<File|null>(null)
  const [profile,setProfile]=useState<Profile>('studio-hd')
  const [budget,setBudget]=useState<number>(200000)
  const [consent,setConsent]=useState(false)
@@ -71,13 +74,18 @@ export default function SpaktokForgeStudioJob({
 
  const start=async()=>{
   if(!source||!approved||!consent||running||disabled)return
+  if(mode==='retexture'&&!mesh)return
   const controller=new AbortController()
   abortRef.current?.abort();abortRef.current=controller
   setRunning(true);setJob(null);setNote('تجهيز الصورة وإرسال المهمة إلى A100…')
   try{
    const image=await fitForUpload(source)
    const form=new FormData()
-   form.set('image',image);form.set('profile',profile);form.set('polyBudget',String(budget))
+   form.set('image',image)
+   if(mode==='retexture'&&mesh){
+    if(image.size+mesh.size>MAX_RETEXTURE_UPLOAD)throw Error('forge_job_mesh_too_large')
+    form.set('kind','retexture');form.set('mesh',mesh)
+   }else{form.set('profile',profile);form.set('polyBudget',String(budget))}
    form.set('rights',rights);form.set('approveCompute','yes');form.set('approveTransfer','yes')
    const submit=await fetch('/api/spaktok-forge/jobs',{
     method:'POST',body:form,cache:'no-store',signal:controller.signal,
@@ -116,9 +124,11 @@ export default function SpaktokForgeStudioJob({
     if(new TextDecoder().decode(bytes.slice(0,4))!=='glTF')throw Error('forge_job_result_not_glb')
     if(data.job.sha256&&await sha256Hex(bytes)!==data.job.sha256)
      throw Error('forge_job_result_integrity_failed')
-    onResult(new File([bytes],'spaktok-forge-'+profile+'.glb',{type:'model/gltf-binary'}))
-    setNote('اكتمل: '+(bytes.byteLength/1024/1024).toFixed(1)+' MB · '+
-     budget.toLocaleString()+' وجه كحد أقصى. راجع الجودة بصريًا قبل النشر.')
+    const tag=mode==='retexture'?'retexture':profile
+    onResult(new File([bytes],'spaktok-forge-'+tag+'.glb',{type:'model/gltf-binary'}))
+    setNote('اكتمل: '+(bytes.byteLength/1024/1024).toFixed(1)+' MB'+
+     (mode==='retexture'?' · خامات PBR جديدة على شكلك الأصلي.':
+      ' · '+budget.toLocaleString()+' وجه كحد أقصى.')+' راجع الجودة بصريًا قبل النشر.')
     return
    }
   }catch(error){
@@ -136,6 +146,25 @@ export default function SpaktokForgeStudioJob({
 
  return <div className="mt-3 flex flex-col gap-2 rounded-lg border border-cyan-300/25 bg-slate-950/50 p-3">
   <p className="text-xs font-semibold text-cyan-200">Studio HD / Ultra · مهمة غير متزامنة على A100</p>
+  <div role="radiogroup" aria-label="نوع المهمة" className="flex gap-2 text-xs">
+   {([['generate','توليد شكل جديد'],['retexture','إعادة تلوين مجسّم']] as const).map(([key,label])=>
+    <button key={key} type="button" role="radio" aria-checked={mode===key} disabled={running}
+     onClick={()=>setMode(key)}
+     className={'flex-1 rounded-lg border px-2 py-2 font-semibold '+(mode===key?
+      'border-cyan-300 bg-cyan-400/15 text-cyan-100':'border-white/20 text-slate-300')}>
+     {label}
+    </button>)}
+  </div>
+  {mode==='retexture'?<>
+   <label className="flex flex-col gap-1 text-xs">المجسّم (GLB أو PLY)
+    <input type="file" accept=".glb,.ply,model/gltf-binary" disabled={running}
+     onChange={e=>setMesh(e.target.files?.[0]??null)}
+     className="rounded-lg border border-white/20 bg-slate-950 p-2 text-[11px]"/>
+   </label>
+   <p className="text-[11px] leading-5 text-slate-400">
+    يُحتفظ بالشكل كما هو، وتُولَّد خامات PBR (لون، خشونة، معدنية) من الصورة المرجعية. الحد الأقصى للصورة والمجسّم معًا 4 MB.
+   </p>
+  </>:<>
   <label className="flex flex-col gap-1 text-xs">الجودة
    <select value={profile} disabled={running}
     onChange={e=>pickProfile(e.target.value as Profile)}
@@ -151,6 +180,7 @@ export default function SpaktokForgeStudioJob({
     {PROFILES[profile].budgets.map(b=><option key={b} value={b}>{b.toLocaleString()} وجه</option>)}
    </select>
   </label>
+  </>}
   <label className="flex gap-2 text-xs leading-5 text-amber-100">
    <input type="checkbox" checked={consent} disabled={running}
     onChange={e=>setConsent(e.target.checked)} className="mt-1"/>
@@ -162,9 +192,9 @@ export default function SpaktokForgeStudioJob({
     إيقاف المتابعة
    </button>:
    <button type="button" onClick={()=>void start()}
-    disabled={!source||!approved||!consent||disabled}
+    disabled={!source||!approved||!consent||disabled||(mode==='retexture'&&!mesh)}
     className="rounded-lg bg-cyan-400 px-3 py-3 text-xs font-bold text-slate-950 disabled:opacity-40">
-    بدء توليد {profile==='studio-ultra'?'Ultra':'HD'}
+    {mode==='retexture'?'بدء إعادة التلوين':'بدء توليد '+(profile==='studio-ultra'?'Ultra':'HD')}
    </button>}
   {job&&<p className="text-[11px] leading-5 text-cyan-100" aria-live="polite">
    الحالة: {STATE_AR[job.state]}

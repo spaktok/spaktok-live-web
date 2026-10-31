@@ -6,7 +6,7 @@ import {queryD1} from '@/lib/native/d1'
 import {FORGE_QUOTA_CLAIM_SQL} from '@/lib/server/spaktok-forge-budget'
 import {
  FORGE_JOB_MAX_IMAGE,forgeJobsBase,isForgeJobProfile,isForgePolyBudget,
- parseForgeGpuJobStatus,signForgeJobHandle,signForgeJobReadTicket,
+ parseForgeGpuJobStatus,signForgeJobHandle,FORGE_RETEXTURE_MAX_TOTAL,sniffForgeMesh,signForgeJobReadTicket,
  verifyForgeJobHandle,
 } from '@/lib/server/spaktok-forge-jobs'
 
@@ -41,18 +41,27 @@ export async function POST(request:NextRequest){
  if(!cfg||cfg.engine!=='trellis2'||!hdEnabled())
   return json({error:'forge_gpu_hd_not_authorized'},403)
  const length=Number(request.headers.get('content-length')??0)
- if(!Number.isSafeInteger(length)||length<128||length>FORGE_JOB_MAX_IMAGE+16384)
+ if(!Number.isSafeInteger(length)||length<128||length>FORGE_RETEXTURE_MAX_TOTAL+16384)
   return json({error:'forge_job_payload_size_invalid'},413)
 
  let form:FormData
  try{form=await request.formData()}catch{return json({error:'forge_job_invalid_form'},422)}
  const image=form.get('image')
- const profile=form.get('profile')
+ const retexture=form.get('kind')==='retexture'
+ const profile=retexture?'studio-hd':form.get('profile')
  const rawBudget=form.get('polyBudget')
  const polyBudget=rawBudget===null||rawBudget===''?null:Number(rawBudget)
  if(!(image instanceof File)||!MIME.includes(image.type)||
   image.size<128||image.size>FORGE_JOB_MAX_IMAGE)
   return json({error:'forge_job_image_invalid'},422)
+ let meshBytes:Buffer|null=null
+ if(retexture){
+  const mesh=form.get('mesh')
+  if(!(mesh instanceof File)||image.size+mesh.size>FORGE_RETEXTURE_MAX_TOTAL)
+   return json({error:'forge_job_mesh_invalid'},422)
+  meshBytes=Buffer.from(await mesh.arrayBuffer())
+  if(!sniffForgeMesh(meshBytes))return json({error:'forge_job_mesh_invalid'},422)
+ }
  if(!isForgeJobProfile(profile))return json({error:'forge_job_profile_invalid'},422)
  if(polyBudget!==null&&!isForgePolyBudget(polyBudget))
   return json({error:'forge_job_poly_budget_invalid'},422)
@@ -77,15 +86,19 @@ export async function POST(request:NextRequest){
 
  const upstream=new FormData()
  upstream.set('image',new Blob([bytes],{type:image.type}),'source')
- upstream.set('profile',profile)
- if(polyBudget!==null)upstream.set('poly_budget',String(polyBudget))
+ if(meshBytes)upstream.set('mesh',new Blob([new Uint8Array(meshBytes)]),'mesh')
+ else{
+  upstream.set('profile',profile)
+  if(polyBudget!==null)upstream.set('poly_budget',String(polyBudget))
+ }
  let status
  try{
-  const r=await fetch(forgeJobsBase(cfg.url),{
+  const r=await fetch(forgeJobsBase(cfg.url)+(meshBytes?'/retexture':''),{
    method:'POST',body:upstream,cache:'no-store',redirect:'error',
    headers:{authorization:'Bearer '+cfg.token},
    signal:AbortSignal.timeout(30000),
   })
+  if(r.status===503&&meshBytes)return json({error:'forge_retexture_unavailable',paidGpuStarted:false},503)
   if(r.status===429)return json({error:'forge_gpu_queue_full',paidGpuStarted:false},429)
   if(!r.ok)return json({error:'forge_gpu_job_rejected',upstream:r.status},502)
   status=parseForgeGpuJobStatus(await r.json())
@@ -93,7 +106,7 @@ export async function POST(request:NextRequest){
  if(!status)return json({error:'forge_gpu_job_invalid_response'},502)
 
  return json({
-  handle:signForgeJobHandle(cfg.token,{jobId:status.id,uid:user.id,profile}),
+  handle:signForgeJobHandle(cfg.token,{jobId:status.id,uid:user.id,profile:retexture?'retexture':profile}),
   job:status,
   note:'This job consumed your daily GPU reservation. No automatic retry.',
  },202)

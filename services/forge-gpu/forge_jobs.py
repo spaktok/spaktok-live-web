@@ -49,7 +49,9 @@ class Job:
     poly_budget: Optional[int]
     created_at: float
     state: str = "queued"
+    kind: str = "generate"
     photo: Optional[bytes] = field(default=None, repr=False)
+    mesh: Optional[bytes] = field(default=None, repr=False)
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
     error: Optional[str] = None
@@ -58,7 +60,7 @@ class Job:
 
     def public(self, queue_position: Optional[int] = None) -> dict:
         data = {
-            "id": self.id, "state": self.state, "profile": self.profile,
+            "id": self.id, "kind": self.kind, "state": self.state, "profile": self.profile,
             "polyBudget": self.poly_budget, "createdAt": int(self.created_at),
             "startedAt": int(self.started_at) if self.started_at else None,
             "finishedAt": int(self.finished_at) if self.finished_at else None,
@@ -80,10 +82,12 @@ class JobQueue:
                  max_queue: int = 8, ttl_seconds: int = 3600,
                  max_result_bytes: int = 256 * 1024 * 1024,
                  clock: Callable[[], float] = time.time,
-                 on_event: Callable[[dict], None] = lambda _e: None):
+                 on_event: Callable[[dict], None] = lambda _e: None,
+                 retexture: Optional[Callable[[bytes, bytes, str], bytes]] = None):
         if max_queue < 1 or ttl_seconds < 60:
             raise ValueError("invalid_queue_bounds")
         self._generate = generate
+        self._retexture = retexture
         self._workdir = workdir
         self._lock = gpu_lock or asyncio.Lock()
         self._max_queue = max_queue
@@ -111,13 +115,29 @@ class JobQueue:
             self._worker = None
 
     # ---- public API ------------------------------------------------------
+    @property
+    def supports_retexture(self) -> bool:
+        return self._retexture is not None
+
     def submit(self, photo: bytes, profile: str, poly_budget: Optional[int] = None) -> dict:
+        return self._enqueue(Job(id=secrets.token_urlsafe(18), profile=profile,
+                                 poly_budget=poly_budget, created_at=self._clock(),
+                                 photo=photo))
+
+    def submit_retexture(self, photo: bytes, mesh: bytes) -> dict:
+        """Shape-conditioned PBR re-texturing of a creator-supplied mesh."""
+        if self._retexture is None:
+            raise RuntimeError("retexture_unavailable")
+        return self._enqueue(Job(id=secrets.token_urlsafe(18), profile="retexture",
+                                 poly_budget=None, created_at=self._clock(),
+                                 kind="retexture", photo=photo, mesh=mesh))
+
+    def _enqueue(self, job: Job) -> dict:
         self.purge_expired()
         waiting = sum(1 for j in self._jobs.values() if j.state in ("queued", "running"))
         if waiting >= self._max_queue:
             raise QueueFull()
-        job = Job(id=secrets.token_urlsafe(18), profile=profile,
-                  poly_budget=poly_budget, created_at=self._clock(), photo=photo)
+        profile = job.profile
         self._jobs[job.id] = job
         self._pending.put_nowait(job.id)
         self._emit({"event": "spaktok_gpu_job", "job": job.id,
@@ -174,12 +194,16 @@ class JobQueue:
         if job is None or job.state != "queued":
             return
         photo, job.photo = job.photo, None
+        mesh, job.mesh = job.mesh, None
         async with self._lock:
             job.state, job.started_at = "running", self._clock()
             self._emit({"event": "spaktok_gpu_job", "job": job.id, "stage": "running"})
             try:
-                result = await asyncio.to_thread(
-                    self._generate, photo, job.profile, job.poly_budget, job.id)
+                if job.kind == "retexture":
+                    result = await asyncio.to_thread(self._retexture, photo, mesh, job.id)
+                else:
+                    result = await asyncio.to_thread(
+                        self._generate, photo, job.profile, job.poly_budget, job.id)
                 if not isinstance(result, (bytes, bytearray)) or \
                         not 28 <= len(result) <= self._max_result or result[:4] != b"glTF":
                     raise ValueError("invalid_or_oversized_glb")
@@ -193,7 +217,7 @@ class JobQueue:
             except Exception as exc:  # noqa: BLE001 - categorized, never leaked
                 job.state, job.error = "failed", categorize(exc)
             finally:
-                del photo
+                del photo, mesh
                 job.finished_at = self._clock()
         self._emit({"event": "spaktok_gpu_job", "job": job.id, "stage": job.state,
                     "error": job.error, "bytes": job.result_bytes})
