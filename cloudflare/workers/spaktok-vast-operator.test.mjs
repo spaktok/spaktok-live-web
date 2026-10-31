@@ -37,6 +37,7 @@ test('unauthenticated claim and file endpoints are denied',async()=>{
 test('enroll validates strictly and never writes bad device records',async()=>{
  const env=fakeEnv();
  env.VAST_ENROLL_ENABLED='true';
+ env.VAST_ENROLL_EXPIRES_AT=String(Math.floor(Date.now()/1000)+600);
  const invalids=[
   {deviceId:'abc',tokenSha256:'b'.repeat(64),pairCode:'ABCD1234'},
   {deviceId:'a'.repeat(32),tokenSha256:'nothex',pairCode:'ABCD1234'},
