@@ -16,7 +16,11 @@ import time
 from urllib import request, error
 
 from vast_setup_tasks import locate_trellis_python, TRELLIS, TRELLIS_SHA, FORGE_REPO
-from vast_operator_agent import OperatorError, STATE_DIR
+STATE_DIR = Path(os.environ.get("SPAKTOK_VAST_AGENT_STATE", "/workspace/.spaktok-vast-agent"))
+
+
+class LocalServiceError(Exception):
+    """Sanitized, local-only service errors translated by the agent."""
 
 HEALTH = "http://127.0.0.1:8000/health"
 TOKEN_FILE = STATE_DIR / "forge-gpu-local-token"
@@ -36,10 +40,12 @@ def local_health() -> tuple[bool, bool]:
             return False, True
         engine = obj.get("engine")
         if engine != "trellis2":
-            raise OperatorError("localhost_gpu_port_wrong_engine")
+            raise LocalServiceError("localhost_gpu_port_wrong_engine")
         return obj.get("ready") is True, True
-    except OperatorError:
+    except LocalServiceError:
         raise
+    except error.HTTPError:
+        return False, True
     except (OSError, ValueError, json.JSONDecodeError):
         return False, False
 
@@ -48,10 +54,10 @@ def local_token() -> str:
     STATE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
     if TOKEN_FILE.exists():
         if TOKEN_FILE.is_symlink() or TOKEN_FILE.stat().st_mode & 0o077:
-            raise OperatorError("local_gpu_token_permissions_unsafe")
+            raise LocalServiceError("local_gpu_token_permissions_unsafe")
         token = TOKEN_FILE.read_text(encoding="utf-8").strip()
         if len(token) < 32 or len(token) > 256:
-            raise OperatorError("local_gpu_token_invalid")
+            raise LocalServiceError("local_gpu_token_invalid")
         return token
     token = secrets.token_urlsafe(48)
     flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
@@ -64,15 +70,15 @@ def local_token() -> str:
 def check_source() -> Path:
     python = locate_trellis_python()
     if python is None:
-        raise OperatorError("trellis2_environment_missing")
+        raise LocalServiceError("trellis2_environment_missing")
     source = TRELLIS / "trellis2" / "pipelines" / "trellis2_image_to_3d.py"
     if not source.is_file():
-        raise OperatorError("trellis2_checkout_missing")
+        raise LocalServiceError("trellis2_checkout_missing")
     result = subprocess.run(["git", "-C", str(TRELLIS), "rev-parse", "HEAD"],
                             capture_output=True, text=True, timeout=15,
                             check=False)
     if result.returncode != 0 or result.stdout.strip() != TRELLIS_SHA:
-        raise OperatorError("trellis2_checkout_not_pinned")
+        raise LocalServiceError("trellis2_checkout_not_pinned")
     return python
 
 
@@ -93,7 +99,7 @@ def process_environment(python: Path, token: str) -> dict:
         if approved_cache.is_dir():
             env["HF_HOME"] = str(approved_cache)
     if not env.get("HF_HOME") or not Path(env["HF_HOME"]).is_dir():
-        raise OperatorError("huggingface_device_cache_missing")
+        raise LocalServiceError("huggingface_device_cache_missing")
     return env
 
 
@@ -105,12 +111,12 @@ def ensure_local_trellis2() -> str:
     """
     ready, occupied = local_health()
     if occupied and not ready:
-        raise OperatorError("localhost_gpu_port_occupied_or_booting")
+        raise LocalServiceError("localhost_gpu_port_occupied_or_booting")
     # Even if already ready, fail if this operator does not possess the
     # original locally-created GPU server token.
     if ready:
         if not TOKEN_FILE.is_file():
-            raise OperatorError("existing_gpu_server_unmanaged")
+            raise LocalServiceError("existing_gpu_server_unmanaged")
         return local_token()
     python = check_source()
     token = local_token()
@@ -129,13 +135,13 @@ def ensure_local_trellis2() -> str:
                 start_new_session=True, close_fds=True,
             )
         except OSError:
-            raise OperatorError("trellis_service_launch_failed") from None
+            raise LocalServiceError("trellis_service_launch_failed") from None
     started = time.monotonic()
     while time.monotonic() - started < MAX_START_SECONDS:
         ready, occupied = local_health()
         if ready:
             return token
         if child.poll() is not None:
-            raise OperatorError("trellis_service_exited_review_private_log")
+            raise LocalServiceError("trellis_service_exited_review_private_log")
         time.sleep(5)
-    raise OperatorError("trellis_service_start_timeout_review_private_log")
+    raise LocalServiceError("trellis_service_start_timeout_review_private_log")
