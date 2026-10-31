@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react'
 import type { MouseEvent, TouchEvent } from 'react'
-import { Heart, MessageCircle, Share2, Bookmark, Download, Music2, Play, Volume2, VolumeX, X, Send } from 'lucide-react'
+import { Heart, MessageCircle, Share2, Bookmark, Download, Music2, Play, Volume2, VolumeX, X, Send, Flag } from 'lucide-react'
+import { SpaktokReportSheet } from './spaktok-report-sheet'
 import type { Video } from '@/lib/types'
 import { formatNumber } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
@@ -46,6 +47,7 @@ export function VideoCard({ video, isActive, shouldPrecache = false, saveData = 
   const [retrySerial, setRetrySerial] = useState(0)
   const [showHearts, setShowHearts] = useState<{ id: number; x: number; y: number }[]>([])
   const [showComments, setShowComments] = useState(false)
+  const [showReport, setShowReport] = useState(false)
   const [commentText, setCommentText] = useState('')
   const [comments, setComments] = useState<VideoComment[]>([])
   const [commentsLoading, setCommentsLoading] = useState(false)
@@ -428,6 +430,11 @@ export function VideoCard({ video, isActive, shouldPrecache = false, saveData = 
         >
           <div className="w-12 h-12 rounded-full glass flex items-center justify-center"><Download className="w-6 h-6 text-white" /></div>
         </button>
+
+        <button type="button" onClick={() => setShowReport(true)} className="flex flex-col items-center gap-1 press-effect" aria-label="الإبلاغ عن الفيديو">
+          <div className="w-12 h-12 rounded-full glass flex items-center justify-center"><Flag className="w-6 h-6 text-white" /></div>
+        </button>
+        {showReport && <SpaktokReportSheet targetType="video" targetId={video.id} onClose={() => setShowReport(false)} />}
 
         {/* Music Disc */}
         {video.music && (
