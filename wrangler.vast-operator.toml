@@ -1,0 +1,21 @@
+# Spaktok Vast.ai GPU agent control plane (outbound-only).
+# Deploy only with migration 0005_vast_remote_control.sql applied.
+# Enrollment is deliberately OFF. Temporarily open only while the owner
+# pairs a specific device; verify DEVICE_ID + PAIR_CODE via D1 before approval.
+# No public terminal, no arbitrary commands, no paid inference without D1 grants.
+name = "spaktok-vast-operator"
+main = "cloudflare/workers/spaktok-vast-operator.mjs"
+compatibility_date = "2026-10-31"
+workers_dev = true
+
+[vars]
+VAST_ENROLL_ENABLED = "false"
+
+[[d1_databases]]
+binding = "VAST_DB"
+database_name = "spaktok-primary"
+database_id = "e18619f5-76ec-42e5-b601-3e5f06ae7731"
+
+[[r2_buckets]]
+binding = "VAST_ASSETS"
+bucket_name = "spaktok-private-drafts"
