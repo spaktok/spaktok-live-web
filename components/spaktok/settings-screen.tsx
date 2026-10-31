@@ -44,6 +44,7 @@ interface SettingsScreenProps {
 }
 
 interface SettingItem {
+  id?: 'language' | 'exportData' | 'signOut' | 'deleteAccount';
   icon: React.ReactNode;
   label: string;
   description?: string;
@@ -66,8 +67,7 @@ interface SettingSection {
 
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const { user: authUser, signOut } = useAuth()
-  const { language, languageName, setLanguage, t } = useLanguage()
-  const languageLabel = t('settings.language')
+  const { language, languageName, setLanguage, t, compact, integer } = useLanguage()
   const [settings, setSettings] = useState(defaultSettings);
   const [exporting,setExporting]=useState(false)
   useEffect(()=>{
@@ -96,51 +96,51 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
 
   const settingSections: SettingSection[] = [
     {
-      title: "الحساب",
+      title: t('settings.section.account'),
       items: [
-        { icon: <User className="w-5 h-5" />, label: "تعديل الملف الشخصي", action: "navigate" },
-        { icon: <Lock className="w-5 h-5" />, label: "تغيير كلمة المرور", action: "navigate" },
-        { icon: <CreditCard className="w-5 h-5" />, label: "المحفظة والدفع", action: "navigate" },
-        { icon: <Gift className="w-5 h-5" />, label: "العملات والهدايا", action: "navigate" },
-        { icon: <QrCode className="w-5 h-5" />, label: "رمز QR الخاص بي", action: "navigate" },
+        { icon: <User className="w-5 h-5" />, label: t('settings.editProfile'), action: "navigate" },
+        { icon: <Lock className="w-5 h-5" />, label: t('settings.changePassword'), action: "navigate" },
+        { icon: <CreditCard className="w-5 h-5" />, label: t('settings.wallet'), action: "navigate" },
+        { icon: <Gift className="w-5 h-5" />, label: t('settings.coins'), action: "navigate" },
+        { icon: <QrCode className="w-5 h-5" />, label: t('settings.qr'), action: "navigate" },
       ],
     },
     {
-      title: "الخصوصية والأمان",
+      title: t('settings.section.privacy'),
       items: [
-        { icon: <Eye className="w-5 h-5" />, label: "حساب خاص", description: "لم يُفعّل على الخادم بعد", action: "toggle", settingKey: "privateAccount", value: settings.privateAccount },
-        { icon: <Shield className="w-5 h-5" />, label: "التحقق بخطوتين", description: "قيد التطوير — غير مفعّل حاليًا", action: "toggle", settingKey: "twoFactor", value: settings.twoFactor },
-        { icon: <UserPlus className="w-5 h-5" />, label: "الحسابات المحظورة", action: "navigate" },
-        { icon: <Database className="w-5 h-5" />, label: "تحميل بياناتي", description:"تنزيل نسخة جزئية من معلومات الحساب في ملف JSON", action: "navigate" },
+        { icon: <Eye className="w-5 h-5" />, label: t('settings.privateAccount'), description: t('settings.privateAccountHint'), action: "toggle", settingKey: "privateAccount", value: settings.privateAccount },
+        { icon: <Shield className="w-5 h-5" />, label: t('settings.twoFactor'), description: t('settings.twoFactorHint'), action: "toggle", settingKey: "twoFactor", value: settings.twoFactor },
+        { icon: <UserPlus className="w-5 h-5" />, label: t('settings.blocked'), action: "navigate" },
+        { icon: <Database className="w-5 h-5" />, id: 'exportData', label: t('settings.downloadData'), description: t('settings.downloadDataHint'), action: "navigate" },
       ],
     },
     {
-      title: "الإشعارات",
+      title: t('settings.section.notifications'),
       items: [
-        { icon: <Bell className="w-5 h-5" />, label: "تفعيل الإشعارات", description:"تفضيل محلي لهذا الجهاز، وليس إذن إشعارات النظام", action: "toggle", settingKey: "notifications", value: settings.notifications },
+        { icon: <Bell className="w-5 h-5" />, label: t('settings.enableNotifications'), description: t('settings.notificationsHint'), action: "toggle", settingKey: "notifications", value: settings.notifications },
       ],
     },
     {
-      title: "المظهر والتفضيلات",
+      title: t('settings.section.appearance'),
       items: [
-        { icon: <Moon className="w-5 h-5" />, label: "الوضع الليلي", action: "toggle", settingKey: "darkMode", value: settings.darkMode },
-        { icon: <Globe className="w-5 h-5" />, label: t('settings.language'), action: "navigate", badge: languageName },
-        { icon: <Smartphone className="w-5 h-5" />, label: "توفير البيانات", description: "تقليل استهلاك الإنترنت", action: "toggle", settingKey: "dataSaver", value: settings.dataSaver },
+        { icon: <Moon className="w-5 h-5" />, label: t('settings.darkMode'), action: "toggle", settingKey: "darkMode", value: settings.darkMode },
+        { icon: <Globe className="w-5 h-5" />, id: 'language', label: t('settings.language'), action: "navigate", badge: languageName },
+        { icon: <Smartphone className="w-5 h-5" />, label: t('settings.dataSaver'), description: t('settings.dataSaverHint'), action: "toggle", settingKey: "dataSaver", value: settings.dataSaver },
       ],
     },
     {
-      title: "الدعم والمعلومات",
+      title: t('settings.section.support'),
       items: [
-        { icon: <HelpCircle className="w-5 h-5" />, label: "مركز المساعدة", action: "navigate" },
-        { icon: <FileText className="w-5 h-5" />, label: "الشروط والأحكام", action: "navigate" },
-        { icon: <Shield className="w-5 h-5" />, label: "سياسة الخصوصية", action: "navigate" },
+        { icon: <HelpCircle className="w-5 h-5" />, label: t('settings.help'), action: "navigate" },
+        { icon: <FileText className="w-5 h-5" />, label: t('settings.terms'), action: "navigate" },
+        { icon: <Shield className="w-5 h-5" />, label: t('settings.privacyPolicy'), action: "navigate" },
       ],
     },
     {
-      title: "إجراءات الحساب",
+      title: t('settings.section.accountActions'),
       items: [
-        { icon: <LogOut className="w-5 h-5" />, label: "تسجيل الخروج", action: "danger" },
-        { icon: <Trash2 className="w-5 h-5" />, label: "حذف الحساب", action: "danger" },
+        { icon: <LogOut className="w-5 h-5" />, id: 'signOut', label: t('settings.signOut'), action: "danger" },
+        { icon: <Trash2 className="w-5 h-5" />, id: 'deleteAccount', label: t('settings.deleteAccount'), action: "danger" },
       ],
     },
   ];
