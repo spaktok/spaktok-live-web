@@ -35,7 +35,8 @@ import {segmentHandOnce,semanticHandMaskFresh,type RealitySemanticHand} from './
 import {RealityLivePhotoFace,LOCAL_PHOTO_FACE_ID} from './reality-live-photo-face'
 import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION,type FirstGpuPilotCalibration} from './spaktok-first-gpu-live'
 import {centeredPreviewTransform} from './spaktok-glb-preview-transform'
-import {PRECISION_FACE_MASK_ID,PORCELAIN_FACE_MASK_ID,PrecisionFaceSurfaceMask} from './reality-precision-face-mask'
+import {PRECISION_FACE_MASK_ID,PORCELAIN_FACE_MASK_ID,PrecisionFaceSurfaceMask,isPhotorealSurfaceId} from './reality-precision-face-mask'
+import {SPAKTOK_ORIGINAL_FACE_FINISHES} from './spaktok-original-face-filters'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
@@ -47,6 +48,7 @@ export const face3DPresets = [
  {id:'3d-expression',name:'قناع التعبيرات',icon:'🎭',group:'3d'},
  {id:PRECISION_FACE_MASK_ID,name:'قناع تيتانيوم PBR • AR V2',icon:'🛡️',group:'3d'},
  {id:PORCELAIN_FACE_MASK_ID,name:'قناع سيراميك PBR • AR V2',icon:'🤍',group:'3d'},
+ ...SPAKTOK_ORIGINAL_FACE_FINISHES.map(({id,name,icon})=>({id,name,icon,group:'3d' as const})),
  {id:'3d-photo-face',name:'وجه GLB محلي متحرك',icon:'🧑',group:'3d'},
  ...makeupLooks,
 ] as const
@@ -428,7 +430,7 @@ export class FaceMesh3DEngine{
   try{
    const definition=getFaceRealityEffect(id)
    if(!definition)throw Error('reality_effect_not_registered:'+id)
-   if(id===PRECISION_FACE_MASK_ID||id===PORCELAIN_FACE_MASK_ID){
+   if(isPhotorealSurfaceId(id)){
     // No GLB or photo is uploaded; only the live tracked face geometry is used.
     this.lensReady=true
     this.modelQuality='fallback'
@@ -502,7 +504,7 @@ export class FaceMesh3DEngine{
  }
  /** Reuse the existing 32x18 ambient camera-light sampler in legacy preview. */
  updatePhotorealLight(video:HTMLVideoElement,seconds:number){
-  if(this.current===PRECISION_FACE_MASK_ID||this.current===PORCELAIN_FACE_MASK_ID)
+  if(this.current&&isPhotorealSurfaceId(this.current))
    this.adaptLight(video,seconds)
  }
  private adaptLight(source:RenderInput['source'],at:number){
@@ -604,8 +606,8 @@ export class FaceMesh3DEngine{
   this.meshDebug.visible=typeof window!=='undefined'&&
    new URLSearchParams(window.location.search).get('realityMesh')==='1'
   this.makeup.setStyle(id,this.lensReady,makeup)
-  const photoMask=id===PRECISION_FACE_MASK_ID||id===PORCELAIN_FACE_MASK_ID
-  if(photoMask)this.precisionMask.setFinish(id===PORCELAIN_FACE_MASK_ID?'porcelain':'titanium')
+  const photoMask=isPhotorealSurfaceId(id)
+  if(photoMask)this.precisionMask.setFinish(id===PORCELAIN_FACE_MASK_ID?'porcelain':id===PRECISION_FACE_MASK_ID?'titanium':id as typeof SPAKTOK_ORIGINAL_FACE_FINISHES[number]['id'])
   this.precisionMask.setActive(photoMask&&this.lensReady&&!heldFaceMissing,strength)
   // Update 478 surface vertices only on a *new* inference, not 30-60 times/sec.
   if(frame.timestamp!==this.lastFrame||this.lastSourceW!==sourceW||
@@ -761,7 +763,7 @@ export class FaceMesh3DEngine{
     }
    })
   }
-  this.mount.visible=this.lensReady&&id!==LOCAL_PHOTO_FACE_ID&&id!==PRECISION_FACE_MASK_ID&&id!==PORCELAIN_FACE_MASK_ID
+  this.mount.visible=this.lensReady&&id!==LOCAL_PHOTO_FACE_ID&&!isPhotorealSurfaceId(id)
   // Segmentation is not delivered by HandLandmarker. Until a true per-pixel
   // hand model is available we use a conservative landmark-derived matte.
   // Keep this behind a SECOND QA flag; never fade/cancel the wearable.

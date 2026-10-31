@@ -3,6 +3,7 @@ import type {DenseFaceTopology} from './reality-face-topology'
 import type {FaceSemanticAtlas} from './reality-face-regions'
 import type {AmbientLightEstimate} from './lighting3d'
 import {createFacePhotorealUV} from './reality-canonical-face-uv'
+import {getOriginalFaceFinish,isOriginalFaceFinishId,type OriginalFacePbrFinish} from './spaktok-original-face-filters'
 
 /** AR V2 surface-conforming mask, not a head prop or identity swap.
  * Shares 478 tracked vertex positions and normals with face depth. Semantic
@@ -61,7 +62,11 @@ export function precisionMaskCoverage(topology:DenseFaceTopology,atlas:FaceSeman
  * Camera light estimate updates at <=2Hz; no extra face inference or upload.
  */
 export const PORCELAIN_FACE_MASK_ID='3d-photoreal-porcelain-mask' as const
-export type PrecisionMaskFinish='titanium'|'porcelain'
+export type PrecisionMaskFinish='titanium'|'porcelain'|OriginalFacePbrFinish['id']
+export function isPhotorealSurfaceId(id:string):boolean{
+ return id===PRECISION_FACE_MASK_ID||id===PORCELAIN_FACE_MASK_ID||
+  isOriginalFaceFinishId(id)
+}
 const DETAIL_SIZE=256
 function detailNoise(x:number,y:number,seed:number){
  let n=Math.imul(x+1,374761393)^Math.imul(y+1,668265263)^Math.imul(seed+1,2246822519)
@@ -116,6 +121,8 @@ const FRAGMENT_SHADER=[
  'varying vec3 vNormalView;',
  'uniform sampler2D uMicro;',
  'uniform vec3 uBaseColor;',
+ 'uniform vec3 uAccentColor;',
+ 'uniform float uAccentAmount;',
  'uniform vec3 uLightColor;',
  'uniform vec3 uLightDir;',
  'uniform float uStrength;',
@@ -157,16 +164,17 @@ const FRAGMENT_SHADER=[
  ' float rough=clamp(uRoughness+(micro.b-.5)*.14,.18,.87);',
  ' float metal=clamp(uMetalness,0.,1.);',
  ' float a=max(.03,rough*rough);',
- ' vec3 f0=mix(vec3(.04),uBaseColor,metal);',
+ ' vec3 base=mix(uBaseColor,uAccentColor,clamp(uAccentAmount,0.,.6)*smoothstep(.13,.90,vFaceUv.y));',
+ ' vec3 f0=mix(vec3(.04),base,metal);',
  ' vec3 f=fresnel(vH,f0);',
  ' float distribution=ggx(nH,a);',
  ' float visibility=smith1(nL,rough)*smith1(nV,rough);',
  ' vec3 spec=(distribution*visibility*f)/max(4.*nL*nV,.09);',
- ' vec3 diffuse=(vec3(1.)-f)*uBaseColor*(1.-metal)/PI;',
+ ' vec3 diffuse=(vec3(1.)-f)*base*(1.-metal)/PI;',
  ' vec3 direct=(diffuse+spec)*uLightColor*nL*1.65;',
  ' float wrap=(dot(n,l)+.5)/1.5;',
- ' vec3 skinScatter=uBaseColor*uSubsurface*max(wrap,0.)*.20;',
- ' vec3 ambient=uBaseColor*(1.-metal)*uAmbient;',
+ ' vec3 skinScatter=base*uSubsurface*max(wrap,0.)*.20;',
+ ' vec3 ambient=base*(1.-metal)*uAmbient;',
  // Cheap broad environmental fill to avoid charcoal metal without an HDR probe.
  ' vec3 reflection=f0*(.27+.82*uAmbient)*(.70+.30*nV);',,
  ' float coatD=ggx(nH,.075);',
@@ -202,6 +210,8 @@ export class PrecisionFaceSurfaceMask{
    uniforms:{
     uMicro:{value:this.microTexture},
     uBaseColor:{value:new THREE.Color(0x92aab6)},
+    uAccentColor:{value:new THREE.Color(0xffffff)},
+    uAccentAmount:{value:0},
     uLightColor:{value:new THREE.Color(0xffeadf)},
     uLightDir:{value:new THREE.Vector3(-.25,.40,1).normalize()},
     uStrength:{value:.85},
@@ -224,8 +234,23 @@ export class PrecisionFaceSurfaceMask{
  }
  setFinish(finish:PrecisionMaskFinish){
   if(this.finish===finish)return
+  const look=getOriginalFaceFinish(finish)
+  if(look){
+   this.finish=finish
+   const u=this.mesh.material.uniforms
+   ;(u.uBaseColor.value as THREE.Color).set(look.base)
+   ;(u.uAccentColor.value as THREE.Color).set(look.accent)
+   u.uAccentAmount.value=look.accentAmount
+   u.uMetalness.value=look.metalness
+   u.uRoughness.value=look.roughness
+   u.uClearcoat.value=look.clearcoat
+   u.uSubsurface.value=look.subsurface
+   u.uOpacity.value=look.opacity
+   return
+  }
   this.finish=finish
   const u=this.mesh.material.uniforms
+  u.uAccentAmount.value=0
   if(finish==='porcelain'){
    ;(u.uBaseColor.value as THREE.Color).set(0xe5d4c7)
    u.uMetalness.value=.04
