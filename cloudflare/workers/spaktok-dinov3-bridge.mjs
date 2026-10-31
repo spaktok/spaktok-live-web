@@ -79,7 +79,7 @@ export default {async fetch(req,env){
  try{
   const url=new URL(req.url);
   if(url.pathname==='/health'&&req.method==='GET')
-   return j({name:'spaktok-dinov3-bridge',publicModels:false,tokenConfigured:!!env.HF_DINOV3_READ_TOKEN});
+   return j({name:'spaktok-dinov3-bridge',publicModels:false});
   if(!env.VAST_DB)return j({error:'d1_not_configured'},503);
   const id=await device(req,env);
   if(!id)return j({error:'unauthorized'},401);
