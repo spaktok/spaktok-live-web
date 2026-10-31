@@ -1,6 +1,7 @@
 import { NextRequest,NextResponse } from 'next/server'
 import { queryD1 } from '@/lib/native/d1'
 import { getNativeUser } from '@/lib/native/auth'
+import { rankTrendingHashtags } from '@/lib/feed/hashtags'
 
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -29,7 +30,12 @@ export async function GET(request:NextRequest){
       JOIN profiles p ON p.id=v.user_id
       WHERE v.status='published' AND (?='' OR instr(lower(v.description),?)>0 OR instr(lower(p.username),?)>0)
       ORDER BY v.created_at DESC LIMIT 18`,[q,q,q])
+    const trending=q?[]:rankTrendingHashtags((await queryD1<{description:string|null;created_at:string;view_count:number}>(`
+      SELECT description,created_at,view_count FROM videos
+      WHERE status='published' AND instr(description,'#')>0
+      ORDER BY created_at DESC LIMIT 400`)).rows.map(r=>({description:r.description,createdAt:r.created_at,views:r.view_count||0})),Date.now())
     return json({
+      trending:trending.map(({tag,videos})=>({tag,videos})),
       creators:creators.rows.map(p=>({id:p.id,username:p.username,displayName:p.display_name,
         avatar:p.avatar_url||'',bio:p.bio||'',followers:p.follower_count||0,
         isVerified:Boolean(p.is_verified),isFollowing:Boolean(p.following)})),

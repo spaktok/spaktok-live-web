@@ -10,7 +10,8 @@ type Creator = {
 }
 type Clip = {id:string;userId:string;username:string;thumbnailUrl:string;caption:string;
   views:number;likes:number;createdAt:string}
-type SearchResponse={creators:Creator[];videos:Clip[];query:string}
+type Trend={tag:string;videos:number}
+type SearchResponse={creators:Creator[];videos:Clip[];trending?:Trend[];query:string}
 interface Props {
   onUserClick:(id:string)=>void
   onVideoClick:(id:string)=>void
@@ -25,6 +26,7 @@ export function DiscoverScreen({onUserClick,onVideoClick,onShopClick,onNotificat
   const [mode,setMode]=useState<'all'|'people'|'videos'>('all')
   const [creators,setCreators]=useState<Creator[]>([])
   const [videos,setVideos]=useState<Clip[]>([])
+  const [trending,setTrending]=useState<Trend[]>([])
   const [isLoading,setIsLoading]=useState(true)
   const [error,setError]=useState(false)
   const [revision,setRevision]=useState(0)
@@ -43,6 +45,7 @@ export function DiscoverScreen({onUserClick,onVideoClick,onShopClick,onNotificat
         const data=await response.json() as SearchResponse
         if(!controller.signal.aborted){
           setCreators(data.creators);setVideos(data.videos)
+          if(!search.trim())setTrending(data.trending??[])
         }
       }catch{
         if(!controller.signal.aborted)setError(true)
@@ -121,6 +124,26 @@ export function DiscoverScreen({onUserClick,onVideoClick,onShopClick,onNotificat
           </div>
         ):(
           <>
+            {trending.length>0&&(
+              <section aria-labelledby="trending-tags">
+                <p className="text-[10px] font-bold tracking-[0.16em] text-[#86a4fc]">TRENDING</p>
+                <h2 id="trending-tags" className="mb-3 mt-1 text-lg font-bold">الوسوم الرائجة الآن</h2>
+                <div className="flex flex-wrap gap-2">
+                  {trending.map(t=>{
+                    const active=search.trim()==='#'+t.tag
+                    return (
+                      <button key={t.tag} type="button" aria-pressed={active}
+                        onClick={()=>{setSearch(active?'':'#'+t.tag);setMode('videos')}}
+                        className={cn('inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-xs font-semibold transition-colors',
+                          active?'border-[#7e9dff] bg-[#7e9dff] text-[#08152f]':'border-white/10 bg-white/[.06] text-white/80 hover:border-[#7e9dff]/60')}>
+                        <span>#{t.tag}</span>
+                        <span className={cn('tabular-nums',active?'text-[#08152f]/70':'text-white/40')}>{count(t.videos)}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </section>
+            )}
             {mode!=='videos'&&(
               <section>
                 <div className="mb-4 flex items-center justify-between">
