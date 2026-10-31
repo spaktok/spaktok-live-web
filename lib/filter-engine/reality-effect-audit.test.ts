@@ -64,6 +64,25 @@ describe('Reality Studio: complete filter family audit',()=>{
   expect(entry('beauty:smooth').requiredModels).not.toContain('face-mesh')
   expect(entry('beauty:smooth').checks).toContain('beauty-and-skin-tone')
  })
+ it('assigns a photographic upgrade path to every effect without relabeling prototypes as HD',()=>{
+  expect(REALITY_EFFECT_AUDIT).toHaveLength(135)
+  expect(entry('3d-lux-glasses').visualStage).toBe('geometric-prototype')
+  expect(entry('3d-premium-silk-pearl').visualStage).toBe('pbr-approximation')
+  expect(entry('3d-precision-cyber-mask').visualStage).toBe('pbr-approximation')
+  expect(entry('3d-makeup-glam').visualStage).toBe('tracked-cosmetic')
+  expect(entry('3d-gold-crown').visualStage).toBe('authored-3d')
+  expect(entry('neon-glasses').visualStage).toBe('illustrated-2d')
+  expect(entry('face-morph').visualStage).toBe('tracked-deformation')
+  expect(entry('beauty:smooth').visualStage).toBe('beauty')
+  expect(entry('grade:clear').visualStage).toBe('color-grade')
+  const summary=summarizeRealityAudit(REALITY_EFFECT_AUDIT)
+  expect(summary.visualStages.reduce((sum,row)=>sum+row.count,0)).toBe(summary.total)
+  for(const effect of REALITY_EFFECT_AUDIT){
+   expect(effect.photographicUpgrade.length).toBeGreaterThan(35)
+   if(effect.visualStage==='geometric-prototype')
+    expect(effect.state).toBe('prototype')
+  }
+ })
  it('never marks an effect production-certified based on a passing unit test',()=>{
   for(const effect of REALITY_EFFECT_AUDIT){
    expect(effect.checks).toContain('real-device-performance')
