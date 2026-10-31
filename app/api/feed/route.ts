@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getNativeUser } from '@/lib/native/auth'
 import { queryD1, validId } from '@/lib/native/d1'
 import { decodeFeedKey, encodeFeedKey } from '@/lib/feed/cursor'
+import { extractHashtags } from '@/lib/feed/hashtags'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
 const json=(data:unknown,status=200)=>NextResponse.json(data,{status,headers:{'Cache-Control':'private, no-store'}})
@@ -44,7 +45,7 @@ export async function GET(req:NextRequest){
       videoUrl:r.media_url,thumbnailUrl:r.thumbnail_url||r.media_url,
       caption:r.description||'',music:r.music?{name:r.music,artist:'',coverUrl:''}:undefined,
       likes:r.like_count,comments:r.comment_count,shares:r.share_count,views:r.view_count,
-      isLiked:Boolean(r.liked),isBookmarked:Boolean(r.bookmarked),tags:[],createdAt:r.created_at,
+      isLiked:Boolean(r.liked),isBookmarked:Boolean(r.bookmarked),tags:extractHashtags(r.description),createdAt:r.created_at,
     })),nextCursor:!featuredId && rows.length>limit && last?encodeFeedKey({createdAt:last.created_at,id:last.id}):null})
   }catch{return json({error:'feed_unavailable'},503)}
 }
