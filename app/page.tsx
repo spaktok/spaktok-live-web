@@ -22,10 +22,12 @@ import { SplashScreen } from '@/components/spaktok/splash-screen'
 import type { TabType } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
+import { useLanguage } from '@/components/language-provider'
 
 export default function SpakTok() {
   const [isLoading, setIsLoading] = useState(true)
   const { session, isLoading: isAuthLoading, error: authError } = useAuth()
+  const { t } = useLanguage()
   const isAuthenticated = !!session
   const [activeTab, setActiveTab] = useState<TabType>('home')
   const [feedType, setFeedType] = useState<'forYou' | 'following' | 'live'>('forYou')
@@ -149,8 +151,8 @@ export default function SpakTok() {
           "fixed left-1/2 top-4 z-[100] -translate-x-1/2 rounded-full px-4 py-2 text-sm font-semibold shadow-lg",
           paymentStatus === 'success' ? "bg-emerald-500 text-white" : "bg-amber-500 text-black",
         )} role="status" aria-live="polite">
-          {paymentStatus === 'success' ? 'Zahlung erfolgreich abgeschlossen' : 'Zahlung abgebrochen'}
-          <button className="ml-3 underline underline-offset-2" onClick={() => setPaymentStatus(null)} aria-label="Zahlungsnachricht schließen">Schließen</button>
+          {paymentStatus === 'success' ? t('payment.success') : t('payment.cancelled')}
+          <button className="ml-3 underline underline-offset-2" onClick={() => setPaymentStatus(null)} aria-label={t('payment.dismiss')}>{t('common.close')}</button>
         </div>
       )}
       {/* Main Content */}
@@ -160,7 +162,7 @@ export default function SpakTok() {
             {/* Feed Type Selector */}
             <Link href="/spaktok-studio"
               className="absolute right-3 top-14 z-30 flex items-center gap-2 rounded-full border border-indigo-300/35 bg-[#171536]/85 px-3 py-2 text-xs font-bold text-white shadow-xl shadow-indigo-900/40 backdrop-blur-xl transition hover:bg-indigo-500/70"
-              aria-label="افتح Spaktok Studio AI Director">
+              aria-label={t('feed.openStudio')}>
               <Sparkles size={15} className="text-sky-300"/> AI Studio
             </Link>
             <div className="absolute top-0 left-0 right-0 z-20 safe-top">
@@ -175,7 +177,7 @@ export default function SpakTok() {
                         : "text-white/50"
                     )}
                   >
-                    لك
+                    {t('feed.forYou')}
                   </button>
                   <button
                     onClick={() => setFeedType('following')}
@@ -187,7 +189,7 @@ export default function SpakTok() {
                         : "text-white/50"
                     )}
                   >
-                    أتابعهم
+                    {t('feed.following')}
                   </button>
                   <button
                     onClick={() => setFeedType('live')}
@@ -200,7 +202,7 @@ export default function SpakTok() {
                     )}
                   >
                     <span className="w-1.5 h-1.5 rounded-full bg-[#ff3b30] animate-live-pulse" />
-                    مباشر
+                    {t('feed.live')}
                   </button>
                 </div>
               </div>

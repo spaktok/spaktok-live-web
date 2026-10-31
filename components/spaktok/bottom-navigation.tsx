@@ -3,6 +3,7 @@
 import { Home, Compass, BookOpen, Plus, MessageCircle, User } from 'lucide-react'
 import type { TabType } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { useLanguage } from '@/components/language-provider'
 
 interface BottomNavigationProps {
   activeTab: TabType
@@ -10,21 +11,23 @@ interface BottomNavigationProps {
 }
 
 const tabs = [
-  { id: 'home' as TabType, icon: Home, label: 'الرئيسية' },
-  { id: 'discover' as TabType, icon: Compass, label: 'اكتشف' },
-  { id: 'stories' as TabType, icon: BookOpen, label: 'القصص' },
-  { id: 'create' as TabType, icon: Plus, label: 'إنشاء', isCreate: true },
-  { id: 'chat' as TabType, icon: MessageCircle, label: 'المحادثات' },
-  { id: 'profile' as TabType, icon: User, label: 'حسابي' },
+  { id: 'home' as TabType, icon: Home, labelKey: 'nav.home' as const },
+  { id: 'discover' as TabType, icon: Compass, labelKey: 'nav.discover' as const },
+  { id: 'stories' as TabType, icon: BookOpen, labelKey: 'nav.stories' as const },
+  { id: 'create' as TabType, icon: Plus, labelKey: 'nav.create' as const, isCreate: true },
+  { id: 'chat' as TabType, icon: MessageCircle, labelKey: 'nav.chat' as const },
+  { id: 'profile' as TabType, icon: User, labelKey: 'nav.profile' as const },
 ]
 
 export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationProps) {
+  const { t } = useLanguage()
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 px-3 safe-bottom">
       <div className="spak-content-width spak-bottom-bar mb-2 overflow-hidden rounded-[1.5rem] border border-[#a8beff]/15">
         <div className="flex items-center justify-around px-1 py-1.5">
           {tabs.map((tab) => {
             const Icon = tab.icon
+            const label = t(tab.labelKey)
             const isActive = activeTab === tab.id
             
             if (tab.isCreate) {
@@ -32,7 +35,7 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
                 <button
                   key={tab.id}
                   onClick={() => onTabChange(tab.id)}
-                  aria-label={tab.label}
+                  aria-label={label}
                   className="relative flex items-center justify-center -mt-6 press-effect"
                 >
                   <div className="absolute inset-0 rounded-2xl bg-[#6f92fa]/25 blur-lg" />
@@ -47,7 +50,7 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
               <button
                 key={tab.id}
                 onClick={() => onTabChange(tab.id)}
-                aria-label={tab.label}
+                aria-label={label}
                 aria-current={isActive ? 'page' : undefined}
                 className={cn(
                   "flex min-w-0 flex-1 flex-col items-center gap-1 px-1 py-2 rounded-xl transition-all press-effect focus-visible:outline-2 focus-visible:outline-[#a8beff]",
@@ -71,7 +74,7 @@ export function BottomNavigation({ activeTab, onTabChange }: BottomNavigationPro
                   "whitespace-nowrap text-[9px] font-medium",
                   isActive && "text-glow-cyan"
                 )}>
-                  {tab.label}
+                  {label}
                 </span>
               </button>
             )
