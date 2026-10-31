@@ -2,6 +2,7 @@
 
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
+import type {FaceFxId} from '@/lib/filter-engine/params'
 
 /** Camera and AR dependencies are only downloaded after the user opens capture/live. */
 const Camera = dynamic(
@@ -63,13 +64,14 @@ class LiveCameraErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   }
 }
 
-export function SafeLiveCamera({ onClose, initialMode = 'live' }: {
+export function SafeLiveCamera({ onClose, initialMode = 'live', initialFaceFxId='none' }: {
   onClose: () => void
   initialMode?: 'photo' | '15s' | '60s' | 'story' | 'live'
+  initialFaceFxId?: FaceFxId
 }) {
   return (
     <LiveCameraErrorBoundary onExit={onClose}>
-      <Camera initialMode={initialMode} onClose={onClose} />
+      <Camera initialMode={initialMode} initialFaceFxId={initialFaceFxId} onClose={onClose} />
     </LiveCameraErrorBoundary>
   )
 }

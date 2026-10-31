@@ -10,14 +10,14 @@ import {SafeLiveCamera} from '@/components/spaktok/safe-live-camera'
  */
 export default function LiveStudioPreviewPage(){
  const [open,setOpen]=useState(false)
- if(open)return <SafeLiveCamera initialMode="live" onClose={()=>setOpen(false)}/>
+ if(open)return <SafeLiveCamera initialMode="live" initialFaceFxId="3d-precision-cyber-mask" onClose={()=>setOpen(false)}/>
  return <main dir="rtl" className="min-h-dvh bg-[#070a12] px-5 py-14 text-white">
   <section className="mx-auto max-w-xl space-y-6 rounded-3xl border border-cyan-500/25 bg-[#111a2b] p-6 shadow-2xl sm:p-9">
    <p className="text-sm font-semibold tracking-wider text-cyan-300">SpakTok Reality • Local Live QA</p>
-   <h1 className="text-3xl font-bold leading-snug">تجربة نحت الوجه المباشر من شبكتك الشخصية</h1>
+   <h1 className="text-3xl font-bold leading-snug">تجربة فلاتر PBR الواقعية على الوجه مباشرة</h1>
    <p className="text-sm leading-7 text-slate-300">
-    هنا يمكنك تجربة تنحيف الفك والذقن، توسيع العينين وتصغير الأنف في معاينة الكاميرا،
-    دون الحاجة إلى تسجيل الدخول. تبدأ الكاميرا فقط بعد موافقتك.
+    يبدأ الاختبار بقناع التيتانيوم PBR. من زر «فلاتر الوجه 3D» يمكنك التبديل إلى
+    قناع السيراميك أو الصورة الأصلية للمقارنة. لا تبدأ الكاميرا إلا بموافقتك.
    </p>
    <div className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-4 text-sm leading-7 text-amber-100">
     <strong>معاينة محلية فقط:</strong> لا يبدأ بث للجمهور، ولا تُرسل صور الوجه أو نقاط التتبع إلى خادم

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Camera, Download, Radio, RefreshCw, Send, SlidersHorizontal, Timer, X, Zap, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { createStudioState,type FaceFxParams } from '@/lib/filter-engine/params'
+import { createStudioState,faceFxCatalog,type FaceFxId,type FaceFxParams } from '@/lib/filter-engine/params'
 import {NEUTRAL_LIVE_SCULPT,type LiveSculptControls} from '@/lib/filter-engine/reality-live-sculpt-warp'
 import {
  DEFAULT_REALITY_UNIFIED_CONFIG,resolveUnifiedRealityLook,
@@ -21,6 +21,8 @@ import { uploadVideoDirect } from '@/lib/video/direct-upload-client'
 interface CameraScreenProps {
   onClose: () => void
   initialMode?: CaptureMode
+  /** Only special QA entry opts into an initial 3D lens. */
+  initialFaceFxId?: FaceFxId
 }
 
 type CaptureMode = 'photo' | '15s' | '60s' | 'story' | 'live'
@@ -29,9 +31,14 @@ const durations: Partial<Record<CaptureMode, number>> = { '15s': 15, '60s': 60, 
 
 type Captured = { kind: 'photo'; url: string } | { kind: 'video'; url: string; blob: Blob }
 
-export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenProps) {
+export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='none' }: CameraScreenProps) {
   const { s } = useStudioStrings()
-  const [studio, setStudio] = useState(() => createStudioState())
+  const [studio, setStudio] = useState(() => {
+   const state=createStudioState()
+   return initialFaceFxId==='none'?state:{
+    ...state,face:{...state.face,id:initialFaceFxId,strength:.85},
+   }
+  })
   const [mode, setMode] = useState<CaptureMode>(initialMode)
   // Live stays a local preview until a real broadcast transport is connected.
   const [liveLook,setLiveLook]=useState<RealityLook>('natural-light')
@@ -48,7 +55,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   ] as const
   const [liveLookActive,setLiveLookActive]=useState(false)
   const [showPanel, setShowPanel] = useState(false)
-  const [showFaceTray,setShowFaceTray] = useState(true)
+  const [showFaceTray,setShowFaceTray] = useState(initialMode!=='live')
   const [localPhotoFaceFile,setLocalPhotoFaceFile]=useState<File|null>(null)
   const photoPickerRef=useRef<HTMLInputElement|null>(null)
   const [photoImportHint,setPhotoImportHint]=useState('')
@@ -75,10 +82,10 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
      setLocalPhotoFaceFile(file)
      setSavedFaceId(data.latest.id)
      setPhotoImportHint('✓ استعدنا مرجع GLB الخاص من R2، والتشكيل يعمل على صورتك الحية.')
-     setStudio(prev=>prev.face.id==='none'?{
+     setStudio(prev=>initialMode!=='live'&&prev.face.id==='none'?{
       ...prev,face:{...prev.face,id:'face-morph',strength:.65},
      }:prev)
-     setShowFaceTray(false)
+     if(initialMode!=='live')setShowFaceTray(false)
     }catch{/* No session, network failure or empty drafts: keep local picker. */}
    }
    void restore()
@@ -112,6 +119,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
   },[])
   const onFaceChange=(face:FaceFxParams)=>{
    setStudio(prev=>({...prev,face}))
+   if(mode==='live'&&face.id!==studio.face.id)setShowFaceTray(false)
    if(face.id!==FIRST_GPU_LIVE_FILTER_ID||!face.pilot)return
    try{
     localStorage.setItem(FIRST_GPU_CALIBRATION_STORAGE_KEY,
@@ -148,7 +156,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
 
 
   const camera = useCameraStudio({
-   state:studio,localPhotoFaceFile,firstGpuPilotFile,audio:mode!=='photo'&&mode!=='live',
+   state:studio,localPhotoFaceFile,firstGpuPilotFile,audio:mode!=='photo'&&mode!=='live',livePreview:mode==='live',
    paused:Boolean(captured),liveFaceMesh:isLive&&mode==='live',
    liveMeshDebug:liveMeshQa&&isLive,
    liveSculpt:isLive&&liveFaceOptIn?liveSculpt:NEUTRAL_LIVE_SCULPT,
@@ -273,6 +281,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
       setIsLive(true)
       setLiveSeconds(0)
       setShowPanel(false)
+      setShowFaceTray(false)
       return
     }
     if (!camera.startRecording()) return
@@ -315,6 +324,7 @@ export function CameraScreen({ onClose, initialMode = 'photo' }: CameraScreenPro
     camera.status === 'denied' ? s('denied') : camera.status === 'unsupported' ? s('unsupported') : camera.status === 'error' ? s('cameraError') : s('starting')
 
   const faceArSelected = studio.face.id !== 'none'
+  const selectedFaceName=faceFxCatalog.find(e=>e.id===studio.face.id)?.name??'مؤثر غير معروف'
   const visionMessage = faceArSelected
     ? camera.vision === 'loading'
       ? 'جارٍ تحميل محرك تتبع الوجه…'
