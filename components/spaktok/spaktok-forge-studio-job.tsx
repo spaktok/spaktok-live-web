@@ -47,6 +47,17 @@ async function sha256Hex(buffer:ArrayBuffer){
  return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,'0')).join('')
 }
 
+const LIBRARY_ERRORS_AR:Record<string,string>={
+ studio_cloud_disabled:'المكتبة الخاصة غير مفعّلة بعد على هذا الخادم.',
+ glb_too_dense:'النتيجة أكثف من 150,000 مثلث. أعد التوليد بحد 120,000 وجه أو أقل للحفظ.',
+ glb_size:'النتيجة أكبر من 15 MB، حد المكتبة الخاصة.',
+ glb_no_pbr_texture:'النتيجة بلا خامة PBR، لا تُقبل في المكتبة.',
+ studio_daily_limit:'بلغت حد 10 حفظات يوميًا.',
+ forge_library_rate_limited:'محاولات كثيرة. انتظر قليلًا.',
+ forge_job_handle_invalid:'انتهت صلاحية المهمة (ساعة). أعد التوليد.',
+ forge_job_not_ready:'النتيجة لم تعد متاحة على الـ GPU.',
+}
+
 export default function SpaktokForgeStudioJob({
  source,rights,approved,disabled,onResult,
 }:Readonly<{
@@ -65,6 +76,9 @@ export default function SpaktokForgeStudioJob({
  const [job,setJob]=useState<JobView|null>(null)
  const [running,setRunning]=useState(false)
  const [note,setNote]=useState('')
+ const [doneHandle,setDoneHandle]=useState<string|null>(null)
+ const [library,setLibrary]=useState<'idle'|'saving'|'saved'>('idle')
+ const [libraryNote,setLibraryNote]=useState('')
  const abortRef=useRef<AbortController|null>(null)
  useEffect(()=>()=>abortRef.current?.abort(),[])
 
@@ -79,7 +93,7 @@ export default function SpaktokForgeStudioJob({
   if(mode==='retexture'&&!mesh)return
   const controller=new AbortController()
   abortRef.current?.abort();abortRef.current=controller
-  setRunning(true);setJob(null);setNote('تجهيز الصورة وإرسال المهمة إلى A100…')
+  setRunning(true);setJob(null);setDoneHandle(null);setLibrary('idle');setLibraryNote('');setNote('تجهيز الصورة وإرسال المهمة إلى A100…')
   try{
    const extra=mode==='generate'?views:[]
    const share=extra.length?Math.floor(MAX_RETEXTURE_UPLOAD/(1+extra.length))-8192:MAX_UPLOAD
@@ -131,6 +145,7 @@ export default function SpaktokForgeStudioJob({
      throw Error('forge_job_result_integrity_failed')
     const tag=mode==='retexture'?'retexture':profile
     onResult(new File([bytes],'spaktok-forge-'+tag+'.glb',{type:'model/gltf-binary'}))
+    setDoneHandle(handle)
     setNote('اكتمل: '+(bytes.byteLength/1024/1024).toFixed(1)+' MB'+
      (mode==='retexture'?' · خامات PBR جديدة على شكلك الأصلي.':
       ' · '+budget.toLocaleString()+' وجه كحد أقصى.')+' راجع الجودة بصريًا قبل النشر.')
@@ -141,6 +156,26 @@ export default function SpaktokForgeStudioJob({
    setNote('تعذّر إكمال المهمة: '+(error instanceof Error?error.message:String(error)))
   }finally{
    if(abortRef.current===controller){abortRef.current=null;setRunning(false)}
+  }
+ }
+
+ const saveToLibrary=async()=>{
+  if(!doneHandle||library!=='idle')return
+  setLibrary('saving');setLibraryNote('نقل النتيجة من A100 إلى مكتبتك الخاصة في R2…')
+  try{
+   const r=await fetch('/api/spaktok-forge/jobs/save',{
+    method:'POST',cache:'no-store',
+    headers:{'content-type':'application/json','x-forge-job-handle':doneHandle},
+    body:JSON.stringify({rights}),
+   })
+   const data=await r.json().catch(()=>({}))
+   if(!r.ok||data.stored!==true)throw Error(String(data.error??'forge_library_failed'))
+   setLibrary('saved')
+   setLibraryNote('حُفظ في مكتبتك الخاصة ('+Number(data.triangles).toLocaleString()+' مثلث). غير منشور ولا رابط عام.')
+  }catch(error){
+   const code=error instanceof Error?error.message:String(error)
+   setLibrary('idle')
+   setLibraryNote(LIBRARY_ERRORS_AR[code]??'تعذّر الحفظ: '+code)
   }
  }
 
@@ -216,5 +251,11 @@ export default function SpaktokForgeStudioJob({
    {job.state==='queued'&&typeof job.queuePosition==='number'?' · الترتيب '+(job.queuePosition+1):''}
   </p>}
   {note&&<p className="text-[11px] leading-5 text-slate-300">{note}</p>}
+  {doneHandle&&<button type="button" onClick={()=>void saveToLibrary()}
+   disabled={library!=='idle'}
+   className="rounded-lg border border-cyan-300/60 px-3 py-2 text-xs font-semibold text-cyan-100 disabled:opacity-50">
+   {library==='saved'?'محفوظ في مكتبتك الخاصة':library==='saving'?'جارٍ الحفظ…':'حفظ في مكتبتي الخاصة (R2)'}
+  </button>}
+  {libraryNote&&<p className="text-[11px] leading-5 text-slate-300" aria-live="polite">{libraryNote}</p>}
  </div>
 }
