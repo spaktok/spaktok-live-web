@@ -43,7 +43,7 @@ command -v nohup >/dev/null || { echo "ERROR: nohup_missing" >&2; exit 2; }
 nohup python3 -u "$ROOT/services/forge-gpu/vast_operator_agent.py" poll --interval 20 \
   </dev/null >"$LOG_DIR/agent.log" 2>&1 &
 pid=$!
-(umask 077; printf '%s\\n' "$pid" >"$LOG_DIR/agent.pid")
+(umask 077; echo "$pid" >"$LOG_DIR/agent.pid")
 echo "AGENT_POLLING=STARTED"
 echo "AGENT_PID=$pid"
 echo "SEND_DEVICE_ID_AND_PAIR_CODE_ONLY; NEVER_SEND_DEVICE_TOKEN_OR_CONFIG"
