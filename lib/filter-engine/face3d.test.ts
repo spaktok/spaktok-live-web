@@ -19,7 +19,7 @@ const frame:Face3DFrame={
 }
 describe('SpakTok tracked 3D lenses',()=>{
  it('binds original 3D effects and the first private GPU preview to the catalog',()=>{
-   expect(face3DPresets).toHaveLength(16)
+   expect(face3DPresets).toHaveLength(17)
    for(const fx of face3DPresets){
      expect(isFace3DId(fx.id)).toBe(true)
      expect(faceFxCatalog.some(x=>x.id===fx.id)).toBe(true)

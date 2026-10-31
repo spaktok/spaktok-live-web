@@ -109,6 +109,7 @@ export const faceFxCatalog = [
   { id: '3d-crystal', name: 'جوهرة ثلاثية', icon: '💎', group: '3d' },
   { id: '3d-first-gpu-pilot', name: 'أول GPU • خاص', icon: '🧬', group: '3d' },
   { id: '3d-expression', name: 'قناع التعبيرات', icon: '🎭', group: '3d' },
+  { id: '3d-precision-cyber-mask', name: 'قناع سيبراني دقيق • AR V2', icon: '🛡️', group: '3d' },
   { id: '3d-photo-face', name: 'وجه GLB محلي متحرك', icon: '🧑', group: '3d' },
 
   { id: '3d-makeup-soft', name: 'مكياج ناعم', icon: '🌷', group: 'makeup' },

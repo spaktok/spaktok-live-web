@@ -58,6 +58,7 @@ const threeConfigs: Readonly<Record<string, ThreeConfig>> = {
       localAnchor:[0,-.55,0],calibration:'owner-crown-v1'},
   },
   '3d-first-gpu-pilot': {anchor:'head_top'},
+  '3d-precision-cyber-mask': {anchor:'eyes_center'},
   '3d-crystal': {
     anchor:'forehead_center',
     asset:{uri:'/face-assets/spaktok-crystal.glb',format:'glb',
@@ -76,7 +77,7 @@ const isThree=(id:string)=>id.startsWith('3d-')&&!isMakeup(id)
 const faceManifests=faceFxCatalog.filter(x=>x.id!=='none').map((fx):RealityEffectManifest=>{
   const id=fx.id
   const conf=threeConfigs[id]
-  const surface=isMakeup(id),three=isThree(id)
+  const surface=isMakeup(id)||id==='3d-precision-cyber-mask',three=isThree(id)
   if(three&&!conf)throw Error('reality_missing_3d_contract:'+id)
   return {
     schemaVersion:REALITY_MANIFEST_VERSION,id,name:fx.name,
