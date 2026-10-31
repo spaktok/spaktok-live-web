@@ -64,7 +64,7 @@ async function respond(req,env){
    .bind(clock()+3600,device.device_id).first();
   if(!next)return json({paired:true,job:null});
   if(!ACTIONS.has(next.action))return json({error:'unknown_action'},500);
-  return json({paired:true,job:{id:next.id,action:next.action,inputKey:next.input_key,inputSha256:next.input_sha256,outputKey:next.output_key,leaseUntil:next.lease_until}});
+  return json({paired:true,job:{id:next.id,action:next.action,inputKey:next.input_key,inputSha256:next.input_sha256,outputKey:next.output_key,approvedCompute:next.approved_compute,rightsConfirmed:next.rights_confirmed,leaseUntil:next.lease_until}});
  }
  const m=path.match(/^\/v1\/agent\/jobs\/([a-f0-9-]{36})\/(input|output|complete)$/);
  if(!m||!ID.test(m[1]))return json({error:'not_found'},404);
