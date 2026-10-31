@@ -71,7 +71,7 @@ async function respond(req,env){
    leaseUntil:next.lease_until
   }});
  }
- const completeSetup=path.match(/^\\/v1\\/agent\\/setup\\/([a-f0-9-]{36})\\/complete$/);
+ const completeSetup=path.match(/^\/v1\/agent\/setup\/([a-f0-9-]{36})\/complete$/);
  if(completeSetup&&req.method==='POST'){
   if(device.state!=='approved')return json({error:'device_not_approved'},403);
   const id=completeSetup[1];
