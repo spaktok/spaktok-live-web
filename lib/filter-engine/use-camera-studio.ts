@@ -17,6 +17,7 @@ import {buildLiveSculptWarp,hasLiveSculpt,normalizeLiveSculpt,
  type LiveSculptControls,type LiveSculptFrame} from './reality-live-sculpt-warp'
 import {createDenseFaceTopology,type DenseFaceTopology} from './reality-face-topology'
 import {FIRST_GPU_LIVE_FILTER_ID} from './spaktok-first-gpu-live'
+import {PRECISION_FACE_MASK_ID,PORCELAIN_FACE_MASK_ID} from './reality-precision-face-mask'
 import {createLiveFaceMeshTemplate,updateLiveFaceMesh,chooseLiveMeshLevel,
  type LiveMeshTemplate} from './reality-live-personal-mesh'
 
@@ -602,6 +603,10 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
             const tracked=face3DRef.current
             const fresh=tracked&&hasFreshFace(tracked.timestamp,now,trackingFreshnessMs(inferenceMsRef.current))?tracked:null
             const candidate=shouldUseRealityGpu2(gpu2RequestedRef.current,true,current)
+            // Sample actual camera brightness on legacy WebGL too, only at 2 Hz.
+            if(!candidate&&(current.face.id===PRECISION_FACE_MASK_ID||
+              current.face.id===PORCELAIN_FACE_MASK_ID))
+              threeEngineRef.current.updatePhotorealLight(video,now/1000)
             const cameraInput:RenderInput|undefined=candidate?{
               source:video,
               color:original?neutralColor:resolveColor(current),
