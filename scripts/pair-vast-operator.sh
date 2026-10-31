@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# One-time enrollment of a renter-owned Vast.ai machine to the Spaktok Worker.
+# Does not rent GPUs, install CUDA/model weights, expose ports, or run inference.
+set -euo pipefail
+umask 077
+
+ROOT="/workspace/spaktok-live-web"
+WORKER="https://spaktok-vast-operator.spaktok.workers.dev"
+
+command -v git >/dev/null || { echo "ERROR: install_git_before_pairing" >&2; exit 2; }
+command -v python3 >/dev/null || { echo "ERROR: python3_required" >&2; exit 2; }
+if [[ -e "$ROOT/.git" ]]; then
+  echo "Existing checkout found. Verifying origin and using fast-forward only."
+  origin="$(git -C "$ROOT" remote get-url origin)"
+  case "$origin" in
+    https://github.com/spaktok/spaktok-live-web.git|https://github.com/spaktok/spaktok-live-web) ;;
+    *) echo "ERROR: unexpected_repository_origin" >&2; exit 3;;
+  esac
+  git -C "$ROOT" fetch --depth=1 origin main
+  if [[ "$(git -C "$ROOT" branch --show-current)" != "main" ]]; then
+    echo "ERROR: expected_main_branch; do_not_overwrite_checkout" >&2;exit 3
+  fi
+  git -C "$ROOT" merge --ff-only origin/main
+elif [[ ! -e "$ROOT" ]];then
+  git clone --depth=1 --branch main https://github.com/spaktok/spaktok-live-web.git "$ROOT"
+else
+  echo "ERROR: checkout_directory_exists_without_git" >&2;exit 3
+fi
+
+test -f "$ROOT/services/forge-gpu/vast_operator_agent.py" ||
+  { echo "ERROR: missing_vast_operator_agent" >&2;exit 3; }
+
+echo "PAIRING_DEVICE_TO_PRIVATE_WORKER"
+echo "This performs no GPU inference. The operator must verify and approve device."
+exec python3 "$ROOT/services/forge-gpu/vast_operator_agent.py" enroll --worker "$WORKER"
