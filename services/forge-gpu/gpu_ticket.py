@@ -20,8 +20,65 @@ _UUID_RE = re.compile(
     r"^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$"
 )
 
+_JOB_ID_RE = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
+JOB_READ_PREFIX = "sj1"
+MAX_JOB_READ_SECONDS = 300
+
+
 class InvalidGPUTicket(ValueError):
     pass
+
+
+def _b64sig(secret: str, message: str) -> str:
+    return base64.urlsafe_b64encode(
+        hmac.new(secret.encode("utf-8"), message.encode("ascii"), hashlib.sha256).digest()
+    ).rstrip(b"=").decode("ascii")
+
+
+def validate_job_read_ticket(
+    bearer: str, secret: str, allowed_origin: str, actual_origin: str,
+    job_id: str, now: int | None = None,
+) -> dict[str, Any]:
+    """Read-only GLB download grant for one async job.
+
+    The signature covers the "sj1." prefix (domain separation) so it can never
+    be replayed as a one-use generation ticket and vice versa.
+    """
+    if not secret or len(secret) < 32:
+        raise InvalidGPUTicket("ticket_config_missing")
+    if (not allowed_origin.startswith("https://") or not actual_origin or
+        actual_origin != allowed_origin):
+        raise InvalidGPUTicket("ticket_origin_mismatch")
+    if not _JOB_ID_RE.fullmatch(job_id or ""):
+        raise InvalidGPUTicket("ticket_invalid_job")
+    if not bearer.startswith("Bearer sj1.") or len(bearer) > MAX_TICKET_BYTES:
+        raise InvalidGPUTicket("ticket_format_invalid")
+    chunks = bearer.removeprefix("Bearer ").split(".")
+    if len(chunks) != 3 or chunks[0] != JOB_READ_PREFIX:
+        raise InvalidGPUTicket("ticket_format_invalid")
+    body, signature = chunks[1], chunks[2]
+    if not body or not signature or not re.fullmatch(r"[a-zA-Z0-9_-]+", body+signature):
+        raise InvalidGPUTicket("ticket_base64_invalid")
+    if not hmac.compare_digest(_b64sig(secret, JOB_READ_PREFIX + "." + body), signature):
+        raise InvalidGPUTicket("ticket_bad_signature")
+    try:
+        claim = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)).decode("utf-8"))
+    except (ValueError, UnicodeError) as exc:
+        raise InvalidGPUTicket("ticket_invalid_claims") from exc
+    if not isinstance(claim, dict):
+        raise InvalidGPUTicket("ticket_invalid_claims")
+    if claim.get("v") != 1 or claim.get("purpose") != "forge-job-read":
+        raise InvalidGPUTicket("ticket_wrong_purpose")
+    if claim.get("origin") != allowed_origin:
+        raise InvalidGPUTicket("ticket_origin_mismatch")
+    if claim.get("jobId") != job_id:
+        raise InvalidGPUTicket("ticket_job_mismatch")
+    now = int(time.time()) if now is None else now
+    iat, exp = claim.get("iat"), claim.get("exp")
+    if (type(iat) is not int or type(exp) is not int or iat > now + 10 or
+        exp <= now or exp <= iat or exp - iat > MAX_JOB_READ_SECONDS):
+        raise InvalidGPUTicket("ticket_expired_or_invalid")
+    return claim
 
 
 def validate_gpu_ticket(
