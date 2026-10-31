@@ -4,6 +4,7 @@ import {ChevronDown,ChevronUp,Heart,Search,ScanFace,X} from 'lucide-react'
 import {faceFxCatalog,type FaceFxParams,type FaceFxId} from '@/lib/filter-engine/params'
 import {cn} from '@/lib/utils'
 import {FIRST_GPU_LIVE_FILTER_ID,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION} from '@/lib/filter-engine/spaktok-first-gpu-live'
+import {SPAKTOK_ORIGINAL_PACK_INFO} from '@/lib/filter-engine/spaktok-original-face-filters'
 import {getMakeupPalette,type MakeupLookId} from '@/lib/filter-engine/makeup3d'
 
 type Category='beauty'|'makeup'|'3d'|'all'|'fashion'|'animal'|'fantasy'|'fun'|'reactive'|'saved'
@@ -167,6 +168,12 @@ export function FaceMaskTray({
           {item.label}
         </button>)}
       </div>
+      {liveMode&&tab==='3d'&&(
+       <p dir="rtl" className="mb-2 rounded-lg border border-indigo-300/20 bg-indigo-300/10 px-2 py-1.5 text-[10px] leading-4 text-indigo-100">
+        ✨ حزمة Spaktok الأصلية: {SPAKTOK_ORIGINAL_PACK_INFO.addedFilters} خامة PBR جديدة
+        بدون تنزيل مجسمات إضافية. جودة ومعدل الإطارات قيد اختبار الهاتف.
+       </p>
+      )}
       {liveMode&&tab==='3d'&&(
        <div dir="rtl" className="mb-2 space-y-2 rounded-xl border border-cyan-400/20 bg-[#101c36]/75 p-2.5 text-xs text-cyan-100">
         <p className="font-bold">🧬 أول فلتر GPU • معاينة خاصة</p>

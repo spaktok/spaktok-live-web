@@ -9,6 +9,7 @@ import {
  createPhotorealMicroTexture,PrecisionFaceSurfaceMask,
 } from './reality-precision-face-mask'
 import {getFaceRealityEffect} from './reality-effect-manifest'
+import {SPAKTOK_ORIGINAL_FACE_FINISHES} from './spaktok-original-face-filters'
 
 function setup(){
  const topology=createDenseFaceTopology(FaceLandmarker.FACE_LANDMARKS_TESSELATION,478)
@@ -89,6 +90,29 @@ describe('Face AR V2 camera-matched photo-PBR',()=>{
   expect((mask.mesh.material.uniforms.uLightDir.value as THREE.Vector3).x).toBeLessThan(dir.x)
   mask.setActive(true,10)
   expect(mask.mesh.material.uniforms.uStrength.value).toBe(1)
+  mask.dispose();geo.dispose()
+ })
+ it('renders 12 distinct mobile PBR finishes on one 478-point mesh',()=>{
+  const {geo,positions,mask}=setup()
+  const colors=new Set<string>()
+  const originalUv=mask.mesh.geometry.getAttribute('uv')
+  const originalNormal=mask.mesh.geometry.getAttribute('normal')
+  for(const look of SPAKTOK_ORIGINAL_FACE_FINISHES){
+   mask.setFinish(look.id)
+   const u=mask.mesh.material.uniforms
+   expect(u.uMetalness.value).toBe(look.metalness)
+   expect(u.uRoughness.value).toBe(look.roughness)
+   expect(u.uClearcoat.value).toBe(look.clearcoat)
+   expect(u.uOpacity.value).toBe(look.opacity)
+   expect(u.uAccentAmount.value).toBe(look.accentAmount)
+   expect(mask.mesh.geometry.getAttribute('position')).toBe(positions)
+   expect(mask.mesh.geometry.getAttribute('uv')).toBe(originalUv)
+   expect(mask.mesh.geometry.getAttribute('normal')).toBe(originalNormal)
+   colors.add((u.uBaseColor.value as THREE.Color).getHexString())
+  }
+  expect(colors.size).toBe(12)
+  mask.setFinish('titanium')
+  expect(mask.mesh.material.uniforms.uAccentAmount.value).toBe(0)
   mask.dispose();geo.dispose()
  })
  it('declares both finishes as local tracked-mesh surfaces, not face photos',()=>{

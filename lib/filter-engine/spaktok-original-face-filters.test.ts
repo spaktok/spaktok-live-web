@@ -1,4 +1,8 @@
 import {describe,expect,it} from 'vitest'
+import {faceFxCatalog} from './params'
+import {getFaceRealityEffect} from './reality-effect-manifest'
+import {face3DPresets,isFace3DId} from './face3d'
+import {isPhotorealSurfaceId} from './reality-precision-face-mask'
 import {SPAKTOK_ORIGINAL_FACE_FINISHES,getOriginalFaceFinish,SPAKTOK_ORIGINAL_PACK_INFO} from './spaktok-original-face-filters'
 import {LIVE_FILTER_IMPORT_BUDGET,reviewLiveFilterImport} from './spaktok-live-filter-import-qa'
 import type {StudioGlbAudit} from './reality-production-glb-audit'
@@ -25,6 +29,23 @@ describe('rights-safe mobile original filter pack',()=>{
     look.metalness,look.roughness,look.clearcoat,look.subsurface,
     look.opacity,look.accentAmount,
    ])expect(value>=0&&value<=1).toBe(true)
+  }
+ })
+ it('every original look is selectable and bound to a proper face surface',()=>{
+  expect(faceFxCatalog.length).toBe(72)
+  expect(face3DPresets.length).toBe(30)
+  for(const look of SPAKTOK_ORIGINAL_FACE_FINISHES){
+   expect(faceFxCatalog.find(f=>f.id===look.id)).toMatchObject({
+    id:look.id,group:'3d',name:look.name,
+   })
+   expect(isFace3DId(look.id)).toBe(true)
+   expect(isPhotorealSurfaceId(look.id)).toBe(true)
+   const effect=getFaceRealityEffect(look.id)
+   expect(effect?.kind).toBe('face-surface')
+   expect(effect?.quality).toBe('tracked-mesh')
+   expect(effect?.occlusion).toBe('surface-depth')
+   expect(effect?.tracking).toBe('face-surface')
+   expect(effect?.asset).toBeNull()
   }
  })
  it('uses strict bounds inspired by TikTok Effect House optimization guidance',()=>{
