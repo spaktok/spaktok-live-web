@@ -265,7 +265,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
       filteredFrameReadyRef.current = false
       compositeCanvasRef.current = null
     }
-  }, [aspect,livePreview]
+  }, [aspect,livePreview])
 
   useEffect(() => {
     if (!needsFace && !needsMask) {
