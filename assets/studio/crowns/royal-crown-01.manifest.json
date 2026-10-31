@@ -1,6 +1,6 @@
 {
   "assetId": "spaktok-studio/filters/crown/royal-crown-01",
-  "version": "2026-11-01.2",
+  "version": "2026-11-01.3",
   "state": "reference-prepared-generation-not-run",
   "source": {
     "filename": "crown_reference_original.png",
@@ -9,7 +9,8 @@
     "height": 1086,
     "hasAlpha": true,
     "originalStoredInConversationReferencePack": true,
-    "r2Uploaded": false
+    "r2Uploaded": true,
+    "privateR2Key": "vast-private/input/royal-crown-01/883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e.png"
   },
   "input": {
     "filename": "trellis_input_1024.png",
@@ -101,15 +102,16 @@
     "meshMatchedToReference": false,
     "materialSlotMappingVerified": false,
     "faceTrackingQA": false,
-    "ownerRightsVerified": false
+    "ownerRightsVerified": true
   },
   "runtime": {
     "approvedGpuInstance": "58584822",
     "trellis2DiagnosticPassed": true,
     "dinov3CudaTestPassed": true,
     "gpuServiceLaunched": false,
-    "privateInputR2Stored": false,
+    "privateInputR2Stored": true,
     "firstGlbCreated": false,
-    "description": "Reference+color-palette implementation only. GPU agent still needs a reviewed git pull and verified input upload."
+    "description": "Reference+color-palette implementation only. GPU agent still needs a reviewed git pull and verified input upload.",
+    "privateInputR2MetadataChecked": true
   }
 }
