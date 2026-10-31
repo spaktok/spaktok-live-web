@@ -47,7 +47,8 @@ def main() -> int:
     if not args.execute:
         event("dry_run_only", image=source.name, no_gpu_generation=True)
         return 0
-    if os.environ.get("CONDA_PREFIX") != "/workspace/trellis2-env":
+    conda_prefix = Path(os.environ.get("CONDA_PREFIX", ""))
+    if not conda_prefix.is_absolute() or conda_prefix.name not in ("trellis2", "trellis2-env"):
         event("wrong_conda_environment")
         return 2
     import torch
