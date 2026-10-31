@@ -11,7 +11,7 @@ import { LiveGrid } from '@/components/spaktok/live-grid'
 import { LiveStream } from '@/components/spaktok/live-stream'
 import { SpaktokLiveHub } from '@/components/spaktok/spaktok-live-hub'
 import { ChatScreen } from '@/components/spaktok/chat-screen'
-import { CameraScreen } from '@/components/spaktok/camera-screen'
+import { SafeLiveCamera } from '@/components/spaktok/safe-live-camera'
 import { ProfileScreen } from '@/components/spaktok/profile-screen'
 import { DiscoverScreen } from '@/components/spaktok/discover-screen'
 import { NotificationsScreen } from '@/components/spaktok/notifications-screen'
@@ -106,7 +106,7 @@ export default function SpakTok() {
 
   // Camera Screen
   if (showCamera) {
-    return <CameraScreen initialMode={cameraInitialMode} onClose={() => setShowCamera(false)} />
+    return <SafeLiveCamera initialMode={cameraInitialMode} onClose={() => setShowCamera(false)} />
   }
 
   // Story Viewer

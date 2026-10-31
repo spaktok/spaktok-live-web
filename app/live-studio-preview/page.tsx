@@ -2,7 +2,7 @@
 
 import {useState} from 'react'
 import Link from 'next/link'
-import {CameraScreen} from '@/components/spaktok/camera-screen'
+import {SafeLiveCamera} from '@/components/spaktok/safe-live-camera'
 
 /** Public, permission-gated LOCAL camera QA entry.
  * No authentication bypass for account APIs. Only mounts getUserMedia after
@@ -10,7 +10,7 @@ import {CameraScreen} from '@/components/spaktok/camera-screen'
  */
 export default function LiveStudioPreviewPage(){
  const [open,setOpen]=useState(false)
- if(open)return <CameraScreen initialMode="live" onClose={()=>setOpen(false)}/>
+ if(open)return <SafeLiveCamera initialMode="live" onClose={()=>setOpen(false)}/>
  return <main dir="rtl" className="min-h-dvh bg-[#070a12] px-5 py-14 text-white">
   <section className="mx-auto max-w-xl space-y-6 rounded-3xl border border-cyan-500/25 bg-[#111a2b] p-6 shadow-2xl sm:p-9">
    <p className="text-sm font-semibold tracking-wider text-cyan-300">SpakTok Reality • Local Live QA</p>
