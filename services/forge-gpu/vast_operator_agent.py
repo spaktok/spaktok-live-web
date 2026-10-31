@@ -304,8 +304,9 @@ def execute(job: dict, device: dict) -> dict:
         first = [part.strip() for part in lines[0].split(",")]
         if len(first) != 3:
             raise OperatorError("unexpected_gpu_info")
+        from vast_setup_tasks import locate_trellis_python
         model_repo = Path("/workspace/TRELLIS.2/trellis2/pipelines/trellis2_image_to_3d.py")
-        python_env = Path("/workspace/trellis2-env/bin/python")
+        python_env = locate_trellis_python()
         api_ready, api_engine = False, "unknown"
         try:
             with request.urlopen("http://127.0.0.1:8000/health", timeout=2) as resp:
@@ -320,19 +321,21 @@ def execute(job: dict, device: dict) -> dict:
         return {"name": first[0][:100], "memoryMiB": int(first[1]),
                 "driver": first[2][:50], "deviceCount": len(lines),
                 "trellis2Checkout": model_repo.is_file(),
-                "trellis2Environment": python_env.is_file(),
+                "trellis2Environment": python_env is not None,
                 "localGpuApiReady": api_ready, "localGpuEngine": api_engine}
     if action in {"preflight", "diagnose_dinov3"}:
-        model_python = Path("/workspace/trellis2-env/bin/python")
-        interpreter = str(model_python) if model_python.is_file() else sys.executable
+        from vast_setup_tasks import locate_trellis_python
+        model_python = locate_trellis_python()
+        # Preflight always uses the known working system torch, independently
+        # of optional TRELLIS conda installation.
         if action == "preflight":
-            return run_checked([interpreter, str(HERE / "gpu_preflight.py")])
-        if not model_python.is_file():
+            return run_checked([sys.executable, str(HERE / "gpu_preflight.py")])
+        if model_python is None:
             raise OperatorError("trellis2_environment_missing")
         if not Path("/workspace/TRELLIS.2/trellis2/pipelines/trellis2_image_to_3d.py").is_file():
             raise OperatorError("trellis2_checkout_missing")
         env = os.environ.copy()
-        env["CONDA_PREFIX"] = "/workspace/trellis2-env"
+        env["CONDA_PREFIX"] = str(model_python.parent.parent)
         env["PYTHONPATH"] = os.pathsep.join((str(HERE), "/workspace/TRELLIS.2",
                                                env.get("PYTHONPATH", "")))
         if not env.get("HF_HOME") and Path("/workspace/hf-cache").is_dir():
