@@ -77,7 +77,7 @@ class VastAgentContractTests(unittest.TestCase):
                  patch.object(agent, "CONFIG", state / "device.json"), \
                  patch.object(agent, "post_json", fake_post), \
                  contextlib.redirect_stdout(out):
-                agent.enroll(url)
+                agent.enroll(url, auto_start=False)
                 private = json.loads((state / "device.json").read_text())
                 self.assertNotIn(private["token"], out.getvalue())
                 self.assertIn("PAIR_CODE=", out.getvalue())
