@@ -2,7 +2,7 @@ import 'server-only'
 import {NextRequest,NextResponse} from 'next/server'
 import {sign} from 'node:crypto'
 import {getNativeUser} from '@/lib/native/auth'
-import {studioPilotReadiness,studioPilotSigner} from '@/lib/server/spaktok-studio-pilot-config'
+import {studioPilotOwnerId,studioPilotReadiness,studioPilotSigner} from '@/lib/server/spaktok-studio-pilot-config'
 import {
  SPAKTOK_FIRST_GPU_LODS,isSpaktokFirstLodId,
 } from '@/lib/filter-engine/spaktok-first-gpu-lods'
@@ -26,7 +26,7 @@ export async function GET(){
  const user=await getNativeUser().catch(()=>null)
  if(!user)return json({enabled:false,reason:'pilot_sign_in_required',
   workerVerified:false,private:true})
- if(user.id!==process.env.SPAKTOK_STUDIO_PILOT_OWNER_ID)
+ if(user.id.toLowerCase()!==studioPilotOwnerId(process.env))
   return json({enabled:false,reason:'pilot_owner_only',
    workerVerified:false,private:true})
  return json({enabled:true,reason:'server_signer_configured',
@@ -41,7 +41,7 @@ export async function POST(req:NextRequest){
   return json({error:'pilot_not_configured'},503)
  const user=await getNativeUser().catch(()=>null)
  if(!user)return json({error:'unauthorized'},401)
- if(user.id!==process.env.SPAKTOK_STUDIO_PILOT_OWNER_ID)
+ if(user.id.toLowerCase()!==studioPilotOwnerId(process.env))
   return json({error:'forbidden'},403)
  let assetId:unknown='lod0'
  try{

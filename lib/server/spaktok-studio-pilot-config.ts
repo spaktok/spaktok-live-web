@@ -10,11 +10,18 @@ export type StudioPilotReadiness=
 
 const OWNER_UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i
 const SAFE_BASE64=/^[a-zA-Z0-9+/]+={0,2}$/
+/** Narrow owner identity: explicit pilot owner overrides the existing
+ * admin UUID; no ID is ever returned to untrusted clients.
+ */
+export function studioPilotOwnerId(env:Readonly<Record<string,string|undefined>>):string|null{
+ const id=env.SPAKTOK_STUDIO_PILOT_OWNER_ID||env.SPAKTOK_ADMIN_USER_ID
+ return OWNER_UUID.test(id??'')?id!.toLowerCase():null
+}
 
 export function studioPilotReadiness(env:Readonly<Record<string,string|undefined>>):
  StudioPilotReadiness{
  if(env.SPAKTOK_STUDIO_PILOT_ENABLED!=='true')return 'disabled'
- if(!OWNER_UUID.test(env.SPAKTOK_STUDIO_PILOT_OWNER_ID??''))
+ if(!studioPilotOwnerId(env))
   return 'owner_unconfigured'
  const encoded=env.SPAKTOK_STUDIO_PILOT_SIGNING_KEY??''
  if(!encoded)return 'signer_unconfigured'
