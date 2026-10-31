@@ -339,6 +339,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
       if(!layer||!base)return
       let engine=threeEngineRef.current
       if(!engine){engine=new FaceMesh3DEngine(layer,base.width,base.height);threeEngineRef.current=engine}
+      engine.setGpuPilotCalibration(stateRef.current.face.pilot)
       const loaded=await engine.setLens(state.face.id,
        state.face.id===FIRST_GPU_LIVE_FILTER_ID?firstGpuPilotFile:null)
       if(state.face.id==='3d-photo-face'){
@@ -362,6 +363,10 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
     }).catch(()=>{if(!cancelled){setThreeQuality('none');setThreeStatus('unavailable')}})
     return()=>{cancelled=true}
   },[state.face.id,localPhotoFaceFile,firstGpuPilotFile])
+  // Slider events mutate only a cached Three.js transform, never re-read the GLB.
+  useEffect(()=>{
+   threeEngineRef.current?.setGpuPilotCalibration(state.face.pilot)
+  },[state.face.pilot])
   useEffect(()=>()=>{threeEngineRef.current?.dispose();threeEngineRef.current=null},[])
 
   useEffect(() => {

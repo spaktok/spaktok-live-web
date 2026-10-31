@@ -33,7 +33,7 @@ import {planRealityRenderGraph,type RealityRenderNode} from './reality-render-gr
 import {loadInteractiveHandSegmentation} from './vision'
 import {segmentHandOnce,semanticHandMaskFresh,type RealitySemanticHand} from './reality-hand-segmentation'
 import {RealityLivePhotoFace,LOCAL_PHOTO_FACE_ID} from './reality-live-photo-face'
-import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer} from './spaktok-first-gpu-live'
+import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION,type FirstGpuPilotCalibration} from './spaktok-first-gpu-live'
 import {centeredPreviewTransform} from './spaktok-glb-preview-transform'
 
 export const face3DPresets = [
@@ -269,6 +269,17 @@ export class FaceMesh3DEngine{
  private readonly loader=new GLTFLoader()
  private model:THREE.Object3D|null=null
  private pilotFile:File|null=null
+ private pilotCalibration:FirstGpuPilotCalibration=DEFAULT_FIRST_GPU_CALIBRATION
+ /** Apply a local head-prop transform; other 3D effects remain unchanged. */
+ setGpuPilotCalibration(input:unknown){
+  const p=normalizeFirstGpuCalibration(input)
+  this.pilotCalibration=p
+  if(this.current!==FIRST_GPU_LIVE_FILTER_ID||
+     this.model?.name!=='SpaktokFirstGpuPrivateHeadProp')return
+  this.model.scale.setScalar(p.scale)
+  this.model.position.set(0,p.vertical,p.depth)
+  this.model.rotation.y=THREE.MathUtils.degToRad(p.rotation)
+ }
  private photoFace:RealityLivePhotoFace|null=null
  private photoLoadToken=0
  private current:Face3DId|null=null
@@ -422,10 +433,10 @@ export class FaceMesh3DEngine{
     wrapper.name='SpaktokFirstGpuPrivateHeadProp'
     model.scale.setScalar(fit.scale)
     model.position.set(fit.offset.x,fit.offset.y,fit.offset.z)
-    wrapper.position.y=-.18
     wrapper.add(model)
     if(!this.alive||token!==this.request){disposeObject(wrapper);return false}
     this.model=wrapper;this.mount.add(wrapper)
+    this.setGpuPilotCalibration(this.pilotCalibration)
     this.lensReady=true;this.modelQuality='hd'
     return true
    }
