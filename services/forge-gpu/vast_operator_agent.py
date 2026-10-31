@@ -116,7 +116,23 @@ def post_json(base: str, path: str, payload: dict,
     return obj
 
 
-def enroll(url: str) -> None:
+def start_poller() -> None:
+    """Detach an outbound poller so closing the browser terminal does not stop it."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    log_path = STATE_DIR / "poll.log"
+    fd = os.open(str(log_path), os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
+    try:
+        with os.fdopen(fd, "a", encoding="utf-8") as stream:
+            proc = subprocess.Popen(
+                [sys.executable, str(Path(__file__).resolve()), "poll", "--interval", "30"],
+                cwd=HERE, stdin=subprocess.DEVNULL, stdout=stream, stderr=stream,
+                start_new_session=True, close_fds=True)
+        print("POLLER_STARTED_PID=" + str(proc.pid), flush=True)
+    except Exception:
+        raise OperatorError("poller_start_failed") from None
+
+
+def enroll(url: str, *, auto_start: bool = True) -> None:
     url = operator_url(url)
     if CONFIG.exists():
         raise OperatorError("device_already_enrolled_refuse_overwrite")
@@ -135,6 +151,8 @@ def enroll(url: str) -> None:
     print("PAIR_CODE=" + code, flush=True)
     print("ENROLLMENT=PENDING_OPERATOR_APPROVAL", flush=True)
     print("Send ONLY DEVICE_ID and PAIR_CODE; never send device.json", flush=True)
+    if auto_start:
+        start_poller()
 
 
 def validate_job(job: dict) -> tuple[str, str]:
@@ -311,15 +329,20 @@ def handle_job(device: dict, job: dict) -> None:
 def poll(*, once: bool, seconds: int) -> None:
     device = read_config()
     while True:
-        status = post_json(device["url"], "/v1/agent/claim", {}, device=device)
-        if status.get("paired") is False:
-            print("DEVICE_PAIRING=" + str(status.get("status", "pending")), flush=True)
-        else:
-            job = status.get("job")
-            if isinstance(job, dict):
-                handle_job(device, job)
-            elif job is not None:
-                raise OperatorError("invalid_job_claim")
+        try:
+            status = post_json(device["url"], "/v1/agent/claim", {}, device=device)
+            if status.get("paired") is False:
+                print("DEVICE_PAIRING=" + str(status.get("status", "pending")), flush=True)
+            else:
+                job = status.get("job")
+                if isinstance(job, dict):
+                    handle_job(device, job)
+                elif job is not None:
+                    raise OperatorError("invalid_job_claim")
+        except OperatorError as exc:
+            if once:
+                raise
+            print("POLL_RECONNECT=" + str(exc), flush=True)
         if once:
             return
         time.sleep(seconds)
