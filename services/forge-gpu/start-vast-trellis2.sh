@@ -13,6 +13,9 @@ fi
 if [[ ! "${FORGE_GPU_ALLOWED_ORIGIN:-}" =~ ^https://[a-zA-Z0-9.-]+$ ]]; then
   echo >&2 "FORGE_GPU_ALLOWED_ORIGIN_must_be_exact_https_origin"; exit 2
 fi
+if [[ -z "${HF_HOME:-}" && -d /workspace/.hf_home ]]; then
+  export HF_HOME=/workspace/.hf_home
+fi
 if [[ -z "${HF_HOME:-}" || ! -d "${HF_HOME}" ]]; then
   echo >&2 "HF_HOME_not_configured_or_missing"; exit 2
 fi
@@ -33,11 +36,11 @@ export PATH="${CUDA_HOME}/bin:${PATH}"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TORCH_CUDA_ARCH_LIST=8.0
 export MAX_JOBS=4
-python "${HERE}/gpu_preflight.py"
+"${CONDA_PREFIX}/bin/python" "${HERE}/gpu_preflight.py"
 python -m unittest discover -s "${HERE}" -p 'test_gpu_ticket.py' -q
 python -m unittest discover -s "${HERE}" -p 'test_trellis2_engine.py' -q
 python -c "import flash_attn,nvdiffrec_render,o_voxel; from trellis2.pipelines import Trellis2ImageTo3DPipeline; print('SPAKTOK_TRELLIS2_IMPORT_OK')"
 cd "${HERE}"
 # localhost only. Cloudflare named Tunnel must route localhost:8000;
 # never expose a raw Vast.ai port or use an untrusted quick-tunnel link.
-exec python -m uvicorn server:app --host 127.0.0.1 --port 8000 --workers 1 --no-access-log
+exec "${CONDA_PREFIX}/bin/python" -m uvicorn server:app --host 127.0.0.1 --port 8000 --workers 1 --no-access-log
