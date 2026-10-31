@@ -1,6 +1,7 @@
 import { backgroundModes, faceFxCatalog, filterPresets, fxList, neutralBeauty, type FaceFxId } from './params'
 import { UPLOADED_CROWN_MOBILE } from './crown-asset-url'
 import type {FaceSemanticRegion} from './reality-face-regions'
+import {SPAKTOK_ORIGINAL_FACE_FINISHES,isOriginalFaceFinishId} from './spaktok-original-face-filters'
 
 /** Explicit, versioned effect contracts for the entire camera studio:
  * AR wearables, mesh makeup, legacy masks, color looks, post-FX, background.
@@ -60,6 +61,9 @@ const threeConfigs: Readonly<Record<string, ThreeConfig>> = {
   '3d-first-gpu-pilot': {anchor:'head_top'},
   '3d-precision-cyber-mask': {anchor:'eyes_center'},
   '3d-photoreal-porcelain-mask': {anchor:'eyes_center'},
+  ...Object.fromEntries(SPAKTOK_ORIGINAL_FACE_FINISHES.map(({id})=>[
+   id,{anchor:'eyes_center' as const},
+  ])),
   '3d-crystal': {
     anchor:'forehead_center',
     asset:{uri:'/face-assets/spaktok-crystal.glb',format:'glb',
@@ -78,7 +82,7 @@ const isThree=(id:string)=>id.startsWith('3d-')&&!isMakeup(id)
 const faceManifests=faceFxCatalog.filter(x=>x.id!=='none').map((fx):RealityEffectManifest=>{
   const id=fx.id
   const conf=threeConfigs[id]
-  const surface=isMakeup(id)||id==='3d-precision-cyber-mask'||id==='3d-photoreal-porcelain-mask',three=isThree(id)
+  const surface=isMakeup(id)||id==='3d-precision-cyber-mask'||id==='3d-photoreal-porcelain-mask'||isOriginalFaceFinishId(id),three=isThree(id)
   if(three&&!conf)throw Error('reality_missing_3d_contract:'+id)
   return {
     schemaVersion:REALITY_MANIFEST_VERSION,id,name:fx.name,

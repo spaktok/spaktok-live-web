@@ -1,5 +1,6 @@
 import type {FaceMorphSettings} from './reality-face-morph'
 import type {FirstGpuPilotCalibration} from './spaktok-first-gpu-live'
+import {SPAKTOK_ORIGINAL_FACE_FINISHES} from './spaktok-original-face-filters'
 
 export interface ColorParams {
   exposure: number
@@ -111,6 +112,11 @@ export const faceFxCatalog = [
   { id: '3d-expression', name: 'قناع التعبيرات', icon: '🎭', group: '3d' },
   { id: '3d-precision-cyber-mask', name: 'قناع تيتانيوم PBR • AR V2', icon: '🛡️', group: '3d' },
   { id: '3d-photoreal-porcelain-mask', name: 'قناع سيراميك PBR • AR V2', icon: '🤍', group: '3d' },
+  // Bundled, originally-authored, downloadable-with-app shader pack.
+  // Each finish reuses the *same* tracked face mesh and static microtexture.
+  ...SPAKTOK_ORIGINAL_FACE_FINISHES.map(({id,name,icon})=>({
+   id,name,icon,group:'3d' as const,
+  })),
   { id: '3d-photo-face', name: 'وجه GLB محلي متحرك', icon: '🧑', group: '3d' },
 
   { id: '3d-makeup-soft', name: 'مكياج ناعم', icon: '🌷', group: 'makeup' },
