@@ -18,6 +18,8 @@ import secrets
 import subprocess
 import sys
 import tempfile
+import signal
+import fcntl
 import time
 from urllib import error, parse, request
 
@@ -27,6 +29,8 @@ MAX_IMAGE = 8 * 1024 * 1024
 MAX_GLB = 35 * 1024 * 1024
 ACTIONS = frozenset({"gpu_info", "preflight", "diagnose_dinov3",
                      "inspect_glb", "finalize_glb", "generate_one"})
+SETUP_ACTIONS = frozenset({"probe_environment",
+                           "fetch_trellis2_source", "prepare_trellis2_runtime"})
 HEX64 = re.compile(r"^[a-f0-9]{64}$")
 JOB_ID = re.compile(r"^[a-f0-9-]{36}$")
 STATE_DIR = Path(os.environ.get("SPAKTOK_VAST_AGENT_STATE",
@@ -365,6 +369,30 @@ def execute(job: dict, device: dict) -> dict:
     raise OperatorError("unsupported_action")
 
 
+def handle_setup_job(device: dict, job: dict) -> None:
+    """Only fixed reviewed setup tasks, never arbitrary remote shell."""
+    ident = job.get("id")
+    action = job.get("action")
+    if (not isinstance(ident, str) or not JOB_ID.fullmatch(ident)
+            or action not in SETUP_ACTIONS):
+        raise OperatorError("invalid_setup_job")
+    if action != "probe_environment" and job.get("approvedCompute") != 1:
+        raise OperatorError("setup_compute_not_approved")
+    try:
+        from vast_setup_tasks import execute_setup_task, SetupError
+        result = execute_setup_task(action)
+        payload = {"status": "succeeded", "result": result}
+    except Exception as exc:
+        from vast_setup_tasks import SetupError
+        label = str(exc) if isinstance(exc, SetupError) else "setup_runtime_failed"
+        if not re.fullmatch(r"[a-z0-9_]{1,64}", label):
+            label = "setup_runtime_failed"
+        payload = {"status": "failed", "errorCode": label}
+    post_json(device["url"], "/v1/agent/setup/" + ident + "/complete",
+              payload, device=device)
+    print("SETUP_JOB=" + ident + " STATUS=" + payload["status"], flush=True)
+
+
 def handle_job(device: dict, job: dict) -> None:
     ident = str(job.get("id", ""))
     if not JOB_ID.fullmatch(ident):
@@ -385,6 +413,13 @@ def handle_job(device: dict, job: dict) -> None:
 
 def poll(*, once: bool, seconds: int) -> None:
     device = read_config()
+    STATE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    lock_fd = os.open(str(STATE_DIR / "poll.lock"), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        os.close(lock_fd)
+        raise OperatorError("poller_already_running")
     while True:
         try:
             status = post_json(device["url"], "/v1/agent/claim", {}, device=device)
@@ -396,6 +431,15 @@ def poll(*, once: bool, seconds: int) -> None:
                     handle_job(device, job)
                 elif job is not None:
                     raise OperatorError("invalid_job_claim")
+                # Separate operator setup queue; GPU asset jobs are unaffected.
+                setup = post_json(device["url"], "/v1/agent/setup/claim",
+                                  {}, device=device)
+                if setup.get("paired") is True:
+                    task = setup.get("job")
+                    if isinstance(task, dict):
+                        handle_setup_job(device, task)
+                    elif task is not None:
+                        raise OperatorError("invalid_setup_claim")
         except OperatorError as exc:
             if once:
                 raise
@@ -405,11 +449,39 @@ def poll(*, once: bool, seconds: int) -> None:
         time.sleep(seconds)
 
 
+def upgrade_existing_poller() -> None:
+    """Restart the *exact* known agent poller after a reviewed git pull.
+
+    Never kills unrelated Python processes and never changes device token.
+    """
+    read_config()
+    current = os.getpid()
+    script_path = str(Path(__file__).resolve())
+    stopped = 0
+    for item in Path("/proc").iterdir():
+        if not item.name.isdigit() or int(item.name) == current:
+            continue
+        try:
+            args = (item / "cmdline").read_bytes().decode("utf-8").split("\\x00")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if (script_path in args and "poll" in args
+                and len(args) >= 3 and int(item.name) > 1):
+            try:
+                os.kill(int(item.name), signal.SIGTERM)
+                stopped += 1
+            except ProcessLookupError:
+                pass
+    print("PREVIOUS_POLLERS_STOPPED=" + str(stopped), flush=True)
+    start_poller()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Spaktok private Vast GPU agent")
     sub = parser.add_subparsers(dest="command", required=True)
     pair = sub.add_parser("enroll", help="One-time device pairing; no GPU work")
     pair.add_argument("--worker", required=True, help="HTTPS Cloudflare Worker base URL")
+    sub.add_parser("upgrade", help="Restart only the matching agent poller after git pull")
     p = sub.add_parser("poll", help="Outbound polling for operator-approved jobs")
     p.add_argument("--once", action="store_true")
     p.add_argument("--interval", type=int, default=20)
@@ -417,6 +489,8 @@ def main() -> int:
     try:
         if args.command == "enroll":
             enroll(args.worker)
+        elif args.command == "upgrade":
+            upgrade_existing_poller()
         else:
             if not 10 <= args.interval <= 600:
                 raise OperatorError("poll_interval_out_of_range")
