@@ -37,6 +37,35 @@ class VastSetupTests(unittest.TestCase):
             ):
                 setup.fetch_trellis2_source()
 
+    def test_detects_conda_env_outside_workspace(self):
+        import json
+        import subprocess
+        with tempfile.TemporaryDirectory() as td:
+            prefix = Path(td) / "envs" / "trellis2"
+            py = prefix / "bin" / "python"
+            py.parent.mkdir(parents=True)
+            py.write_bytes(b"dummy")
+            response = subprocess.CompletedProcess(
+                ["conda", "env", "list", "--json"], 0,
+                stdout=json.dumps({"envs": ["/venv/main", str(prefix)]}),
+                stderr="")
+            with patch.object(setup, "ENV_PYTHON", Path(td) / "workspace" / "python"), \\
+                 patch.object(setup.shutil, "which", return_value="/venv/main/bin/conda"), \\
+                 patch.object(setup, "_run", return_value=response):
+                self.assertEqual(setup.locate_trellis_python(), py)
+
+    def test_refuses_unrelated_conda_environment(self):
+        import json
+        import subprocess
+        response = subprocess.CompletedProcess(
+            ["conda", "env", "list", "--json"], 0,
+            stdout=json.dumps({"envs": ["/venv/main", "/venv/envs/not-trellis"]}),
+            stderr="")
+        with patch.object(setup, "ENV_PYTHON", Path("/missing-py/bin/python")), \\
+             patch.object(setup.shutil, "which", return_value="conda"), \\
+             patch.object(setup, "_run", return_value=response):
+            self.assertIsNone(setup.locate_trellis_python())
+
     def test_runtime_no_conda_does_not_run_pip(self):
         with patch.object(setup, "_disk", return_value={"freeGiB": 100}), \
              patch.object(setup.shutil, "which", return_value=None):
