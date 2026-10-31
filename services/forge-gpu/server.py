@@ -27,7 +27,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from PIL import Image, ImageOps, UnidentifiedImageError
 from gpu_preflight import require_compatible_gpu
-from gpu_ticket import validate_gpu_ticket, InvalidGPUTicket
+from gpu_ticket import validate_gpu_ticket, validate_job_read_ticket, InvalidGPUTicket
 
 MAX_PHOTO = 8 * 1024 * 1024
 MAX_GLB = 35 * 1024 * 1024
@@ -38,7 +38,7 @@ _BROWSER_ORIGIN = os.environ.get("FORGE_GPU_ALLOWED_ORIGIN", "")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[_BROWSER_ORIGIN] if _BROWSER_ORIGIN.startswith("https://") else [],
-    allow_methods=["POST"],
+    allow_methods=["POST", "GET"],
     allow_headers=["Authorization", "Content-Type"],
     max_age=300,
 )
@@ -61,11 +61,25 @@ JOB_PROFILES = ("studio-hd", "studio-ultra")
 async def admission_guard(request: Request, call_next):
     """Authorize before multipart spooling and burn a short-lived grant once."""
     if request.url.path.startswith("/v1/jobs"):
-        # Async jobs are operator-only (server-to-server), never browser tickets.
+        # Submit/status are operator-only (server-to-server). The ONLY browser
+        # access is GET .../glb with a short-lived signed read grant (sj1),
+        # because large GLBs cannot pass through Vercel Functions.
         token = os.environ.get("FORGE_GPU_TOKEN", "")
         if len(token) < 32:
             return Response(status_code=503, content="gpu_secret_unconfigured")
-        if not secrets.compare_digest(request.headers.get("authorization", ""),
+        parts = request.url.path.split("/")
+        glb_read = len(parts) == 5 and parts[4] == "glb"
+        if glb_read and request.method == "OPTIONS":
+            return await call_next(request)
+        incoming = request.headers.get("authorization", "")
+        if glb_read and request.method == "GET" and incoming.startswith("Bearer sj1."):
+            try:
+                validate_job_read_ticket(incoming, token, _BROWSER_ORIGIN,
+                                         request.headers.get("origin", ""), parts[3])
+            except InvalidGPUTicket:
+                return Response(status_code=401, content="invalid_job_read_ticket")
+            return await call_next(request)
+        if not secrets.compare_digest(incoming,
                                       "Bearer " + token):
             return Response(status_code=401, content="operator_token_required")
         if request.method == "POST":

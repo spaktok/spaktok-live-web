@@ -11,6 +11,7 @@ import {
 import {generateForgeGpuDirect} from '@/lib/filter-engine/spaktok-forge-direct-client'
 import {FORGE_GPU_READINESS_AR,type ForgeGpuReadiness} from '@/lib/filter-engine/spaktok-forge-readiness'
 import {inspectWordGeneratedGlb} from '@/lib/filter-engine/spaktok-word-import'
+import SpaktokForgeStudioJob from './spaktok-forge-studio-job'
 
 const MAX_PHOTO_BYTES=8*1024*1024
 const isImage=(file:File|null):file is File=>
@@ -59,6 +60,7 @@ export default function SpaktokForge({
  const [gpuAvailable,setGpuAvailable]=useState(false)
  const [gpuReadiness,setGpuReadiness]=useState<ForgeGpuReadiness|null>(null)
  const [gpuEngine,setGpuEngine]=useState<string|null>(null)
+ const [gpuHd,setGpuHd]=useState(false)
  const [gpuConsent,setGpuConsent]=useState(false)
  const [transferConsent,setTransferConsent]=useState(false)
  const [sourceRights,setSourceRights]=useState<'original'|'licensed'>('original')
@@ -95,6 +97,7 @@ export default function SpaktokForge({
     setGpuReadiness(status)
     setGpuEngine(['trellis1','trellis2','stable-fast-3d'].includes(String(data.engine))?data.engine:null)
     setGpuAvailable(data.enabled===true&&status==='ready')
+  setGpuHd(data.enabled===true&&data.hdAvailable===true&&data.engine==='trellis2')
    }})
    .catch(()=>{if(live){setGpuAvailable(false);setGpuReadiness('provider-offline')}})
   return()=>{live=false}
@@ -222,6 +225,24 @@ export default function SpaktokForge({
    setBusy(false)
   }
  }
+ const showGpuGlb=async(file:File,previewLimit=96*1024*1024)=>{
+  const bytes=await file.arrayBuffer()
+  setResult(file);setGenerationMode('gpu');setStats(null)
+  if(bytes.byteLength>previewLimit||!sceneRef.current)return
+  try{
+   const model=await new GLTFLoader().parseAsync(bytes,'')
+   const bounds=new THREE.Box3().setFromObject(model.scene)
+   const size=new THREE.Vector3(),center=new THREE.Vector3()
+   bounds.getSize(size);bounds.getCenter(center)
+   if(!bounds.isEmpty()&&Math.max(size.x,size.y,size.z)>1e-5&&sceneRef.current){
+    model.scene.position.sub(center)
+    model.scene.scale.setScalar(2/Math.max(size.x,size.y,size.z))
+    const old=previewRef.current
+    if(old){sceneRef.current.remove(old);disposePreview(old)}
+    sceneRef.current.add(model.scene);previewRef.current=model.scene
+   }else disposePreview(model.scene)
+  }catch{/* A validated large GLB can still fail WebGL decode on a device. */}
+ }
  const buildFull3D=async()=>{
   if(!source||!approved||!gpuConsent||!transferConsent||busy||!gpuAvailable)return
   setBusy(true)
@@ -230,23 +251,7 @@ export default function SpaktokForge({
    if(!isImage(source)||source.size<128||source.size>MAX_PHOTO_BYTES)
     throw Error('forge_gpu_invalid_source')
    const {file,inspection:out}=await generateForgeGpuDirect(source,sourceRights)
-   const bytes=await file.arrayBuffer()
-   setResult(file);setGenerationMode('gpu');setStats(null)
-   if(bytes.byteLength<=15*1024*1024&&sceneRef.current){
-    try{
-     const model=await new GLTFLoader().parseAsync(bytes,'')
-     const bounds=new THREE.Box3().setFromObject(model.scene)
-     const size=new THREE.Vector3(),center=new THREE.Vector3()
-     bounds.getSize(size);bounds.getCenter(center)
-     if(!bounds.isEmpty()&&Math.max(size.x,size.y,size.z)>1e-5){
-      model.scene.position.sub(center)
-      model.scene.scale.setScalar(2/Math.max(size.x,size.y,size.z))
-      const old=previewRef.current
-      if(old){sceneRef.current.remove(old);disposePreview(old)}
-      sceneRef.current.add(model.scene);previewRef.current=model.scene
-     }else disposePreview(model.scene)
-    }catch{/* A validated large GLB can still fail WebGL decode on a device. */}
-   }
+   await showGpuGlb(file,15*1024*1024)
    setMessage('تم توليد GLB عن طريق نموذج AI ذاتي الاستضافة. مثلثات: '+
     out.audit.triangles.toLocaleString()+
     '. لا يعتمد ذلك التحريك أو دقة مشابهة Rodin دون فحص بشري.')
@@ -368,6 +373,9 @@ export default function SpaktokForge({
        إنشاء مجسم 360° بواسطة AI GPU
       </button>
      </>}
+     {gpuAvailable&&gpuHd&&<SpaktokForgeStudioJob
+      source={source} rights={sourceRights} approved={approved} disabled={busy}
+      onResult={file=>void showGpuGlb(file)}/>}
     </div>
     <div className="grid gap-2 sm:grid-cols-2">
      <button type="button" disabled={!result||busy} onClick={()=>result&&saveFile(result)}
