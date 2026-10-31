@@ -1,6 +1,30 @@
 /** First GPU GLB stays owner-private. This is an optional local preview prop. */
 import {SPAKTOK_FIRST_GPU_ASSET} from './spaktok-first-gpu-asset'
 export const FIRST_GPU_LIVE_FILTER_ID='3d-first-gpu-pilot' as const
+export type FirstGpuPilotCalibration=Readonly<{
+ scale:number;vertical:number;depth:number;rotation:number
+}>
+export const DEFAULT_FIRST_GPU_CALIBRATION:FirstGpuPilotCalibration=Object.freeze({
+ scale:1,vertical:-.18,depth:0,rotation:0,
+})
+/** Restrict head-prop controls and tolerate corrupted device settings. */
+export function normalizeFirstGpuCalibration(input:unknown):FirstGpuPilotCalibration{
+ const p=input&&typeof input==='object'&&!Array.isArray(input)?
+  input as Record<string,unknown>:{}
+ const clamp=(key:keyof FirstGpuPilotCalibration,min:number,max:number)=>{
+  const v=p[key]
+  if(typeof v!=='number'||!Number.isFinite(v))
+   return DEFAULT_FIRST_GPU_CALIBRATION[key]
+  return Math.min(max,Math.max(min,v))
+ }
+ return {
+  scale:clamp('scale',.4,1.8),
+  vertical:clamp('vertical',-.5,.5),
+  depth:clamp('depth',-.35,.35),
+  rotation:clamp('rotation',-90,90),
+ }
+}
+export const FIRST_GPU_CALIBRATION_STORAGE_KEY='spaktok.first-gpu.live-calibration.v1' as const
 const url='https://spaktok-private-studio-asset.spaktok.workers.dev/v1/pilot/lod0.glb'
 
 export async function verifiedFirstGpuBuffer(file:File):Promise<ArrayBuffer>{

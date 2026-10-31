@@ -1,4 +1,5 @@
 import type {FaceMorphSettings} from './reality-face-morph'
+import type {FirstGpuPilotCalibration} from './spaktok-first-gpu-live'
 
 export interface ColorParams {
   exposure: number
@@ -124,7 +125,7 @@ export type FaceFxId = (typeof faceFxCatalog)[number]['id']
 export const faceFxCode = (id: FaceFxId) => Math.max(0, faceFxCatalog.findIndex(x=>x.id===id))
 export type MakeupRegion = 'foundation'|'lips'|'eyeshadow'|'eyeliner'|'blush'|'contour'|'highlight'
 export type MakeupOverrides = Partial<Record<MakeupRegion,number>>
-export type FaceFxParams = { id: FaceFxId; strength: number; makeup?:MakeupOverrides; morph?: Partial<FaceMorphSettings> }
+export type FaceFxParams = { id: FaceFxId; strength: number; makeup?:MakeupOverrides; morph?: Partial<FaceMorphSettings>; pilot?: FirstGpuPilotCalibration }
 export const neutralFaceFx: FaceFxParams = { id: 'none', strength: 0.85 }
 export const isFace3DSelected = (id:FaceFxId) => id.startsWith('3d-')
 export const needsFaceFxTracking = (face: FaceFxParams) => face.id !== 'none' && face.strength > 0
