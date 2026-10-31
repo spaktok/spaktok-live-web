@@ -43,6 +43,8 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
   const [mode, setMode] = useState<CaptureMode>(initialMode)
   // Live stays a local preview until a real broadcast transport is connected.
   const [liveLook,setLiveLook]=useState<RealityLook>('natural-light')
+  // On-device illumination adjustment, never face whitening or identity edits.
+  const [smartPhoto,setSmartPhoto]=useState(true)
   const [liveFaceOptIn,setLiveFaceOptIn]=useState(false)
   const [showLiveSculptPanel,setShowLiveSculptPanel]=useState(false)
   const [liveSculpt,setLiveSculpt]=useState<LiveSculptControls>({
@@ -158,7 +160,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
 
   const camera = useCameraStudio({
    state:studio,localPhotoFaceFile,firstGpuPilotFile,audio:mode!=='photo'&&mode!=='live',livePreview:mode==='live',
-   paused:Boolean(captured),
+   paused:Boolean(captured),smartPhoto,
    // Existing 3D AR already tracks the 478-point face. A second
    // subdivided mesh runs only for optional sculpt / QA wireframes.
    liveFaceMesh:shouldRunExtraLiveMesh(isLive,mode==='live',liveFaceOptIn,liveMeshQa),
@@ -639,6 +641,11 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
                     {showLiveMeshDetails?'إخفاء تفاصيل الشبكة':'تفاصيل الشبكة'}
                   </button>
                 </div>
+                <label className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2 text-[11px] text-slate-100">
+                  <input type="checkbox" checked={smartPhoto} onChange={e=>setSmartPhoto(e.target.checked)}
+                    aria-label="تفعيل الإضاءة الفوتوغرافية المتكيّفة"/>
+                  إضاءة فوتوغرافية ذكية · معايرة محلية، دون تغيير ملامح الوجه
+                </label>
                 {showLiveMeshDetails&&<div className="mt-2 space-y-2 border-t border-white/10 pt-2 text-[11px] leading-5 text-slate-300">
                   <p>تتبّع {camera.vision==='tracking'?478:'—'} نقطة · FPS {camera.previewFps??'—'} ·
                    شبكة النحت الإضافية {liveMeshQa||liveFaceOptIn?'مفعّلة':'متوقفة لتوفير الأداء'}
@@ -742,6 +749,11 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
                       <option value="natural-light" className="bg-slate-900">تحسين الإضاءة الطبيعي</option>
                       <option value="studio-glow" className="bg-slate-900">إضاءة استوديو ناعمة</option>
                     </select>
+                    <label className="flex items-center gap-2 text-xs">
+                     <input type="checkbox" checked={smartPhoto}
+                      onChange={e=>setSmartPhoto(e.target.checked)}/>
+                     تكيّف الضوء والألوان مع الكاميرا تلقائيًا (محلي، اختياري)
+                    </label>
                     <label className="flex items-center gap-2 text-xs">
                      <input type="checkbox" checked={liveFaceOptIn}
                       onChange={e=>setLiveFaceOptIn(e.target.checked)} />
