@@ -2,7 +2,7 @@ import {describe,it,expect} from 'vitest'
 import {neutralColor} from './params'
 import {
  NEUTRAL_PHOTOGRAPHIC_CORRECTION as neutral,
- targetPhotographicCorrection,smoothPhotographicCorrection,applyPhotographicCorrection,
+ targetPhotographicCorrection,smoothPhotographicCorrection,applyPhotographicCorrection,estimatePortraitPhotographicLight,
 } from './reality-photographic-meter'
 
 describe('Spaktok local photographic camera metering',()=>{
@@ -34,6 +34,25 @@ describe('Spaktok local photographic camera metering',()=>{
   const next=smoothPhotographicCorrection(first,target,500)
   expect(next.exposure).toBeGreaterThan(first.exposure)
   expect(smoothPhotographicCorrection(first,target,0)).toEqual(first)
+ })
+ it('prioritizes a dark tracked face over a brighter background without face identity inspection',()=>{
+  const width=32,height=18
+  const pixels=new Uint8ClampedArray(width*height*4)
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+   const i=(y*width+x)*4
+   const l=x>=2&&x<15&&y>=3&&y<16?40:220
+   pixels[i]=l;pixels[i+1]=l;pixels[i+2]=l;pixels[i+3]=255
+  }
+  const ambient=estimatePortraitPhotographicLight(pixels,width,height,null)
+  const portrait=estimatePortraitPhotographicLight(pixels,width,height,{
+   center:{x:.25,y:.5},width:.45,
+  })
+  expect(portrait.brightness).toBeLessThan(ambient.brightness)
+  expect(portrait.brightness).toBeGreaterThanOrEqual(.07)
+  expect(portrait.warmth).toBe(ambient.warmth)
+  expect(estimatePortraitPhotographicLight(pixels,width,height,{
+   center:{x:NaN,y:.5},width:.45,
+  })).toEqual(ambient)
  })
  it('clamps invalid light samples and user adjustments',()=>{
   const sample=targetPhotographicCorrection({brightness:NaN,warmth:Infinity,side:NaN})
