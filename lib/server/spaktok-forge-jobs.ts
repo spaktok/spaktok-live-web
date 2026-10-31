@@ -15,6 +15,22 @@ export const FORGE_JOB_HANDLE_SECONDS=3600
 export const FORGE_JOB_READ_SECONDS=240
 /** Vercel Functions cap request bodies at 4.5MB; keep headroom for multipart. */
 export const FORGE_JOB_MAX_IMAGE=4*1024*1024
+/** Retexture sends image + mesh through the same 4.5MB function body. */
+export const FORGE_RETEXTURE_MAX_TOTAL=4*1024*1024+256*1024
+export type ForgeJobHandleProfile=ForgeJobProfile|'retexture'
+const isHandleProfile=(v:unknown):v is ForgeJobHandleProfile=>
+ v==='retexture'||isForgeJobProfile(v)
+
+/** Magic-byte sniff (GLB v2 with exact length, or PLY); never trust MIME. */
+export function sniffForgeMesh(bytes:Uint8Array):'glb'|'ply'|null{
+ if(bytes.length<64)return null
+ const head=String.fromCharCode(...bytes.subarray(0,5))
+ if(head.startsWith('glTF')){
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength)
+  return view.getUint32(4,true)===2&&view.getUint32(8,true)===bytes.length?'glb':null
+ }
+ return head.startsWith('ply\n')||head==='ply\r\n'?'ply':null
+}
 
 const JOB_ID=/^[A-Za-z0-9_-]{16,64}$/
 const UID=/^[A-Za-z0-9_-]{1,128}$/
@@ -50,7 +66,7 @@ export function isForgePolyBudget(value:unknown):value is number{
 }
 
 export function signForgeJobHandle(secret:string,input:{
- jobId:string;uid:string;profile:ForgeJobProfile
+ jobId:string;uid:string;profile:ForgeJobHandleProfile
 },now=nowSec()):string{
  if(!JOB_ID.test(input.jobId)||!UID.test(input.uid))throw Error('forge_job_handle_invalid')
  return seal(secret,'sh1',{
@@ -60,10 +76,10 @@ export function signForgeJobHandle(secret:string,input:{
 }
 
 export function verifyForgeJobHandle(secret:string,handle:string,uid:string,
- now=nowSec()):{jobId:string;profile:ForgeJobProfile}|null{
+ now=nowSec()):{jobId:string;profile:ForgeJobHandleProfile}|null{
  const c=open(secret,'sh1',handle)
  if(!c||c.v!==1||c.purpose!=='forge-job-handle'||c.uid!==uid)return null
- if(typeof c.jobId!=='string'||!JOB_ID.test(c.jobId)||!isForgeJobProfile(c.profile))
+ if(typeof c.jobId!=='string'||!JOB_ID.test(c.jobId)||!isHandleProfile(c.profile))
   return null
  if(typeof c.iat!=='number'||typeof c.exp!=='number'||c.exp<=now||
   c.iat>now+10||c.exp-c.iat>FORGE_JOB_HANDLE_SECONDS)return null

@@ -86,7 +86,9 @@ async def admission_guard(request: Request, call_next):
             raw_length = request.headers.get("content-length", "")
             if not raw_length.isdigit():
                 return Response(status_code=411, content="content_length_required")
-            if not 128 <= int(raw_length) <= MAX_MULTIPART:
+            limit = MAX_MULTIPART + (64 * 1024 * 1024
+                                     if request.url.path == "/v1/jobs/retexture" else 0)
+            if not 128 <= int(raw_length) <= limit:
                 return Response(status_code=413, content="request_too_large")
         return await call_next(request)
     if request.url.path == "/v1/generate":
@@ -176,6 +178,8 @@ async def start_job_queue():
     if _ENGINE_NAME != "trellis2":
         return
     from forge_jobs import JobQueue
+    import trellis2_texturing
+    trellis2_texturing.load_model_once(torch)
     _job_queue = JobQueue(
         _model.make_glb_async_job,
         workdir=os.environ.get("FORGE_GPU_JOB_DIR", "/tmp/spaktok-forge-jobs"),
@@ -184,6 +188,7 @@ async def start_job_queue():
         ttl_seconds=int(os.environ.get("FORGE_GPU_JOB_TTL", "3600")),
         on_event=lambda event: print(json.dumps({**event, "at": int(time.time())}),
                                      flush=True),
+        retexture=trellis2_texturing.retexture if trellis2_texturing.ready() else None,
     )
     _job_queue.start()
 
@@ -200,6 +205,7 @@ async def health():
             "hdConfigured": _ENGINE_NAME == "trellis2" and
                 os.environ.get("FORGE_GPU_HD_ENABLED") == "yes",
             "asyncJobs": _job_queue is not None,
+            "retexture": bool(_job_queue and _job_queue.supports_retexture),
             "no_persistent_images": True}
 
 
@@ -230,6 +236,43 @@ async def submit_job(image: UploadFile = File(...), profile: str = Form("studio-
     from forge_jobs import QueueFull
     try:
         return _job_queue.submit(data, profile, poly_budget)
+    except QueueFull:
+        raise HTTPException(status_code=429, detail="gpu_job_queue_full")
+
+
+async def _read_reference_image(image: UploadFile) -> bytes:
+    if image.content_type not in ("image/png", "image/jpeg", "image/webp"):
+        raise HTTPException(status_code=415, detail="unsupported_image")
+    data = await image.read(MAX_PHOTO + 1)
+    await image.close()
+    if len(data) < 128 or len(data) > MAX_PHOTO:
+        raise HTTPException(status_code=413, detail="invalid_image_size")
+    try:
+        with Image.open(io.BytesIO(data)) as probe:
+            if probe.format not in ("PNG", "JPEG", "WEBP"):
+                raise ValueError("unsupported image encoding")
+    except (ValueError, UnidentifiedImageError):
+        raise HTTPException(status_code=422, detail="image_or_glb_invalid")
+    return data
+
+
+@app.post("/v1/jobs/retexture", status_code=202)
+async def submit_retexture(image: UploadFile = File(...), mesh: UploadFile = File(...)):
+    if _job_queue is None or not _job_queue.supports_retexture:
+        raise HTTPException(status_code=503, detail="retexture_unavailable")
+    if os.environ.get("FORGE_GPU_HD_ENABLED") != "yes":
+        raise HTTPException(status_code=403, detail="gpu_hd_not_enabled")
+    from trellis2_texturing import MAX_MESH_BYTES, sniff_mesh_format
+    data = await _read_reference_image(image)
+    mesh_bytes = await mesh.read(MAX_MESH_BYTES + 1)
+    await mesh.close()
+    try:
+        sniff_mesh_format(mesh_bytes)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="image_or_glb_invalid")
+    from forge_jobs import QueueFull
+    try:
+        return _job_queue.submit_retexture(data, mesh_bytes)
     except QueueFull:
         raise HTTPException(status_code=429, detail="gpu_job_queue_full")
 
