@@ -500,6 +500,11 @@ export class FaceMesh3DEngine{
   this.photoFace=loaded
   return true
  }
+ /** Reuse the existing 32x18 ambient camera-light sampler in legacy preview. */
+ updatePhotorealLight(video:HTMLVideoElement,seconds:number){
+  if(this.current===PRECISION_FACE_MASK_ID||this.current===PORCELAIN_FACE_MASK_ID)
+   this.adaptLight(video,seconds)
+ }
  private adaptLight(source:RenderInput['source'],at:number){
   if(!Number.isFinite(at)||at-this.lastLightUpdate<.5)return
   this.lastLightUpdate=at
