@@ -19,6 +19,8 @@ import {buildLiveSculptWarp,hasLiveSculpt,normalizeLiveSculpt,
 import {createDenseFaceTopology,type DenseFaceTopology} from './reality-face-topology'
 import {FIRST_GPU_LIVE_FILTER_ID} from './spaktok-first-gpu-live'
 import {isPhotorealSurfaceId} from './reality-precision-face-mask'
+import {estimateAmbientLight} from './lighting3d'
+import {NEUTRAL_PHOTOGRAPHIC_CORRECTION,targetPhotographicCorrection,smoothPhotographicCorrection,applyPhotographicCorrection} from './reality-photographic-meter'
 import {createLiveFaceMeshTemplate,updateLiveFaceMesh,chooseLiveMeshLevel,
  type LiveMeshTemplate} from './reality-live-personal-mesh'
 
@@ -32,6 +34,8 @@ interface Options {
   firstGpuPilotFile?:File|null
   audio?: boolean
   livePreview?: boolean
+  /** Opt-in on-device 32x18 camera metering for the shared still/video/live GPU pass. */
+  smartPhoto?: boolean
   paused?: boolean
   liveFaceMesh?:boolean
   liveMeshDebug?:boolean
@@ -59,7 +63,7 @@ const chooseOutputHeight = (livePreview=false) => {
  * Face mesh and person segmentation run on-device (MediaPipe) so reshape and
  * background effects follow the face frame-by-frame.
  */
-export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotFile=null, audio = false, livePreview=false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false, liveSculpt }: Options) {
+export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotFile=null, audio = false, livePreview=false, smartPhoto=false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false, liveSculpt }: Options) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -101,6 +105,10 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const compareRef = useRef(false)
+  const smartPhotoRef=useRef(smartPhoto)
+  const photoSamplerRef=useRef<HTMLCanvasElement|null>(null)
+  const photoSampleMsRef=useRef(0)
+  const photoCorrectionRef=useRef(NEUTRAL_PHOTOGRAPHIC_CORRECTION)
 
   const [facing, setFacing] = useState<Facing>('user')
   const [status, setStatus] = useState<CameraStatus>('idle')
@@ -126,6 +134,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
   const [resolution, setResolution] = useState<{ width: number; height: number } | null>(null)
 
   stateRef.current = state
+  smartPhotoRef.current=smartPhoto
   activeRef.current = !paused
   liveMeshEnabledRef.current=liveFaceMesh
   liveSculptRef.current=normalizeLiveSculpt(liveSculpt)
@@ -554,6 +563,30 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
         runVision(now).catch(() => { faceRef.current=null; setVision('unavailable') })
         const current = stateRef.current
         const original = compareRef.current
+        // Local 32x18 metering (2 Hz maximum). Never transmit, retain, or
+        // upload sampled camera pixels. Ignore sampling errors on mobile.
+        if(!original&&smartPhotoRef.current&&now-photoSampleMsRef.current>=500){
+          const elapsed=photoSampleMsRef.current?now-photoSampleMsRef.current:500
+          photoSampleMsRef.current=now
+          try{
+            if(!photoSamplerRef.current){
+              const sampler=document.createElement('canvas')
+              sampler.width=32;sampler.height=18
+              photoSamplerRef.current=sampler
+            }
+            const ctx=photoSamplerRef.current.getContext('2d',{willReadFrequently:true})
+            if(ctx){
+              ctx.drawImage(video,0,0,32,18)
+              const image=ctx.getImageData(0,0,32,18)
+              const target=targetPhotographicCorrection(estimateAmbientLight(image.data,32,18))
+              photoCorrectionRef.current=smoothPhotographicCorrection(
+                photoCorrectionRef.current,target,elapsed)
+            }
+          }catch{/* Sampling is optional; retain the last safe correction. */}
+        }
+        const baseColor=original?neutralColor:resolveColor(current)
+        const photographicColor=!original&&smartPhotoRef.current
+          ?applyPhotographicCorrection(baseColor,photoCorrectionRef.current):baseColor
         const pilotHeadProp=current.face.id===FIRST_GPU_LIVE_FILTER_ID
          const currentWarp=(!original&&!pilotHeadProp&&liveMeshEnabledRef.current&&
          hasLiveSculpt(liveSculptRef.current)&&
@@ -611,7 +644,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
               threeEngineRef.current.updatePhotorealLight(video,now/1000)
             const cameraInput:RenderInput|undefined=candidate?{
               source:video,
-              color:original?neutralColor:resolveColor(current),
+              color:photographicColor,
               beauty:original?neutralBeauty:beauty,
               effects:original?neutralEffects:current.effects,
               faceFx:neutralFaceFx,
@@ -645,7 +678,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
           try{
             filteredFrameReadyRef.current=rendererRef.current.render({
               source:video,
-              color:original?neutralColor:resolveColor(current),
+              color:photographicColor,
               beauty:original?neutralBeauty:beauty,
               effects:original?neutralEffects:current.effects,
               faceFx:neutralFaceFx,
@@ -698,6 +731,8 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
   const flip = useCallback(() => {
     faceRef.current = null
     face3DRef.current=null
+    photoCorrectionRef.current=NEUTRAL_PHOTOGRAPHIC_CORRECTION
+    photoSampleMsRef.current=0
     return start(facing === 'user' ? 'environment' : 'user')
   }, [facing, start])
 
