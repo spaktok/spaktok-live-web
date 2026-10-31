@@ -1,4 +1,5 @@
 import 'server-only'
+import { ensureSchema } from '@/lib/server/spaktok-schema'
 import { randomUUID } from 'node:crypto'
 import { oneD1, queryD1 } from '@/lib/native/d1'
 import {
@@ -33,6 +34,7 @@ async function isBusy(userId: string, now: number): Promise<boolean> {
 export type CreateResult = { ok: true; id: string } | { ok: false; error: 'guest_not_found' | 'cannot_battle_self' | 'host_busy' | 'guest_busy' }
 
 export async function createBattle(hostId: string, guestUsername: string, rounds: PkRounds, roundSeconds: PkRoundSeconds): Promise<CreateResult> {
+  await ensureSchema('pk')
   const guest = await oneD1<{ id: string }>('SELECT id FROM profiles WHERE lower(username)=? LIMIT 1', [guestUsername])
   if (!guest) return { ok: false, error: 'guest_not_found' }
   if (guest.id === hostId) return { ok: false, error: 'cannot_battle_self' }
@@ -48,6 +50,7 @@ export async function createBattle(hostId: string, guestUsername: string, rounds
 }
 
 export async function respondToInvite(battleId: string, guestId: string, accept: boolean): Promise<boolean> {
+  await ensureSchema('pk')
   const now = Date.now()
   const result = accept
     ? await queryD1(
@@ -61,6 +64,7 @@ export async function respondToInvite(battleId: string, guestId: string, accept:
 
 /** Either participant may end the battle early; it is recorded as cancelled with no winner. */
 export async function cancelBattle(battleId: string, userId: string): Promise<boolean> {
+  await ensureSchema('pk')
   const now = Date.now()
   const result = await queryD1(
     `UPDATE pk_battles SET status='cancelled',ended_by=? WHERE id=? AND (host_id=? OR guest_id=?) AND (
@@ -73,6 +77,7 @@ export async function cancelBattle(battleId: string, userId: string): Promise<bo
 export type VoteResult = { ok: true; round: number } | { ok: false; error: 'not_found' | 'battle_not_live' | 'participant_cannot_vote' | 'already_voted' }
 
 export async function castVote(battleId: string, voterId: string, side: PkSide): Promise<VoteResult> {
+  await ensureSchema('pk')
   const battle = await oneD1<Row>(`${SELECT} WHERE b.id=?`, [battleId])
   if (!battle) return { ok: false, error: 'not_found' }
   const now = Date.now()
@@ -88,6 +93,7 @@ export async function castVote(battleId: string, voterId: string, side: PkSide):
 }
 
 export async function battleState(battleId: string, viewerId: string | null) {
+  await ensureSchema('pk')
   const raw = await oneD1<Row>(`${SELECT} WHERE b.id=?`, [battleId])
   if (!raw) return null
   const battle = normalize(raw)
@@ -123,6 +129,7 @@ export async function battleState(battleId: string, viewerId: string | null) {
 }
 
 export async function listBattles(userId: string | null) {
+  await ensureSchema('pk')
   const now = Date.now()
   const live = (await queryD1<Row>(
     `${SELECT} WHERE b.status='active' AND b.started_at_ms + b.rounds*b.round_seconds*1000 > ?
