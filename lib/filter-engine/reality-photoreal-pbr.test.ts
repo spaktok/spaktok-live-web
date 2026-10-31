@@ -70,11 +70,16 @@ describe('Face AR V2 camera-matched photo-PBR',()=>{
  })
  it('switches metalness, coat and scattering in-place, never changing tracking',()=>{
   const {geo,mask}=setup()
+  // Brushed metal should allow facial details to remain visible.
+  const initial=mask.mesh.material.uniforms
+  expect((initial.uBaseColor.value as THREE.Color).r).toBeGreaterThan(.2)
+  expect(initial.uOpacity.value).toBeLessThan(.75)
+  expect(mask.mesh.material.fragmentShader).toContain('vec3 reflection=f0')
   mask.setFinish('porcelain')
   expect(mask.mesh.material.uniforms.uMetalness.value).toBe(.04)
   expect(mask.mesh.material.uniforms.uSubsurface.value).toBe(.28)
   mask.setFinish('titanium')
-  expect(mask.mesh.material.uniforms.uMetalness.value).toBe(.75)
+  expect(mask.mesh.material.uniforms.uMetalness.value).toBe(.66)
   expect(mask.mesh.material.uniforms.uSubsurface.value).toBe(0)
   mask.setLighting({brightness:.80,warmth:.30,side:.5})
   const bright=mask.mesh.material.uniforms.uAmbient.value

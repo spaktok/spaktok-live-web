@@ -146,7 +146,7 @@ const FRAGMENT_SHADER=[
  ' vec3 up=abs(normal.y)<.94?vec3(0.,1.,0.):vec3(1.,0.,0.);',
  ' vec3 tangent=normalize(cross(up,normal));',
  ' vec3 bitangent=normalize(cross(normal,tangent));',
- ' vec3 n=normalize(normal+(micro.r-.5)*.12*tangent+(micro.g-.5)*.12*bitangent);',
+ ' vec3 n=normalize(normal+(micro.r-.5)*.065*tangent+(micro.g-.5)*.065*bitangent);',
  ' vec3 v=vec3(0.,0.,1.);',
  ' vec3 l=normalize(uLightDir);',
  ' vec3 h=normalize(v+l);',
@@ -154,7 +154,7 @@ const FRAGMENT_SHADER=[
  ' float nV=max(dot(n,v),.045);',
  ' float nH=max(dot(n,h),0.);',
  ' float vH=max(dot(v,h),0.);',
- ' float rough=clamp(uRoughness+(micro.b-.5)*.22,.14,.87);',
+ ' float rough=clamp(uRoughness+(micro.b-.5)*.14,.18,.87);',
  ' float metal=clamp(uMetalness,0.,1.);',
  ' float a=max(.03,rough*rough);',
  ' vec3 f0=mix(vec3(.04),uBaseColor,metal);',
@@ -167,7 +167,8 @@ const FRAGMENT_SHADER=[
  ' float wrap=(dot(n,l)+.5)/1.5;',
  ' vec3 skinScatter=uBaseColor*uSubsurface*max(wrap,0.)*.20;',
  ' vec3 ambient=uBaseColor*(1.-metal)*uAmbient;',
- ' vec3 reflection=f0*uAmbient*(.65+.35*nV);',
+ // Cheap broad environmental fill to avoid charcoal metal without an HDR probe.
+ ' vec3 reflection=f0*(.27+.82*uAmbient)*(.70+.30*nV);',,
  ' float coatD=ggx(nH,.075);',
  ' float coatF=.04+.96*pow(1.-vH,5.);',
  ' vec3 clearcoat=vec3(coatD*coatF*nL*uClearcoat*.033);',
@@ -200,16 +201,16 @@ export class PrecisionFaceSurfaceMask{
    vertexShader:VERTEX_SHADER,fragmentShader:FRAGMENT_SHADER,
    uniforms:{
     uMicro:{value:this.microTexture},
-    uBaseColor:{value:new THREE.Color(0x405d69)},
+    uBaseColor:{value:new THREE.Color(0x92aab6)},
     uLightColor:{value:new THREE.Color(0xffeadf)},
     uLightDir:{value:new THREE.Vector3(-.25,.40,1).normalize()},
     uStrength:{value:.85},
-    uMetalness:{value:.75},
-    uRoughness:{value:.34},
+    uMetalness:{value:.66},
+    uRoughness:{value:.42},
     uClearcoat:{value:.34},
     uSubsurface:{value:0},
     uAmbient:{value:.3},
-    uOpacity:{value:.86},
+    uOpacity:{value:.68},
    },
    transparent:true,depthTest:true,depthWrite:false,
    side:THREE.DoubleSide,
@@ -233,12 +234,12 @@ export class PrecisionFaceSurfaceMask{
    u.uSubsurface.value=.28
    u.uOpacity.value=.91
   }else{
-   ;(u.uBaseColor.value as THREE.Color).set(0x405d69)
-   u.uMetalness.value=.75
-   u.uRoughness.value=.34
+   ;(u.uBaseColor.value as THREE.Color).set(0x92aab6)
+   u.uMetalness.value=.66
+   u.uRoughness.value=.42
    u.uClearcoat.value=.34
    u.uSubsurface.value=0
-   u.uOpacity.value=.86
+   u.uOpacity.value=.68
   }
  }
  /** Existing 32x18 camera light estimate; no second pixel readback. */

@@ -157,7 +157,10 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
 
   const camera = useCameraStudio({
    state:studio,localPhotoFaceFile,firstGpuPilotFile,audio:mode!=='photo'&&mode!=='live',livePreview:mode==='live',
-   paused:Boolean(captured),liveFaceMesh:isLive&&mode==='live',
+   paused:Boolean(captured),
+   // Existing 3D AR already tracks the 478-point face. A second
+   // subdivided mesh runs only for optional sculpt / QA wireframes.
+   liveFaceMesh:isLive&&mode==='live'&&(liveFaceOptIn||liveMeshQa),
    liveMeshDebug:liveMeshQa&&isLive,
    liveSculpt:isLive&&liveFaceOptIn?liveSculpt:NEUTRAL_LIVE_SCULPT,
   })
@@ -620,13 +623,13 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
               <div dir="rtl" className="rounded-2xl border border-cyan-300/20 bg-slate-950/65 px-3 py-2.5 text-white shadow-xl backdrop-blur-md">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span role="status" className="flex items-center gap-2 text-xs font-semibold text-cyan-200">
-                    <span className={camera.liveMeshInfo?.tracking?'h-2 w-2 rounded-full bg-emerald-400':'h-2 w-2 rounded-full bg-amber-400'}/>
+                    <span className={camera.vision==='tracking'?'h-2 w-2 rounded-full bg-emerald-400':'h-2 w-2 rounded-full bg-amber-400'}/>
                     {faceArSelected
                      ? `${selectedFaceName} · ${camera.vision!=='tracking'?'انتظار الوجه':
                          studio.face.id.startsWith('3d-')
                           ? camera.threeStatus==='ready'?'✓ الفلتر جاهز':camera.threeStatus==='unavailable'?'⚠ غير متاح':'جارٍ التجهيز'
                           : '✓ مؤثر ثنائي الأبعاد'}`
-                     : camera.liveMeshInfo?.tracking?'الصورة الأصلية · ✓ الوجه متتبَّع'
+                     : camera.vision==='tracking'?'الصورة الأصلية · ✓ الوجه متتبَّع'
                        :camera.vision==='loading'?'تحميل التتبع…':'الصورة الأصلية · وجّه وجهك نحو الكاميرا'}
                   </span>
                   <button type="button" onClick={()=>setShowLiveMeshDetails(v=>!v)}
@@ -636,11 +639,10 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
                   </button>
                 </div>
                 {showLiveMeshDetails&&<div className="mt-2 space-y-2 border-t border-white/10 pt-2 text-[11px] leading-5 text-slate-300">
-                  <p>تتبّع {camera.liveMeshInfo?.measuredLandmarks??'—'} نقطة ·
-                    مستوى تقسيم {camera.liveMeshInfo?.levels??'—'} ·
-                    FPS {camera.previewFps??'—'}
+                  <p>تتبّع {camera.vision==='tracking'?478:'—'} نقطة · FPS {camera.previewFps??'—'} ·
+                   شبكة النحت الإضافية {liveMeshQa||liveFaceOptIn?'مفعّلة':'متوقفة لتوفير الأداء'}
                   </p>
-                  <p>العدد المعروض هو مثلثات الشبكة المحسوبة، وليس مليون نقطة مقاسة أو عدد مثلثات GPU المرسومة.</p>
+                  <p>فلتر PBR يستخدم شبكة الوجه الأساسية، ولا يحتاج شبكة النحت أو رسم خطوطها.</p>
                   <p>الإضاءة: {liveLookActive?'تم تطبيق الإعداد المختار':'أصلية'}. هذه معاينة محلية، وليست بثًا عامًا.</p>
                   <label className="flex items-center gap-2">
                     <input type="checkbox" checked={liveMeshQa} onChange={e=>setLiveMeshQa(e.target.checked)}/>

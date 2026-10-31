@@ -48,7 +48,7 @@ type VideoWithFrameCallback = HTMLVideoElement & {
 const chooseOutputHeight = (livePreview=false) => {
   // On touch phones, LIVE AR uses a smaller GPU surface for responsive tracking.
   if (livePreview && typeof window !== 'undefined' &&
-      window.matchMedia?.('(pointer:coarse)').matches) return 960
+      window.matchMedia?.('(pointer:coarse)').matches) return 720
   const cpu = navigator.hardwareConcurrency || 4
   const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
   return cpu <= 4 || (memory !== undefined && memory <= 3) ? 960 : 1280
@@ -564,7 +564,10 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
         const overlayCtx=overlay?.getContext('2d')
         if(overlayCtx && overlay){
           overlayCtx.clearRect(0,0,overlay.width,overlay.height)
-          if(compositeArRef.current && !original){
+          // 3D face-surface masks use Three.js and do not paint a 2D overlay.
+            // Skip redundant per-frame Canvas2D transforms for those effects.
+            if(compositeArRef.current && !original &&
+              !isFace3DSelected(current.face.id) && current.face.id!=='face-morph'){
             drawFaceMask(overlayCtx,faceRef.current,current.face,
               video.videoWidth,video.videoHeight,overlay.width,overlay.height,
               facing==='user',now/1000)
