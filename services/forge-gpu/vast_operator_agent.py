@@ -100,7 +100,18 @@ def api(base: str, path: str, *, method: str, body: bytes | None = None,
                 raise OperatorError("remote_response_too_large")
             return raw
     except error.HTTPError as exc:
-        raise OperatorError("remote_http_" + str(exc.code)) from None
+        # Only expose a validated error *code* from our own Worker.
+        # Never print response HTML, URLs, headers, or secret tokens.
+        reason = "remote_http_" + str(exc.code)
+        if exc.headers.get("content-type", "").startswith("application/json"):
+            try:
+                message = json.loads(exc.read(512))
+                error_code = message.get("error") if isinstance(message, dict) else None
+                if isinstance(error_code, str) and re.fullmatch(r"[a-z0-9_]{1,50}", error_code):
+                    reason += "_" + error_code
+            except (ValueError, OSError):
+                pass
+        raise OperatorError(reason) from None
     except error.URLError:
         raise OperatorError("remote_unreachable") from None
 
