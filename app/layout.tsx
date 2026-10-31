@@ -4,6 +4,9 @@ import { Cairo } from 'next/font/google'
 import './globals.css'
 import { APP_LOGO_URL } from '@/lib/brand'
 import { LanguageProvider } from '@/components/language-provider'
+import { cookies, headers } from 'next/headers'
+import { LOCALE_COOKIE, directionOf, resolveLocale } from '@/lib/i18n/config'
+import { loadMessages } from '@/lib/i18n/messages'
 
 const cairo = Cairo({
   subsets: ['arabic', 'latin', 'latin-ext'],
@@ -39,15 +42,18 @@ export const viewport: Viewport = {
   colorScheme: 'dark',
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const [cookieStore, requestHeaders] = await Promise.all([cookies(), headers()])
+  const locale = resolveLocale(cookieStore.get(LOCALE_COOKIE)?.value, requestHeaders.get('accept-language'))
+  const messages = await loadMessages(locale)
   return (
-    <html lang="en" dir="ltr" className={`${cairo.variable} bg-background`}>
+    <html lang={locale} dir={directionOf(locale)} className={`${cairo.variable} bg-background`}>
       <body className="font-sans antialiased" style={{ fontFamily: 'var(--font-cairo), system-ui, sans-serif' }}>
-        <LanguageProvider>{children}</LanguageProvider>
+        <LanguageProvider initialLanguage={locale} initialMessages={messages}>{children}</LanguageProvider>
       </body>
     </html>
   )

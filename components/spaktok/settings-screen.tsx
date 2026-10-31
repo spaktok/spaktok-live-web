@@ -67,7 +67,7 @@ interface SettingSection {
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const { user: authUser, signOut } = useAuth()
   const { language, languageName, setLanguage, t } = useLanguage()
-  const languageLabel = t('language', 'اللغة')
+  const languageLabel = t('settings.language')
   const [settings, setSettings] = useState(defaultSettings);
   const [exporting,setExporting]=useState(false)
   useEffect(()=>{
@@ -124,7 +124,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       title: "المظهر والتفضيلات",
       items: [
         { icon: <Moon className="w-5 h-5" />, label: "الوضع الليلي", action: "toggle", settingKey: "darkMode", value: settings.darkMode },
-        { icon: <Globe className="w-5 h-5" />, label: t('language', 'اللغة'), action: "navigate", badge: languageName },
+        { icon: <Globe className="w-5 h-5" />, label: t('settings.language'), action: "navigate", badge: languageName },
         { icon: <Smartphone className="w-5 h-5" />, label: "توفير البيانات", description: "تقليل استهلاك الإنترنت", action: "toggle", settingKey: "dataSaver", value: settings.dataSaver },
       ],
     },
@@ -197,7 +197,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
               <ChevronLeft className="w-5 h-5" />
             </Button>
           )}
-              <h1 className="text-xl font-bold">{t('settings', 'الإعدادات')}</h1>
+              <h1 className="text-xl font-bold">{t('settings.title')}</h1>
         </div>
       </div>
 
