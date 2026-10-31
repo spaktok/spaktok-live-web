@@ -13,6 +13,7 @@ const noStore={'cache-control':'no-store','x-content-type-options':'nosniff'};
 const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{...noStore,'content-type':'application/json'}});
 const sha=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(x=>x.toString(16).padStart(2,'0')).join('');
 const clock=()=>Math.floor(Date.now()/1000);
+const enrollmentOpen=env=>env.VAST_ENROLL_ENABLED==='true'&&Number(env.VAST_ENROLL_EXPIRES_AT||0)>clock();
 function equal(a,b){if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let d=0;for(let i=0;i<a.length;i++)d|=a.charCodeAt(i)^b.charCodeAt(i);return d===0;}
 async function limitedJson(req,limit=4096){
  const length=Number(req.headers.get('content-length')||'0');
@@ -36,10 +37,10 @@ async function leased(env,id,deviceId){
 }
 async function respond(req,env){
  const url=new URL(req.url),path=url.pathname;
- if(path==='/health'&&req.method==='GET')return json({service:'spaktok-vast-operator',configured:!!(env.VAST_DB&&env.VAST_ASSETS),gpuRented:false,publicCommandSubmission:false,enrollment:env.VAST_ENROLL_ENABLED==='true'});
+ if(path==='/health'&&req.method==='GET')return json({service:'spaktok-vast-operator',configured:!!(env.VAST_DB&&env.VAST_ASSETS),gpuRented:false,publicCommandSubmission:false,enrollment:enrollmentOpen(env)});
  if(!env.VAST_DB||!env.VAST_ASSETS)return json({error:'operator_bindings_missing'},503);
  if(path==='/v1/agent/enroll'&&req.method==='POST'){
-  if(env.VAST_ENROLL_ENABLED!=='true')return json({error:'enrollment_closed'},403);
+  if(!enrollmentOpen(env))return json({error:'enrollment_closed'},403);
   let input;try{input=await limitedJson(req,600)}catch{return json({error:'invalid_request'},400)}
   if(!DEVICE.test(input?.deviceId)||!HASH.test(input?.tokenSha256)||!CODE.test(input?.pairCode))return json({error:'invalid_enrollment'},422);
   const existing=await env.VAST_DB.prepare("SELECT COUNT(*) AS count FROM vast_agent_devices WHERE state='pending' AND expires_at>?").bind(clock()).first();
