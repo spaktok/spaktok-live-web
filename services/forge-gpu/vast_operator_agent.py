@@ -81,8 +81,20 @@ def read_config() -> dict:
 def api(base: str, path: str, *, method: str, body: bytes | None = None,
         device: dict | None = None, headers: dict | None = None,
         max_output: int = 4096, timeout: int = 45) -> bytes:
-    if not path.startswith("/v1/agent/") or ".." in path or "//" in path:
+    """Outbound HTTPS transport through curl, as validated on Vast.ai.
+
+    Some Vast network routes return an HTML 403 to urllib's TLS fingerprint.
+    A curl POST was verified to reach this Cloudflare Worker (HTTP 422 on
+    deliberately invalid JSON). Never place authorization headers or payload
+    bytes in process arguments: pipe curl's configuration via stdin and store
+    request/response only in a 0700 temporary directory with 0600 files.
+    """
+    base = operator_url(base)
+    if (not path.startswith("/v1/agent/") or ".." in path or "//" in path
+            or "?" in path or "#" in path or method not in ("GET", "POST", "PUT")):
         raise OperatorError("bad_agent_path")
+    if not isinstance(max_output, int) or max_output < 1 or max_output > MAX_GLB:
+        raise OperatorError("invalid_response_limit")
     req_headers = {"Accept": "application/json"}
     if body is not None:
         req_headers["Content-Type"] = "application/json"
@@ -91,30 +103,64 @@ def api(base: str, path: str, *, method: str, body: bytes | None = None,
         req_headers["x-vast-device-id"] = device["deviceId"]
     if headers:
         req_headers.update(headers)
-    req = request.Request(base + path, data=body,
-                          headers=req_headers, method=method)
-    try:
-        with request.build_opener(NoRedirect).open(req, timeout=timeout) as resp:
-            raw = resp.read(max_output + 1)
-            if len(raw) > max_output:
-                raise OperatorError("remote_response_too_large")
-            return raw
-    except error.HTTPError as exc:
-        # Only expose a validated error *code* from our own Worker.
-        # Never print response HTML, URLs, headers, or secret tokens.
-        reason = "remote_http_" + str(exc.code)
-        if exc.headers.get("content-type", "").startswith("application/json"):
+    if not all(isinstance(k, str) and isinstance(v, str) and
+               re.fullmatch(r"[A-Za-z0-9-]{1,64}", k) and
+               not any(ch in v for ch in "\r\n\x00")
+               for k, v in req_headers.items()):
+        raise OperatorError("unsafe_request_header")
+    with tempfile.TemporaryDirectory(prefix="spaktok-vast-https-") as folder:
+        private = Path(folder)
+        os.chmod(private, 0o700)
+        result_file = private / "response"
+        config = [
+            "url = " + json.dumps(base + path),
+            "request = " + json.dumps(method),
+            "output = " + json.dumps(str(result_file)),
+            "write-out = " + json.dumps("%{http_code}"),
+        ]
+        for key, value in req_headers.items():
+            config.append("header = " + json.dumps(key + ": " + value))
+        if body is not None:
+            source = private / "request"
+            with source.open("xb") as fd:
+                fd.write(body)
+            os.chmod(source, 0o600)
+            config.append("data-binary = " + json.dumps("@" + str(source)))
+        try:
+            proc = subprocess.run(
+                ["curl", "-q", "--silent", "--show-error", "--max-time",
+                 str(timeout), "--max-redirs", "0", "--retry", "0",
+                 "--config", "-"],
+                input=("\n".join(config) + "\n").encode("utf-8"),
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                timeout=timeout + 5, check=False,
+            )
+        except FileNotFoundError:
+            raise OperatorError("curl_not_installed") from None
+        except subprocess.TimeoutExpired:
+            raise OperatorError("remote_timeout") from None
+        if proc.returncode != 0:
+            raise OperatorError("remote_transport_failed")
+        status_text = proc.stdout.decode("ascii", errors="replace").strip()
+        if len(status_text) != 3 or not status_text.isdigit():
+            raise OperatorError("remote_status_invalid")
+        status = int(status_text)
+        if not result_file.is_file():
+            raise OperatorError("remote_response_missing")
+        if result_file.stat().st_size > max_output:
+            raise OperatorError("remote_response_too_large")
+        raw = result_file.read_bytes()
+        if status < 200 or status >= 300:
+            label = "remote_http_" + str(status)
             try:
-                message = json.loads(exc.read(512))
-                error_code = message.get("error") if isinstance(message, dict) else None
-                if isinstance(error_code, str) and re.fullmatch(r"[a-z0-9_]{1,50}", error_code):
-                    reason += "_" + error_code
-            except (ValueError, OSError):
+                obj = json.loads(raw[:512])
+                code = obj.get("error") if isinstance(obj, dict) else None
+                if isinstance(code, str) and re.fullmatch(r"[a-z0-9_]{1,50}", code):
+                    label += "_" + code
+            except (ValueError, UnicodeError):
                 pass
-        raise OperatorError(reason) from None
-    except error.URLError:
-        raise OperatorError("remote_unreachable") from None
-
+            raise OperatorError(label)
+        return raw
 
 def post_json(base: str, path: str, payload: dict,
               device: dict | None = None) -> dict:
