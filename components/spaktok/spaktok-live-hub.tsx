@@ -2,9 +2,10 @@
 import {useEffect,useState} from 'react'
 import {
  ArrowRight,BarChart3,Crown,Eye,Heart,Medal,Radio,RefreshCcw,
- ShieldCheck,SlidersHorizontal,Smartphone,Users,Video,WifiOff,
+ ShieldCheck,Smartphone,Users,Video,WifiOff,
 } from 'lucide-react'
 import {cn} from '@/lib/utils'
+import {SpaktokPkArena} from '@/components/spaktok/spaktok-pk-arena'
 
 type Tab='live'|'ranking'|'battle'
 type Period='week'|'month'|'all'
@@ -30,8 +31,6 @@ export function SpaktokLiveHub({onOpenLivePreview,onUserClick}:Props){
  const [loading,setLoading]=useState(false)
  const [error,setError]=useState(false)
  const [retry,setRetry]=useState(0)
- const [rounds,setRounds]=useState<3|5>(3)
- const [mode,setMode]=useState<'solo'|'team'>('solo')
  useEffect(()=>{
   if(tab!=='ranking')return
   const controller=new AbortController()
@@ -99,9 +98,9 @@ export function SpaktokLiveHub({onOpenLivePreview,onUserClick}:Props){
     </article>
     <div className="grid gap-3 sm:grid-cols-2">
      <button type="button" onClick={()=>setTab('battle')} className="rounded-3xl border border-white/10 bg-white/[.035] p-5 text-right transition hover:border-[#9db7ff]/40">
-      <Users className="mb-4 size-7 text-[#a6baff]"/><h3 className="font-bold">غرف متعددة وجولات</h3>
-      <p className="mt-2 text-xs leading-6 text-slate-400">معاينة تخطيط الفرق والجولات دون خصم أرصدة وهمية.</p>
-      <span className="mt-3 block text-xs text-[#a8bcff]">استعراض التصميم ←</span>
+      <Users className="mb-4 size-7 text-[#a6baff]"/><h3 className="font-bold">جولات PK</h3>
+      <p className="mt-2 text-xs leading-6 text-slate-400">تحدٍّ بموافقة الطرفين، والساعة والنقاط يحسبها الخادم. تصويت مجاني بلا عملات.</p>
+      <span className="mt-3 block text-xs text-[#a8bcff]">فتح الجولات ←</span>
      </button>
      <button type="button" onClick={()=>setTab('ranking')} className="rounded-3xl border border-white/10 bg-white/[.035] p-5 text-right transition hover:border-[#9db7ff]/40">
       <BarChart3 className="mb-4 size-7 text-[#a6baff]"/><h3 className="font-bold">توب رانك حقيقي</h3>
@@ -138,19 +137,7 @@ export function SpaktokLiveHub({onOpenLivePreview,onUserClick}:Props){
     </ol>}
    </>}
    {tab==='battle'&&<>
-    <div className="rounded-[28px] border border-[#7b91ee]/25 bg-gradient-to-b from-[#162448] to-[#0b1021] p-5">
-     <div className="mb-4 flex items-center gap-2 text-xs font-bold tracking-wider text-[#afc1ff]"><SlidersHorizontal className="size-4"/>مخطط الجولات — تصميم خاص غير منشور</div>
-     <div className="grid grid-cols-2 gap-2">
-      <div className="rounded-2xl border border-[#9dadff]/30 bg-[#344477]/30 p-5 text-center"><Users className="mx-auto mb-2 size-8"/><p className="font-black">المضيف</p><p className="mt-2 text-xs text-slate-400">0 نقطة فعلية</p></div>
-      <div className="rounded-2xl border border-white/10 bg-white/[.06] p-5 text-center"><Users className="mx-auto mb-2 size-8"/><p className="font-black">الضيف</p><p className="mt-2 text-xs text-slate-400">غير متصل</p></div>
-     </div>
-     <div className="my-5 flex justify-center gap-2">{Array.from({length:rounds},(_,i)=><span key={i} className="flex size-9 items-center justify-center rounded-full border border-[#92a7ff]/30 bg-[#3a559f]/20 text-xs font-bold">{i+1}</span>)}</div>
-     <div className="space-y-3">
-      <fieldset><legend className="mb-2 text-xs font-bold text-slate-300">نوع الجولة</legend><div className="grid grid-cols-2 gap-2">{([{id:'solo',label:'فردية'},{id:'team',label:'فرق'}] as const).map(item=><button type="button" key={item.id} aria-pressed={mode===item.id} onClick={()=>setMode(item.id)} className={cn('rounded-xl border p-3 text-sm',mode===item.id?'border-[#abbcff] bg-[#526cd4]/30':'border-white/10')}>{item.label}</button>)}</div></fieldset>
-      <fieldset><legend className="mb-2 text-xs font-bold text-slate-300">عدد الجولات</legend><div className="grid grid-cols-2 gap-2">{([3,5] as const).map(value=><button key={value} type="button" aria-pressed={rounds===value} onClick={()=>setRounds(value)} className={cn('rounded-xl border p-3 text-sm',rounds===value?'border-[#abbcff] bg-[#526cd4]/30':'border-white/10')}>{value} جولات</button>)}</div></fieldset>
-     </div>
-     <p className="mt-5 rounded-xl border border-amber-200/20 bg-amber-200/10 p-3 text-xs leading-6 text-amber-50">هذه معاينة تنسيق {mode==='solo'?'فردي':'فرق'} من {rounds} جولات، وليست منافسة حقيقية. بدء التحدي وحساب النقاط والهدايا يحتاج غرفة بث حقيقية، موافقة الطرفين، وسجل مدفوعات موثوقًا.</p>
-    </div>
+    <SpaktokPkArena/>
     <button type="button" onClick={onOpenLivePreview} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[#a8baff] px-5 py-3 font-bold text-[#09152c]"><Smartphone className="size-4"/>معاينة الكاميرا قبل الجولة</button>
    </>}
   </div>
