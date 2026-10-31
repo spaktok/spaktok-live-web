@@ -67,6 +67,58 @@ def _torch() -> dict:
             "available": obj.get("available") is True}
 
 
+def locate_trellis_python() -> Path | None:
+    """Resolve the exact Conda env named trellis2, without guessing its prefix.
+
+    Vast PyTorch templates commonly place Conda environments under /venv or
+    /opt rather than /workspace. No credentials or raw paths are reported.
+    """
+    if ENV_PYTHON.is_file():
+        return ENV_PYTHON
+    if not shutil.which("conda"):
+        return None
+    try:
+        cmd = _run(["conda", "env", "list", "--json"], timeout=25)
+    except SetupError:
+        return None
+    if cmd.returncode != 0:
+        return None
+    try:
+        entries = json.loads(cmd.stdout).get("envs", [])
+    except (ValueError, AttributeError, TypeError):
+        return None
+    if not isinstance(entries, list):
+        return None
+    for entry in entries:
+        if not isinstance(entry, str):
+            continue
+        prefix = Path(entry)
+        if prefix.is_absolute() and prefix.name == "trellis2":
+            python = prefix / "bin" / "python"
+            if python.is_file():
+                return python
+    return None
+
+
+def _torch_in_runtime(python: Path) -> dict:
+    code = ("import json,torch;"
+            "print(json.dumps({'torch':torch.__version__,"
+            "'cuda':torch.version.cuda,'available':torch.cuda.is_available()}))")
+    try:
+        p = _run([str(python), "-c", code], timeout=45)
+    except SetupError:
+        return {"installed": False}
+    if p.returncode:
+        return {"installed": False}
+    try:
+        info = json.loads(p.stdout)
+    except (ValueError, TypeError):
+        return {"installed": False}
+    return {"installed": True, "version": str(info.get("torch", ""))[:50],
+            "cuda": str(info.get("cuda", ""))[:30],
+            "available": info.get("available") is True}
+
+
 def probe_environment() -> dict:
     out = _disk()
     # No account credentials, environment variables or home paths are reported.
@@ -77,7 +129,13 @@ def probe_environment() -> dict:
     out["torch"] = _torch()
     out["trellisSourcePresent"] = (
         TRELLIS / "trellis2" / "pipelines" / "trellis2_image_to_3d.py").is_file()
-    out["trellisEnvironmentPresent"] = ENV_PYTHON.is_file()
+    runtime = locate_trellis_python()
+    out["trellisEnvironmentPresent"] = runtime is not None
+    out["trellisRuntimeLocation"] = (
+        "workspace" if runtime == ENV_PYTHON else "conda" if runtime else "missing"
+    )
+    if runtime is not None:
+        out["trellisTorch"] = _torch_in_runtime(runtime)
     out["forgeSourcePresent"] = (FORGE_REPO / "services" / "forge-gpu" /
                                  "vast_operator_agent.py").is_file()
     out["sourcePinned"] = False
@@ -173,12 +231,15 @@ def prepare_trellis2_runtime() -> dict:
             raise SetupError("trellis_setup_timeout_review_private_log") from None
     if p.returncode != 0:
         raise SetupError("trellis_setup_failed_review_private_log")
-    if not ENV_PYTHON.is_file():
-        # Existing script uses conda env 'trellis2'; it may not place its Python
-        # at /workspace/trellis2-env. Do not claim the runtime is ready yet.
+    runtime = locate_trellis_python()
+    if runtime is None:
         return {"setupScriptExitedZero": True, "canonicalRuntime": False,
-                "requiresEnvironmentPathReview": True}
-    return {"setupScriptExitedZero": True, "canonicalRuntime": True,
+                "runtimeLocated": False, "requiresEnvironmentPathReview": True}
+    torch = _torch_in_runtime(runtime)
+    return {"setupScriptExitedZero": True, "runtimeLocated": True,
+            "canonicalRuntime": runtime == ENV_PYTHON,
+            "cudaReady": torch.get("available") is True,
+            "trellisTorch": torch,
             "modelWeightsDownloaded": False, "inferenceExecuted": False}
 
 
