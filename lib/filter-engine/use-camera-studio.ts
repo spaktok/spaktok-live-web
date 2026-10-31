@@ -7,7 +7,7 @@ import { composeRealityFrame } from './reality-compositor'
 import { createRealityExecutionPlan, shouldUseRealityGpu2 } from './reality-pipeline'
 import { loadFaceLandmarker, recoverFaceLandmarkerOnCpu, configureFace3DExtras, loadSegmenter, loadHandLandmarker, smoothFace, toFaceGeometry } from './vision'
 import { drawFaceMask } from './face-overlay'
-import {trackingIntervalMs,updatedMean} from './vision-scheduler'
+import {trackingIntervalMs,trackingFreshnessMs,updatedMean} from './vision-scheduler'
 import type {FaceMesh3DEngine,Face3DFrame} from './face3d'
 import type {TrackedHand} from './reality-hand-physics'
 import {stabilizeFaceMesh,hasFreshFace} from './face3d-tracking'
@@ -29,6 +29,7 @@ interface Options {
   localPhotoFaceFile?:File|null
   firstGpuPilotFile?:File|null
   audio?: boolean
+  livePreview?: boolean
   paused?: boolean
   liveFaceMesh?:boolean
   liveMeshDebug?:boolean
@@ -43,7 +44,10 @@ type VideoWithFrameCallback = HTMLVideoElement & {
 }
 
 // Use a smaller WebGL surface on lower-end devices to avoid UI jank.
-const chooseOutputHeight = () => {
+const chooseOutputHeight = (livePreview=false) => {
+  // On touch phones, LIVE AR uses a smaller GPU surface for responsive tracking.
+  if (livePreview && typeof window !== 'undefined' &&
+      window.matchMedia?.('(pointer:coarse)').matches) return 960
   const cpu = navigator.hardwareConcurrency || 4
   const memory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory
   return cpu <= 4 || (memory !== undefined && memory <= 3) ? 960 : 1280
@@ -54,7 +58,7 @@ const chooseOutputHeight = () => {
  * Face mesh and person segmentation run on-device (MediaPipe) so reshape and
  * background effects follow the face frame-by-frame.
  */
-export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotFile=null, audio = false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false, liveSculpt }: Options) {
+export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotFile=null, audio = false, livePreview=false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false, liveSculpt }: Options) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -157,9 +161,9 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: nextFacing },
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            frameRate: { ideal: 30, max: 60 },
+            width: { ideal: livePreview ? 1280 : 1920 },
+            height: { ideal: livePreview ? 720 : 1080 },
+            frameRate: { ideal: 30, max: livePreview ? 30 : 60 },
           },
           audio: audio ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true } : false,
         })
@@ -198,7 +202,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
         setStatus(name === 'NotAllowedError' || name === 'SecurityError' ? 'denied' : 'error')
       }
     },
-    [audio, stopStream],
+    [audio, stopStream, livePreview],
   )
 
   useEffect(() => {
@@ -214,8 +218,8 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
     if (!canvas) return
     const video=videoRef.current
     const rect=video?.getBoundingClientRect()
-    const initial=cameraSurfaceDimensions(rect?.width??0,rect?.height??0,chooseOutputHeight())
-      ??{width:Math.round(chooseOutputHeight()*aspect),height:chooseOutputHeight()}
+    const initial=cameraSurfaceDimensions(rect?.width??0,rect?.height??0,chooseOutputHeight(livePreview))
+      ??{width:Math.round(chooseOutputHeight(livePreview)*aspect),height:chooseOutputHeight(livePreview)}
     canvas.height=initial.height
     canvas.width=initial.width
     filteredFrameReadyRef.current = false
@@ -236,7 +240,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
     compositeCanvasRef.current=composition
     const resizeToActualViewport=()=>{
       const videoRect=video?.getBoundingClientRect()
-      const desired=cameraSurfaceDimensions(videoRect?.width??0,videoRect?.height??0,chooseOutputHeight())
+      const desired=cameraSurfaceDimensions(videoRect?.width??0,videoRect?.height??0,chooseOutputHeight(livePreview))
       if(!desired)return
       if(Math.abs(canvas.width-desired.width)<2&&canvas.height===desired.height)return
       canvas.width=desired.width;canvas.height=desired.height
@@ -261,7 +265,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
       filteredFrameReadyRef.current = false
       compositeCanvasRef.current = null
     }
-  }, [aspect])
+  }, [aspect,livePreview]
 
   useEffect(() => {
     if (!needsFace && !needsMask) {
@@ -549,11 +553,12 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
         runVision(now).catch(() => { faceRef.current=null; setVision('unavailable') })
         const current = stateRef.current
         const original = compareRef.current
-        const currentWarp=(!original&&liveMeshEnabledRef.current&&
+        const pilotHeadProp=current.face.id===FIRST_GPU_LIVE_FILTER_ID
+         const currentWarp=(!original&&!pilotHeadProp&&liveMeshEnabledRef.current&&
          hasLiveSculpt(liveSculptRef.current)&&
          liveWarpRef.current&&now-liveWarpRef.current.timestamp<=375&&faceRef.current)
          ?liveWarpRef.current.frame:null
-        const beauty=currentWarp?{...current.beauty,slim:0,jaw:0,eyes:0,nose:0}:current.beauty
+        const beauty=currentWarp||pilotHeadProp?{...current.beauty,slim:0,jaw:0,eyes:0,nose:0}:current.beauty
         const overlay=arCanvasRef.current
         const overlayCtx=overlay?.getContext('2d')
         if(overlayCtx && overlay){
@@ -595,7 +600,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
         if(isFace3DSelected(current.face.id)&&threeEngineRef.current){
           try{
             const tracked=face3DRef.current
-            const fresh=tracked&&hasFreshFace(tracked.timestamp,now)?tracked:null
+            const fresh=tracked&&hasFreshFace(tracked.timestamp,now,trackingFreshnessMs(inferenceMsRef.current))?tracked:null
             const candidate=shouldUseRealityGpu2(gpu2RequestedRef.current,true,current)
             const cameraInput:RenderInput|undefined=candidate?{
               source:video,
@@ -603,7 +608,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
               beauty:original?neutralBeauty:beauty,
               effects:original?neutralEffects:current.effects,
               faceFx:neutralFaceFx,
-              morph:original||currentWarp?null:cameraMorphForEffect(current.face.id,current.face.strength,current.face.morph),
+              morph:original||currentWarp||pilotHeadProp?null:cameraMorphForEffect(current.face.id,current.face.strength,current.face.morph),
               liveSculpt:currentWarp,
               mirror:facing==='user',
               face:faceRef.current,
@@ -637,7 +642,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
               beauty:original?neutralBeauty:beauty,
               effects:original?neutralEffects:current.effects,
               faceFx:neutralFaceFx,
-              morph:original||currentWarp?null:cameraMorphForEffect(current.face.id,current.face.strength,current.face.morph),
+              morph:original||currentWarp||pilotHeadProp?null:cameraMorphForEffect(current.face.id,current.face.strength,current.face.morph),
               liveSculpt:currentWarp,
               mirror:facing==='user',
               face:faceRef.current,
