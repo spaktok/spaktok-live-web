@@ -16,9 +16,12 @@ fi
 if [[ -z "${HF_HOME:-}" || ! -d "${HF_HOME}" ]]; then
   echo >&2 "HF_HOME_not_configured_or_missing"; exit 2
 fi
-if [[ "${CONDA_PREFIX:-}" != "/workspace/trellis2-env" ]]; then
-  echo >&2 "activate_existing_trellis2-env_first"; exit 2
-fi
+# The upstream TRELLIS.2 installer creates a named Conda environment
+# whose actual prefix varies by Vast.ai template (/venv, /opt/conda, etc.).
+case "${CONDA_PREFIX:-}" in
+  */trellis2|*/trellis2-env) ;;
+  *) echo >&2 "activate_named_trellis2_conda_environment_first"; exit 2 ;;
+esac
 if [[ ! -f /workspace/TRELLIS.2/trellis2/pipelines/trellis2_image_to_3d.py ]]; then
   echo >&2 "TRELLIS2_checkout_missing"; exit 2
 fi
