@@ -322,7 +322,8 @@ def execute(job: dict, device: dict) -> dict:
                 "driver": first[2][:50], "deviceCount": len(lines),
                 "trellis2Checkout": model_repo.is_file(),
                 "trellis2Environment": python_env is not None,
-                "localGpuApiReady": api_ready, "localGpuEngine": api_engine}
+                "localGpuApiReady": api_ready, "localGpuEngine": api_engine,
+                "autoTrellisJobLauncher": (HERE / "vast_local_trellis_service.py").is_file()}
     if action in {"preflight", "diagnose_dinov3"}:
         from vast_setup_tasks import locate_trellis_python
         model_python = locate_trellis_python()
