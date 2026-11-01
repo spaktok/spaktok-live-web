@@ -19,6 +19,18 @@ describe('Reality execution plan', () => {
     })
   })
 
+  it('starts local face tracking for texture-preserving smoothing alone', () => {
+    const state=createStudioState()
+    state.face.id='none'
+    state.beauty.smooth=0.35
+    const plan=createRealityExecutionPlan(state)
+    expect(plan.trackFace).toBe(true)
+    expect(plan.faceOverlay).toBe(false)
+    expect(plan.threeDimensional).toBe(false)
+    state.beauty.smooth=0
+    expect(createRealityExecutionPlan(state).trackFace).toBe(false)
+  })
+
   it('does not require inference for a neutral effect', () => {
     const p = createRealityExecutionPlan(createStudioState())
     expect(p.trackFace).toBe(false)
