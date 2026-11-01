@@ -25,7 +25,7 @@ export async function GET() {
     await queryD1('SELECT auth_version FROM auth_sessions LIMIT 1')
     const user = await getNativeUser()
     return reply({ configured:true,user,registration: registrationReady() ? (betaRegistrationOpen() ? 'limited_beta' : 'invite_only') : 'disabled' })
-  } catch {return reply({configured:false,user:null},503)}
+  } catch {return reply({configured:true,user:null,error:'auth_unavailable'},503)}
 }
 export async function POST(req: NextRequest) {
   if (!nativeAuthReady()) return reply({error:'native_auth_not_configured'},503)
