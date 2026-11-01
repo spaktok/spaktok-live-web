@@ -13,6 +13,7 @@ import {
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
 import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,loadFirstGpuOwnerR2,firstGpuErrorMessage,normalizeFirstGpuCalibration,FIRST_GPU_CALIBRATION_STORAGE_KEY} from '@/lib/filter-engine/spaktok-first-gpu-live'
 import {CROWN_V2_FILTER_ID,verifiedCrownV2Buffer,loadCrownV2OwnerR2,crownV2ArabicError} from '@/lib/filter-engine/crown-v2-private-live'
+import type {CrownV2ColorPresetId} from '@/lib/filter-engine/crown-v2-draft-colors'
 import {inspectPhotoFacePickerFile,photoFacePickerArabicError} from '@/lib/filter-engine/reality-photo-file-picker'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
 import { StudioPanel } from './studio/studio-panel'
@@ -114,6 +115,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
   const [liveTitle, setLiveTitle] = useState('')
   const [firstGpuPilotFile,setFirstGpuPilotFile]=useState<File|null>(null)
   const [crownV2File,setCrownV2File]=useState<File|null>(null)
+  const [crownV2Preset,setCrownV2Preset]=useState<CrownV2ColorPresetId>('royal-rainbow')
   const [crownV2Busy,setCrownV2Busy]=useState(false)
   const [crownV2Message,setCrownV2Message]=useState('التاج الأصلي V2 جاهز كمسودة خاصة في R2؛ يمكنك تحميله لتجربته على رأسك.')
   useEffect(()=>{
@@ -198,7 +200,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
   },[initialFaceFxId])
 
   const camera = useCameraStudio({
-   state:studio,localPhotoFaceFile,firstGpuPilotFile,crownV2File,audio:mode!=='photo'&&mode!=='live',livePreview:mode==='live',
+   state:studio,localPhotoFaceFile,firstGpuPilotFile,crownV2File,crownV2Preset,audio:mode!=='photo'&&mode!=='live',livePreview:mode==='live',
    paused:Boolean(captured),smartPhoto,
    // Existing 3D AR already tracks the 478-point face. A second
    // subdivided mesh runs only for optional sculpt / QA wireframes.
@@ -647,7 +649,8 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
             firstGpuBusy={firstGpuBusy} firstGpuMessage={firstGpuMessage}
             onImportFirstGpu={activateFirstGpu} onFetchFirstGpu={fetchFirstGpu}
             crownV2Ready={Boolean(crownV2File)} crownV2Busy={crownV2Busy}
-            crownV2Message={crownV2Message} onFetchCrownV2={fetchCrownV2}
+            crownV2Message={crownV2Message} crownV2Preset={crownV2Preset}
+            onCrownV2PresetChange={setCrownV2Preset} onFetchCrownV2={fetchCrownV2}
             onImportCrownV2={activateCrownV2}/>}
         {mode==='live'&&studio.face.id===CROWN_V2_FILTER_ID&&
           <p dir="rtl" role="status" className="pointer-events-none absolute inset-x-4 top-[max(4.75rem,env(safe-area-inset-top))] z-20 rounded-lg bg-black/70 px-3 py-2 text-center text-[11px] text-amber-100">
