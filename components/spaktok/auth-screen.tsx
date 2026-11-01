@@ -98,7 +98,10 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
       const body=await response.json() as {success?:boolean;error?:string;recoveryCode?:string}
       if (!response.ok || !body.success) {
         const errors:Record<string,string>={
-          native_auth_not_configured:'قاعدة بيانات Cloudflare غير مُهيأة بعد. يلزم ربطها من إعدادات الإدارة.',
+          native_auth_not_configured:'تسجيل الدخول غير مهيأ على هذا النطاق. افتح موقع Spaktok الرئيسي أو تواصل مع الإدارة.',
+          auth_unavailable:'خدمة الحسابات غير متاحة حاليًا. يرجى التحقق من حالة Cloudflare D1 وإعدادات الدخول.',
+          invalid_origin:'تم رفض الطلب لأن نطاق الصفحة لا يطابق نطاق تسجيل الدخول. افتح Spaktok على النطاق الرئيسي مباشرة.',
+          invalid_request:'حجم الطلب غير صالح. امسح الحقول وأعد المحاولة.',
           registration_not_configured:'التسجيل بدعوة غير مُفعّل حتى يكمل المدير إعداد Cloudflare.',
           invalid_login:'البريد أو كلمة المرور غير صحيحة. إذا حذفت قاعدة الحسابات السابقة، عليك إنشاء حساب جديد.',
           already_registered:'الحساب موجود بالفعل. جرّب تسجيل الدخول.',
@@ -396,7 +399,7 @@ export function AuthScreen({ onComplete, initialError }: AuthScreenProps) {
 
                 {mode === 'login' && (
                   <p className="text-right text-xs text-muted-foreground">
-                    إذا حذفت قاعدة Supabase القديمة، فلا يمكن استخدام كلمة مرور الحساب القديم. أنشئ حسابًا جديدًا برمز الدعوة.
+                    الحسابات من نظام تسجيل الدخول السابق لا تُنقل تلقائيًا إلى Cloudflare D1. إذا لم يُنقل حسابك، اطلب استعادته من الإدارة بدل إنشاء حساب مكرر.
                   </p>
                 )}
                 <Button
