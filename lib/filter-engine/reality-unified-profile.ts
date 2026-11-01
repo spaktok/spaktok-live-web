@@ -1,8 +1,9 @@
 import {
- createStudioState,filterPresets,faceFxCatalog,
+ createStudioState,filterPresets,
  type StudioState,type FaceFxId,
 } from './params'
 import {DEFAULT_FACE_MORPH} from './reality-face-morph'
+import {PUBLIC_PHOTOGRAPHIC_FACE_FX} from './photographic-filter-policy'
 import {REALITY_EFFECTS,getRealityEffect,type RealityEffectManifest} from './reality-effect-manifest'
 
 /** Shared *authoring and scheduling* contract for video, camera and live.
@@ -171,8 +172,8 @@ export const REALITY_SHARED_EFFECT_OPTIONS:ReadonlyArray<
 >=REALITY_EFFECTS.filter(effect=>effect.id!=='3d-photo-face')
  .map(effect=>({id:effect.id,name:effect.name,kind:effect.kind}))
 
-export const REALITY_SHARED_FACE_OPTIONS=faceFxCatalog
- .filter(e=>e.id!=='none'&&e.id!=='3d-photo-face')
+export const REALITY_SHARED_FACE_OPTIONS=PUBLIC_PHOTOGRAPHIC_FACE_FX
+ .filter(e=>e.id!=='none')
  .map(e=>({id:e.id as FaceFxId,name:e.name}))
 export const REALITY_SHARED_GRADE_OPTIONS=filterPresets.map(
  preset=>({id:preset.id,name:preset.name}))
