@@ -1,7 +1,7 @@
 {
   "assetId": "spaktok-studio/filters/crown/royal-crown-01",
-  "version": "2026-11-01.3",
-  "state": "reference-prepared-generation-not-run",
+  "version": "2026-11-01.4",
+  "state": "gpu-generated-private-pending-geometry-and-visual-qa",
   "source": {
     "filename": "crown_reference_original.png",
     "sha256": "883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e",
@@ -98,7 +98,7 @@
     "manifest": "studio/private/filters/crown/royal-crown-01/manifest.json"
   },
   "gates": {
-    "gpuGeneration": false,
+    "gpuGeneration": true,
     "meshMatchedToReference": false,
     "materialSlotMappingVerified": false,
     "faceTrackingQA": false,
@@ -108,10 +108,25 @@
     "approvedGpuInstance": "58584822",
     "trellis2DiagnosticPassed": true,
     "dinov3CudaTestPassed": true,
-    "gpuServiceLaunched": false,
+    "gpuServiceLaunched": true,
     "privateInputR2Stored": true,
-    "firstGlbCreated": false,
+    "firstGlbCreated": true,
     "description": "Reference+color-palette implementation only. GPU agent still needs a reviewed git pull and verified input upload.",
-    "privateInputR2MetadataChecked": true
+    "privateInputR2MetadataChecked": true,
+    "firstGlbVerifiedInPrivateR2": true,
+    "gpuJobId": "39ad267e-f1ed-2d10-12ef-4c5927616c86",
+    "gpuJobState": "succeeded",
+    "gpuJobFinishedAtUnix": 1793491789,
+    "outputR2Key": "vast-private/output/royal-crown-01/first-run-20261101.glb",
+    "outputBytes": 4856516,
+    "outputSha256": "3ce1d543317590c95b386e5f5f6747c048421cf9a93bbf7a37f2a8b39806822b",
+    "published": false
+  },
+  "quality": {
+    "structuralAudit": "not-executed",
+    "visualSourceComparison": "not-executed",
+    "mobileLODAudit": "not-executed",
+    "referenceImageExactness": "unverified",
+    "materialsSlotCountVerified": false
   }
 }
