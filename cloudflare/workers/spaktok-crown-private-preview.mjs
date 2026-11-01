@@ -65,6 +65,7 @@ footer{max-width:1200px;margin:auto;padding:12px 19px 22px;color:#abb2c5;font-si
  <button data-angle="90deg 80deg auto">الجانب</button>
  <button data-angle="180deg 80deg auto">الخلف</button>
  <button id="spin">إيقاف الدوران</button>
+ <button id="capture">حفظ لقطة PNG من المجسم</button>
  <a class="dl" href="/v1/download/${token}.glb">حفظ GLB الخاص</a>
 </div>
 </section>
@@ -94,6 +95,17 @@ footer{max-width:1200px;margin:auto;padding:12px 19px 22px;color:#abb2c5;font-si
  document.getElementById('spin').addEventListener('click',e=>{
   if(model.hasAttribute('auto-rotate')){model.removeAttribute('auto-rotate');e.target.textContent='استئناف الدوران'}
   else{model.setAttribute('auto-rotate','');e.target.textContent='إيقاف الدوران'}
+ });
+ document.getElementById('capture').addEventListener('click',()=>{
+  if(!model.loaded){msg.textContent='يجب تحميل المجسم قبل حفظ صورة المعاينة.';return}
+  try{
+   const url=model.toDataURL('image/png');
+   if(!url.startsWith('data:image/png;base64,'))throw Error('capture_unavailable');
+   const link=document.createElement('a');
+   link.href=url;link.download='spaktok-royal-crown-01-3d-preview.png';
+   document.body.appendChild(link);link.click();link.remove();
+   msg.textContent='تم تجهيز صورة PNG من زاوية العرض الحالية.';
+  }catch{msg.textContent='تعذر حفظ PNG مباشرة؛ يمكنك التقاط صورة للشاشة من الهاتف.'}
  });
 </script></body></html>`;
 }
