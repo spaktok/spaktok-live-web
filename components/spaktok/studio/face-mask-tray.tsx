@@ -1,7 +1,8 @@
 'use client'
 import {useEffect,useMemo,useRef,useState} from 'react'
 import {ChevronDown,ChevronUp,Heart,Search,ScanFace,X} from 'lucide-react'
-import {faceFxCatalog,type FaceFxParams,type FaceFxId} from '@/lib/filter-engine/params'
+import {type FaceFxParams,type FaceFxId} from '@/lib/filter-engine/params'
+import {PUBLIC_PHOTOGRAPHIC_FACE_FX,PHOTOGRAPHIC_CAMERA_LOOKS} from '@/lib/filter-engine/photographic-filter-policy'
 import {cn} from '@/lib/utils'
 import {FIRST_GPU_LIVE_FILTER_ID,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION} from '@/lib/filter-engine/spaktok-first-gpu-live'
 import {CROWN_V2_FILTER_ID} from '@/lib/filter-engine/crown-v2-private-live'
@@ -98,6 +99,7 @@ export function FaceMaskTray({
  onImportFirstGpu,onFetchFirstGpu,
  crownV2Ready=false,crownV2Busy=false,crownV2Message='',onFetchCrownV2,onImportCrownV2,
  crownV2Preset='royal-rainbow',onCrownV2PresetChange,
+ photoPresetId='original',onPhotoPresetChange,
 }:{
  value:FaceFxParams
  onChange:(value:FaceFxParams)=>void
@@ -117,6 +119,8 @@ export function FaceMaskTray({
  onImportCrownV2?:(file:File)=>void|Promise<void>
  crownV2Preset?:CrownV2ColorPresetId
  onCrownV2PresetChange?:(preset:CrownV2ColorPresetId)=>void
+ photoPresetId?:string
+ onPhotoPresetChange?:(presetId:string)=>void
 }){
  const [tab,setTab]=useState<Category>(liveMode?'3d':'makeup')
  const [search,setSearch]=useState('')
@@ -129,12 +133,12 @@ export function FaceMaskTray({
   try{
    const stored=JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]') as unknown
    if(Array.isArray(stored))setFavorites(stored.filter((id):id is FaceFxId=>
-    typeof id==='string'&&faceFxCatalog.some(e=>e.id===id)).slice(0,100))
+    typeof id==='string'&&PUBLIC_PHOTOGRAPHIC_FACE_FX.some(e=>e.id===id)).slice(0,100))
   }catch{}
  },[])
  const filtered=useMemo(()=>{
   const q=search.trim().toLocaleLowerCase('ar')
-  return faceFxCatalog.filter(fx=>{
+  return PUBLIC_PHOTOGRAPHIC_FACE_FX.filter(fx=>{
     if(fx.id==='3d-photo-face')return false // rejected legacy photo overlay
    if((fx.id===FIRST_GPU_LIVE_FILTER_ID||fx.id===CROWN_V2_FILTER_ID)&&!liveMode)return false
    if(tab==='saved'&&!favorites.includes(fx.id))return false
@@ -163,7 +167,7 @@ export function FaceMaskTray({
     <button type="button" onClick={onToggle}
       className="pointer-events-auto flex items-center gap-2 rounded-full border border-[#adc4ff]/35 bg-[#0d1837]/85 px-4 py-2.5 text-sm font-bold text-white shadow-xl backdrop-blur-lg">
       <ScanFace className="size-5 text-[#a8c2ff]"/> مؤثرات الوجه
-      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/70">{faceFxCatalog.length-1}</span>
+      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] text-white/70">{PUBLIC_PHOTOGRAPHIC_FACE_FX.length-1}</span>
       <ChevronUp className="size-4"/>
     </button>
    ):(
@@ -172,7 +176,7 @@ export function FaceMaskTray({
         <div className="flex min-w-0 items-center gap-1.5">
           <ScanFace className="size-4 text-[#9bbaff]"/>
           <strong className="text-xs text-white">مؤثرات الوجه</strong>
-          <span className="rounded-full bg-white/[.07] px-2 py-0.5 text-[10px] text-white/60">{faceFxCatalog.length-1}</span>
+          <span className="rounded-full bg-white/[.07] px-2 py-0.5 text-[10px] text-white/60">{PUBLIC_PHOTOGRAPHIC_FACE_FX.length-1}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button type="button" onClick={()=>setShowSearch(v=>!v)} aria-label="البحث في المؤثرات" className="rounded-full p-1.5 text-white/80 hover:bg-white/10"><Search className="size-4"/></button>
@@ -194,7 +198,21 @@ export function FaceMaskTray({
           {item.label}
         </button>)}
       </div>
-      {liveMode&&tab==='3d'&&(
+      <div dir="rtl" className="mb-2 rounded-xl border border-white/15 bg-[#0c172a]/85 p-2.5">
+        <p className="mb-1 text-xs font-bold text-white">إطلالات تصوير واقعية</p>
+        <p className="mb-2 text-[10px] leading-4 text-white/65">تعديل ألوان وإضاءة الكاميرا الحقيقية دون تركيب رسوم هندسية أو تغيير الهوية. النتيجة تعتمد على الهاتف والإضاءة.</p>
+        <div className="flex gap-2 overflow-x-auto pb-1" role="group" aria-label="إطلالات تصوير من الكاميرا الحقيقية">
+          {PHOTOGRAPHIC_CAMERA_LOOKS.map(look=><button key={look.id} type="button"
+            onClick={()=>onPhotoPresetChange?.(look.id)}
+            aria-pressed={photoPresetId===look.id}
+            className={cn('flex min-w-[70px] max-w-[84px] shrink-0 flex-col items-center gap-1 rounded-lg border p-1.5 text-[10px]',
+              photoPresetId===look.id?'border-cyan-200 bg-cyan-300/20 text-white':'border-white/10 text-white/70')}>
+            <span className="size-9 rounded-full border border-white/25" style={{backgroundColor:look.swatch}} aria-hidden="true"/>
+            <span className="text-center leading-3">{look.name}</span>
+          </button>)}
+        </div>
+       </div>
+       {liveMode&&tab==='3d'&&(
        <p dir="rtl" className="mb-2 rounded-lg border border-indigo-300/20 bg-indigo-300/10 px-2 py-1.5 text-[10px] leading-4 text-indigo-100">
         ✨ حزمة Spaktok الأصلية: {SPAKTOK_ORIGINAL_PACK_INFO.addedFilters} خامة PBR جديدة
         بدون تنزيل مجسمات إضافية. الخامات PBR تقريبية، وليست تصويرًا فوتوغرافيًا مثبتًا؛ جودة الهاتف قيد الاختبار.
