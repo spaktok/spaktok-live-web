@@ -1,7 +1,7 @@
 {
   "assetId": "spaktok-studio/filters/crown/royal-crown-01",
-  "version": "2026-11-01.6",
-  "state": "private-master-archived-structural-qa-passed-visual-and-material-segmentation-pending",
+  "version": "2026-11-01.7",
+  "state": "owner-rejected-first-trellis2-generation-visual-mismatch",
   "source": {
     "filename": "crown_reference_original.png",
     "sha256": "883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e",
@@ -128,7 +128,8 @@
     "privateMasterSha256": "3ce1d543317590c95b386e5f5f6747c048421cf9a93bbf7a37f2a8b39806822b",
     "privateMasterCopiedFromOriginalGpuOutput": true,
     "privateMasterVerifiedInR2": true,
-    "privateMasterAuditJobId": "2fe3c1a8-2bf3-2a80-5c95-94755d23a5d7"
+    "privateMasterAuditJobId": "2fe3c1a8-2bf3-2a80-5c95-94755d23a5d7",
+    "previewRevoked": true
   },
   "quality": {
     "structuralAudit": "passed",
@@ -144,8 +145,8 @@
     "embeddedImages": 2,
     "mobileBudgetPass": true,
     "mobileBudgetKind": "static-geometry-and-textures-only",
-    "visualSourceComparison": "not-executed",
-    "referenceImageExactness": "unverified",
+    "visualSourceComparison": "failed_owner_review",
+    "referenceImageExactness": "failed_owner_review",
     "materialsSlotCountVerified": false,
     "requiresMaterialZoneSeparation": true,
     "limitation": "The 3D GLB has one PBR material; its gold and gems cannot be independently recolored as named material slots until masks/part segmentation are built and audited. Mobile tracking and visual similarity remain unverified."
@@ -156,5 +157,15 @@
     "independentColorChangesEnabled": false,
     "reason": "The generated GLB contains one PBR material; 5 named metal/gem material slots are not present. Palette code fails closed until separate, visually audited zones exist.",
     "sourceGemTexturePreserved": true
+  },
+  "review": {
+    "reviewedAt": "2026-11-01",
+    "decision": "rejected",
+    "reason": "Generated TRELLIS.2 image-to-3D geometry appears substantially different from owner's exact tiara image despite passing structural mobile budget.",
+    "nextApproach": "Source-textured shallow curved relief preserves frontal pixels as a non-final intermediate; sculpted geometry and individual gem PBR materials still required.",
+    "alternateLocalArtifact": "royal-crown-01-frontal-fidelity-v1.glb",
+    "alternateFrontalArtifactSha256": "88672ff99b9ba59569a156edce89a3fe2e7ce0061fa9506ae6a6695a186d02c0",
+    "alternateInCloudflareR2": false,
+    "alternateLiveApproved": false
   }
 }
