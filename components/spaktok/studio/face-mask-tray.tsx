@@ -4,6 +4,7 @@ import {ChevronDown,ChevronUp,Heart,Search,ScanFace,X} from 'lucide-react'
 import {faceFxCatalog,type FaceFxParams,type FaceFxId} from '@/lib/filter-engine/params'
 import {cn} from '@/lib/utils'
 import {FIRST_GPU_LIVE_FILTER_ID,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION} from '@/lib/filter-engine/spaktok-first-gpu-live'
+import {CROWN_V2_FILTER_ID} from '@/lib/filter-engine/crown-v2-private-live'
 import {SPAKTOK_ORIGINAL_PACK_INFO} from '@/lib/filter-engine/spaktok-original-face-filters'
 import {REALITY_EFFECT_AUDIT,type RealityVisualStage} from '@/lib/filter-engine/reality-effect-audit'
 import {getMakeupPalette,type MakeupLookId} from '@/lib/filter-engine/makeup3d'
@@ -94,6 +95,7 @@ export function FaceMaskTray({
  value,onChange,visible,onToggle,liveMode=false,activeLive=false,
  firstGpuReady=false,firstGpuBusy=false,firstGpuMessage='',
  onImportFirstGpu,onFetchFirstGpu,
+ crownV2Ready=false,crownV2Busy=false,crownV2Message='',onFetchCrownV2,onImportCrownV2,
 }:{
  value:FaceFxParams
  onChange:(value:FaceFxParams)=>void
@@ -106,6 +108,11 @@ export function FaceMaskTray({
  firstGpuMessage?:string
  onImportFirstGpu?:(file:File)=>void|Promise<void>
  onFetchFirstGpu?:()=>void|Promise<void>
+ crownV2Ready?:boolean
+ crownV2Busy?:boolean
+ crownV2Message?:string
+ onFetchCrownV2?:()=>void|Promise<void>
+ onImportCrownV2?:(file:File)=>void|Promise<void>
 }){
  const [tab,setTab]=useState<Category>(liveMode?'3d':'makeup')
  const [search,setSearch]=useState('')
@@ -125,7 +132,7 @@ export function FaceMaskTray({
   const q=search.trim().toLocaleLowerCase('ar')
   return faceFxCatalog.filter(fx=>{
     if(fx.id==='3d-photo-face')return false // rejected legacy photo overlay
-   if(fx.id===FIRST_GPU_LIVE_FILTER_ID&&!liveMode)return false
+   if((fx.id===FIRST_GPU_LIVE_FILTER_ID||fx.id===CROWN_V2_FILTER_ID)&&!liveMode)return false
    if(tab==='saved'&&!favorites.includes(fx.id))return false
    if(tab!=='all'&&tab!=='saved'&&fx.group!==tab)return false
    return !q||fx.name.toLocaleLowerCase('ar').includes(q)||fx.id.includes(q)
@@ -208,6 +215,24 @@ export function FaceMaskTray({
         <p role="status" className="text-[10px] leading-4 text-amber-100">{firstGpuMessage}</p>
        </div>
       )}
+      {liveMode&&tab==='3d'&&(
+       <div dir="rtl" className="mb-2 space-y-2 rounded-xl border border-amber-300/25 bg-[#261d14]/80 p-2.5 text-xs text-amber-100">
+        <p className="font-bold">👑 التاج الملكي V2 — نسخة تطوير خاصة</p>
+        <p className="text-[11px] leading-5 text-white/70">GLB من الصورة الأصلية، 32,256 مثلثًا وست مناطق خامات مبدئية. جرّبه في الكاميرا، ثم غيّر المقاس والارتفاع قبل الاعتماد النهائي.</p>
+        <div className="flex flex-wrap gap-2">
+         <button type="button" disabled={crownV2Busy} onClick={()=>{void onFetchCrownV2?.()}}
+          className="rounded-lg bg-amber-700/70 px-3 py-2 text-xs text-white disabled:opacity-50">
+          {crownV2Busy?'جارٍ التحميل…':'تحميل تاج V2 من R2'}
+         </button>
+         <label className="cursor-pointer rounded-lg bg-white/10 px-3 py-2 text-xs text-white">
+          استيراد GLB من الهاتف
+          <input type="file" accept=".glb,model/gltf-binary" className="sr-only"
+           disabled={crownV2Busy} onChange={e=>{const file=e.target.files?.[0];e.target.value='';if(file)void onImportCrownV2?.(file)}}/>
+         </label>
+        </div>
+        <p role="status" className="text-[10px] leading-4 text-amber-100/80">{crownV2Message}</p>
+       </div>
+      )}
       {visibleMasks.length?(
         <div ref={listRef} onScroll={loadMore}
           className="flex snap-x snap-mandatory gap-2 overflow-x-auto pb-1 scrollbar-hide"
@@ -218,6 +243,10 @@ export function FaceMaskTray({
               <button type="button" className="flex w-full flex-col items-center gap-1"
                 title={auditById.get(mask.id)?.photographicUpgrade}
                 onClick={()=>{
+                if(mask.id===CROWN_V2_FILTER_ID&&!crownV2Ready){
+                  void onFetchCrownV2?.()
+                  return
+                }
                 if(mask.id===FIRST_GPU_LIVE_FILTER_ID&&!firstGpuReady){
                   void onFetchFirstGpu?.()
                   return
@@ -229,7 +258,7 @@ export function FaceMaskTray({
                    {mask.id==='3d-gold-crown'?<RoyalCrownSvg/>:mask.group==='makeup'?<MakeupPreview id={mask.id as MakeupLookId}/>:mask.icon}
                  </span>
                 <span className="h-7 w-full overflow-hidden text-center text-[9px] leading-[14px] text-white/85">
-                  {mask.name}{mask.id===FIRST_GPU_LIVE_FILTER_ID?(firstGpuReady?' ✓':' 🔒'):''}
+                  {mask.name}{mask.id===FIRST_GPU_LIVE_FILTER_ID?(firstGpuReady?' ✓':' 🔒'):mask.id===CROWN_V2_FILTER_ID?(crownV2Ready?' ✓':' 🔒'):''}
                 </span>
                 {auditById.get(mask.id)&&<span className="max-w-full truncate rounded-md bg-black/25 px-1 text-[8px] text-cyan-100/80">
                   {photographicStageLabels[auditById.get(mask.id)!.visualStage]}
@@ -244,10 +273,10 @@ export function FaceMaskTray({
           ))}
         </div>
       ):<div className="py-4 text-center text-xs text-white/60">{tab==='saved'?'لم تحفظ أي مؤثر بعد':'لا توجد مؤثرات مطابقة'}</div>}
-      {liveMode&&value.id===FIRST_GPU_LIVE_FILTER_ID&&firstGpuReady&&
+      {liveMode&&((value.id===FIRST_GPU_LIVE_FILTER_ID&&firstGpuReady)||(value.id===CROWN_V2_FILTER_ID&&crownV2Ready))&&
        <section aria-label="معايرة أول مجسم GPU" className="mt-2 space-y-2 border-t border-white/15 pt-2">
         <div className="flex items-center justify-between gap-2">
-         <strong className="text-[11px] text-cyan-100">ضبط مكان مجسم GPU</strong>
+         <strong className="text-[11px] text-cyan-100">{value.id===CROWN_V2_FILTER_ID?'ضبط التاج الملكي V2':'ضبط مكان مجسم GPU'}</strong>
          <button type="button" onClick={()=>onChange({...value,pilot:DEFAULT_FIRST_GPU_CALIBRATION})}
           className="rounded-lg bg-white/10 px-2 py-1 text-[10px] text-white">إعادة الضبط</button>
         </div>
