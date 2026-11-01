@@ -1,9 +1,9 @@
 // Owner-only, short-lived interactive 3D viewer of the VERIFIED Royal Crown 01.
 // Both model and reference are exact immutable private Cloudflare R2 objects.
 // There is no public R2 bucket access and no upload, compute or GLB mutation.
-const MODEL_KEY='studio/private/filters/crown/royal-crown-01/master.glb';
-const MODEL_SHA='3ce1d543317590c95b386e5f5f6747c048421cf9a93bbf7a37f2a8b39806822b';
-const MODEL_BYTES=4856516;
+const MODEL_KEY='vast-private/input/royal-crown-01/reference-locked-v2-source.glb';
+const MODEL_SHA='ee5ec583041a9e2b55e31f718e42670ba5526d2cccfa249b549dece4ad81f129';
+const MODEL_BYTES=3324548;
 const SOURCE_KEY='vast-private/input/royal-crown-01/883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e.png';
 const SOURCE_SHA='883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e';
 const SOURCE_BYTES=2408236;
@@ -26,7 +26,7 @@ function page(token){
  return `<!doctype html><html lang="ar" dir="rtl"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="referrer" content="no-referrer"><meta name="robots" content="noindex,nofollow">
-<title>Spaktok Studio | Royal Crown 01 — عرض ثلاثي الأبعاد</title>
+<title>Spaktok Studio | Royal Crown V2 — معاينة واجهة الصورة الأصلية</title>
 <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.4.0/model-viewer.min.js"></script>
 <style>
 :root{color-scheme:dark;font-family:system-ui,'Segoe UI',sans-serif}
@@ -53,7 +53,7 @@ footer{max-width:1200px;margin:auto;padding:12px 19px 22px;color:#abb2c5;font-si
 <header><h1>Spaktok Studio · التاج الأول 3D</h1><span class="chip">معاينة خاصة مؤقتة</span></header>
 <main class="container">
 <section class="panel">
-<div class="phead">المجسم الحقيقي — Royal Crown 01 (GLB)</div>
+<div class="phead">Royal Crown V2 — المجسم الموجّه بالصورة الأصلية (2.5D)</div>
 <model-viewer id="mv" src="${model}" alt="مجسم التاج المولد من الصورة الأصلية"
  camera-controls auto-rotate rotation-per-second="15deg"
  shadow-intensity="0.55" exposure="1.3" environment-image="neutral"
@@ -73,12 +73,12 @@ footer{max-width:1200px;margin:auto;padding:12px 19px 22px;color:#abb2c5;font-si
 <div class="phead">الصورة الأصلية — مرجع المطابقة</div>
 <div class="original"><img src="${source}" alt="الصورة الأصلية للتاج" loading="lazy"></div>
 <div class="stats">
- <div class="stat"><b>117,788</b><small>مثلث</small></div>
- <div class="stat"><b>4.86 MB</b><small>حجم المجسم</small></div>
- <div class="stat"><b>1</b><small>خامة PBR</small></div>
- <div class="stat"><b>2</b><small>صورة خامة مدمجة</small></div>
+ <div class="stat"><b>32,256</b><small>مثلث</small></div>
+ <div class="stat"><b>3.32 MB</b><small>حجم المجسم</small></div>
+ <div class="stat"><b>6</b><small>خامات PBR أولية</small></div>
+ <div class="stat"><b>1</b><small>صورة PNG أصلية مدمجة</small></div>
 </div>
-<div class="note">هذه نتيجة TRELLIS.2 الفعلية. الشكل الأمامي يحتاج مراجعة بصرية، والجهات الخلفية تقديرية لأنها مستنتجة من صورة واحدة. الألوان الثمانية غير مفعّلة بعد بسبب وجود خامة واحدة.</div>
+<div class="note">هذه نسخة V2 جديدة تحفظ ملف PNG الأصلي كاملًا كخامة أمامية. العمق وحلقة الخلف مصممان بصورة تقريبية، وليسا إعادة بناء 100٪ من صورة واحدة. الخامات الست مبدئية، وتغيير الألوان يتطلب اختبارًا بصريًا قبل Live.</div>
 </aside>
 </main>
 <footer>لا يزال المجسم خاصًا بالمالك، ولم ينشر كفلتر Live. يمكن فحصه بصريًا هنا أو حفظ نسخة GLB للمراجعة. الرابط مؤقت؛ لا تشاركه مع الآخرين.</footer>
