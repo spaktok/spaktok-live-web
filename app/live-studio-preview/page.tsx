@@ -11,7 +11,7 @@ import {SafeLiveCamera} from '@/components/spaktok/safe-live-camera'
 export default function LiveStudioPreviewPage(){
  const [open,setOpen]=useState(false)
  const [crownV2,setCrownV2]=useState(false)
- if(open)return <SafeLiveCamera initialMode="live" initialFaceFxId={crownV2?'3d-royal-crown-v2':'3d-precision-cyber-mask'} onClose={()=>setOpen(false)}/>
+ if(open)return <SafeLiveCamera privatePreview initialMode="live" initialFaceFxId={crownV2?'3d-royal-crown-v2':'3d-precision-cyber-mask'} onClose={()=>setOpen(false)}/>
  return <main dir="rtl" className="min-h-dvh bg-[#070a12] px-5 py-14 text-white">
   <section className="mx-auto max-w-xl space-y-6 rounded-3xl border border-cyan-500/25 bg-[#111a2b] p-6 shadow-2xl sm:p-9">
    <p className="text-sm font-semibold tracking-wider text-cyan-300">SpakTok Reality • Local Live QA</p>
