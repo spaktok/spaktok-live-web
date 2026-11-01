@@ -417,9 +417,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
   // Do not permanently cover the crown with a misleading "loading" banner.
   // Once 3D is visibly rendering, use silent status unless tracking fails.
   const faceHint = !faceArSelected || camera.status !== 'ready' ? null :
-    camera.threeStatus === 'ready' && studio.face.id==='3d-gold-crown' && camera.threeQuality==='fallback'
-      ? 'تعذر تحميل التاج التفصيلي؛ يُعرض نموذج احتياطي'
-      : camera.threeStatus === 'unavailable' && studio.face.id.startsWith('3d-')
+    camera.threeStatus === 'unavailable' && studio.face.id.startsWith('3d-')
       ? 'تعذّر تحميل المجسم ثلاثي الأبعاد'
       : camera.vision === 'unavailable'
         ? 'تتبع الوجه غير متاح — تحقق من إذن الكاميرا'
@@ -459,6 +457,10 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
 
         {!captured&&!camera.recording&&mode!=='live'&&
           <div className="absolute inset-x-0 top-[max(5.5rem,env(safe-area-inset-top))] z-20 flex flex-col items-center gap-1 px-3" dir="rtl">
+            <a href="/live-studio-preview"
+              className="rounded-full border border-amber-300/60 bg-black/85 px-4 py-2 text-[11px] font-semibold text-amber-100 shadow-lg backdrop-blur-md">
+              👑 تاج V2 الأصلي — معاينة المالك فقط
+            </a>
             <button type="button"
               className="rounded-full border border-cyan-300/45 bg-[#0d1935]/85 px-4 py-2 text-[11px] font-semibold text-white shadow-lg backdrop-blur-md"
               aria-label="اختر ملف GLB من ملفات هاتفك لتجربة فلتر الوجه"
