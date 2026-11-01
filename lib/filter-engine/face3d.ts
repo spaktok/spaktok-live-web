@@ -35,12 +35,14 @@ import {segmentHandOnce,semanticHandMaskFresh,type RealitySemanticHand} from './
 import {RealityLivePhotoFace,LOCAL_PHOTO_FACE_ID} from './reality-live-photo-face'
 import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION,type FirstGpuPilotCalibration} from './spaktok-first-gpu-live'
 import {centeredPreviewTransform} from './spaktok-glb-preview-transform'
+import {CROWN_V2_FILTER_ID,verifiedCrownV2Buffer} from './crown-v2-private-live'
 import {PRECISION_FACE_MASK_ID,PORCELAIN_FACE_MASK_ID,PrecisionFaceSurfaceMask,isPhotorealSurfaceId} from './reality-precision-face-mask'
 import {SPAKTOK_ORIGINAL_FACE_FINISHES} from './spaktok-original-face-filters'
 
 export const face3DPresets = [
  {id:'3d-lux-glasses',name:'نظارات ثلاثية',icon:'🥽',group:'3d'},
  {id:'3d-gold-crown',name:'تاج ثلاثي',icon:'👑',group:'3d'},
+ {id:CROWN_V2_FILTER_ID,name:'تاجك الأصلي V2 • تجريبي',icon:'👑',group:'3d'},
  {id:'3d-space-visor',name:'خوذة فضاء',icon:'🪐',group:'3d'},
  {id:'3d-metal-cap',name:'قبعة معدنية',icon:'🧢',group:'3d'},
  {id:'3d-crystal',name:'جوهرة ثلاثية',icon:'💎',group:'3d'},
@@ -280,10 +282,11 @@ export class FaceMesh3DEngine{
  setGpuPilotCalibration(input:unknown){
   const p=normalizeFirstGpuCalibration(input)
   this.pilotCalibration=p
-  if(this.current!==FIRST_GPU_LIVE_FILTER_ID||
-     this.model?.name!=='SpaktokFirstGpuPrivateHeadProp')return
+  if(this.current!==FIRST_GPU_LIVE_FILTER_ID&&this.current!==CROWN_V2_FILTER_ID)return
+  const crown=this.current===CROWN_V2_FILTER_ID
+  if(this.model?.name!==(crown?'SpaktokCrownV2DraftHeadProp':'SpaktokFirstGpuPrivateHeadProp'))return
   this.model.scale.setScalar(p.scale)
-  this.model.position.set(0,p.vertical,p.depth)
+  this.model.position.set(0,(crown?-.28:0)+p.vertical,p.depth)
   this.model.rotation.y=THREE.MathUtils.degToRad(p.rotation)
  }
  private photoFace:RealityLivePhotoFace|null=null
@@ -412,9 +415,10 @@ export class FaceMesh3DEngine{
   }
  }
  async setLens(id:Face3DId,pilotFile:File|null=null):Promise<boolean>{
-  if(this.current===id&&(id!==FIRST_GPU_LIVE_FILTER_ID||this.pilotFile===pilotFile))
+  const privateFileEffect=id===FIRST_GPU_LIVE_FILTER_ID||id===CROWN_V2_FILTER_ID
+  if(this.current===id&&(!privateFileEffect||this.pilotFile===pilotFile))
    return this.lensReady
-  this.pilotFile=id===FIRST_GPU_LIVE_FILTER_ID?pilotFile:null
+  this.pilotFile=privateFileEffect?pilotFile:null
   this.current=id
   this.handPhysics.reset()
   this.lastHandInteraction=null
@@ -436,17 +440,18 @@ export class FaceMesh3DEngine{
     this.modelQuality='fallback'
     return true
    }
-   if(id===FIRST_GPU_LIVE_FILTER_ID){
-    if(!pilotFile)throw Error('first_gpu_private_file_required')
-    const buffer=await verifiedFirstGpuBuffer(pilotFile)
+   if(id===FIRST_GPU_LIVE_FILTER_ID||id===CROWN_V2_FILTER_ID){
+    if(!pilotFile)throw Error('private_glb_required')
+    const crown=id===CROWN_V2_FILTER_ID
+    const buffer=await (crown?verifiedCrownV2Buffer(pilotFile):verifiedFirstGpuBuffer(pilotFile))
     const gltf=await this.loader.parseAsync(buffer,'')
     const model=gltf.scene
     const bbox=new THREE.Box3().setFromObject(model)
-    if(bbox.isEmpty())throw Error('first_gpu_empty_mesh')
+    if(bbox.isEmpty())throw Error('private_glb_empty_mesh')
     const fit=centeredPreviewTransform(
-     bbox.getCenter(new THREE.Vector3()),bbox.getSize(new THREE.Vector3()),.58)
+     bbox.getCenter(new THREE.Vector3()),bbox.getSize(new THREE.Vector3()),crown?.84:.58)
     const wrapper=new THREE.Group()
-    wrapper.name='SpaktokFirstGpuPrivateHeadProp'
+    wrapper.name=crown?'SpaktokCrownV2DraftHeadProp':'SpaktokFirstGpuPrivateHeadProp'
     model.scale.setScalar(fit.scale)
     model.position.set(fit.offset.x,fit.offset.y,fit.offset.z)
     wrapper.add(model)
