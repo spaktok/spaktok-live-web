@@ -219,7 +219,7 @@ export function FaceMaskTray({
         بدون تنزيل مجسمات إضافية. الخامات PBR تقريبية، وليست تصويرًا فوتوغرافيًا مثبتًا؛ جودة الهاتف قيد الاختبار.
        </p>
       )}
-      privatePreview&&{liveMode&&tab==='3d'&&(
+      {privatePreview&&liveMode&&tab==='3d'&&(
        <div dir="rtl" className="mb-2 space-y-2 rounded-xl border border-cyan-400/20 bg-[#101c36]/75 p-2.5 text-xs text-cyan-100">
         <p className="font-bold">🧬 أول فلتر GPU • معاينة خاصة</p>
         <p className="text-[11px] leading-5 text-white/65">GLB أصلي يتبع الرأس للتجربة فقط؛ ليس أفاتارًا بوجه متحرك ولا بثًا عامًا.</p>
@@ -238,7 +238,7 @@ export function FaceMaskTray({
         <p role="status" className="text-[10px] leading-4 text-amber-100">{firstGpuMessage}</p>
        </div>
       )}
-      privatePreview&&{liveMode&&tab==='3d'&&(
+      {privatePreview&&liveMode&&tab==='3d'&&(
        <div dir="rtl" className="mb-2 space-y-2 rounded-xl border border-amber-300/25 bg-[#261d14]/80 p-2.5 text-xs text-amber-100">
         <p className="font-bold">👑 التاج الملكي V2 — نسخة تطوير خاصة</p>
         <p className="text-[11px] leading-5 text-white/70">GLB من الصورة الأصلية، 32,256 مثلثًا وست مناطق خامات مبدئية. جرّبه في الكاميرا، ثم غيّر المقاس والارتفاع قبل الاعتماد النهائي.</p>
