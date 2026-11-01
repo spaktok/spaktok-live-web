@@ -5,7 +5,7 @@ import {type FaceFxParams,type FaceFxId} from '@/lib/filter-engine/params'
 import {PUBLIC_PHOTOGRAPHIC_FACE_FX,PHOTOGRAPHIC_CAMERA_LOOKS} from '@/lib/filter-engine/photographic-filter-policy'
 import {cn} from '@/lib/utils'
 import {FIRST_GPU_LIVE_FILTER_ID,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION} from '@/lib/filter-engine/spaktok-first-gpu-live'
-import {CROWN_V2_FILTER_ID} from '@/lib/filter-engine/crown-v2-private-live'
+import {CROWN_V2_FILTER_ID,DEFAULT_CROWN_V2_CALIBRATION} from '@/lib/filter-engine/crown-v2-private-live'
 import {CROWN_V2_COLOR_PRESETS,type CrownV2ColorPresetId} from '@/lib/filter-engine/crown-v2-draft-colors'
 import {SPAKTOK_ORIGINAL_PACK_INFO} from '@/lib/filter-engine/spaktok-original-face-filters'
 import {REALITY_EFFECT_AUDIT,type RealityVisualStage} from '@/lib/filter-engine/reality-effect-audit'
@@ -259,7 +259,7 @@ export function FaceMaskTray({
        <section aria-label="معايرة أول مجسم GPU" className="mt-2 space-y-2 border-t border-white/15 pt-2">
         <div className="flex items-center justify-between gap-2">
          <strong className="text-[11px] text-cyan-100">{value.id===CROWN_V2_FILTER_ID?'ضبط التاج الملكي V2':'ضبط مكان مجسم GPU'}</strong>
-         <button type="button" onClick={()=>onChange({...value,pilot:DEFAULT_FIRST_GPU_CALIBRATION})}
+         <button type="button" onClick={()=>onChange({...value,pilot:value.id===CROWN_V2_FILTER_ID?DEFAULT_CROWN_V2_CALIBRATION:DEFAULT_FIRST_GPU_CALIBRATION})}
           className="rounded-lg bg-white/10 px-2 py-1 text-[10px] text-white">إعادة الضبط</button>
         </div>
         {([
