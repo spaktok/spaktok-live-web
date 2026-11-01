@@ -13,7 +13,7 @@ MODEL = "trellis2-rev-20261031"
 
 
 def make_glb(*, empty=False) -> bytes:
-    geometry = b"\\x00" * 36
+    geometry = b"\x00" * 36
     document = {"asset": {"version": "2.0"}}
     if not empty:
         document.update({
@@ -29,7 +29,7 @@ def make_glb(*, empty=False) -> bytes:
         return struct.pack("<4sII", b"glTF", 2, 20 + len(raw)) + struct.pack("<I4s", len(raw), b"JSON") + raw
     return (struct.pack("<4sII", b"glTF", 2, 28 + len(raw) + len(geometry)) +
             struct.pack("<I4s", len(raw), b"JSON") + raw +
-            struct.pack("<I4s", len(geometry), b"BIN\\x00") + geometry)
+            struct.pack("<I4s", len(geometry), b"BIN\x00") + geometry)
 
 
 class EvidenceTests(unittest.TestCase):
@@ -74,7 +74,7 @@ class EvidenceTests(unittest.TestCase):
 
     def test_bogus_geometry_buffer_is_rejected(self):
         raw = make_glb()
-        self.glb.write_bytes(raw.replace(b"BIN\\x00", b"NOPE"))
+        self.glb.write_bytes(raw.replace(b"BIN\x00", b"NOPE"))
         self.payload["results"][0]["sha256"] = hashlib.sha256(self.glb.read_bytes()).hexdigest()
         self.assertFalse(self.check()["verified"])
 
