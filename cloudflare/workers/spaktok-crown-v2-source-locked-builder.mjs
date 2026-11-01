@@ -163,7 +163,8 @@ const j=(obj,status=200)=>new Response(JSON.stringify(obj),{status,
  headers:{'content-type':'application/json','cache-control':'no-store'}});
 async function build(env){
  const old=await env.CROWN_DB.prepare("SELECT status FROM studio_crown_v2_build WHERE id='royal-crown-01'").first();
- if(old)return;
+ if(old?.status==='succeeded')return;
+ if(old?.status==='failed')await env.CROWN_DB.prepare("DELETE FROM studio_crown_v2_build WHERE id='royal-crown-01' AND status='failed'").run();
  let result={},error=null;
  try{
   const rights=await env.CROWN_DB.prepare(
@@ -187,7 +188,7 @@ async function build(env){
    materials:model.materials,sourceSha256:SOURCE_SHA,sourcePngEmbeddedUnchanged:true,
    frontPixelsReused:true,backsideSourceUnknown:true,visualQa:false,
    full3dSimilarity100PercentGuaranteed:false,liveApproved:false};
- }catch(ex){error=ex instanceof Error&&/^[a-z0-9_]{1,60}$/.test(ex.message)?ex.message:'build_error'}
+ }catch(ex){const message=ex instanceof Error?ex.name+':'+ex.message:'unknown_error';error='build_error';result={diagnostic:message.slice(0,260)}}
  await env.CROWN_DB.prepare(
   "INSERT OR IGNORE INTO studio_crown_v2_build(id,status,result_json,error_code,completed_at) VALUES('royal-crown-01',?,?,?,?)"
  ).bind(error?'failed':'succeeded',JSON.stringify(result),error,Math.floor(Date.now()/1000)).run();
