@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "npm run test:cloudflare-only && node scripts/build-couture-glb.mjs && npm run test:word:gate && npm run test:studio:worker && next build",
+    "build": "npm run test:security:api && npm run test:cloudflare-only && node scripts/build-couture-glb.mjs && npm run test:word:gate && npm run test:studio:worker && next build",
     "dev": "next dev",
     "lint": "eslint .",
     "start": "next start",
@@ -22,7 +22,8 @@
     "test:studio:worker:canary": "node scripts/test-private-studio-worker.mjs",
     "test:studio:ai:free:canary": "node scripts/test-director-ai-worker.mjs",
     "test:hi3d": "node --test lib/server/hi3d-api.test.mjs",
-    "hi3d:smoke": "node scripts/hi3d-v3-smoke.mjs"
+    "hi3d:smoke": "node scripts/hi3d-v3-smoke.mjs",
+    "test:security:api": "vitest run --config vitest.config.ts lib/native/auth.test.ts lib/native/request-security.test.ts lib/native/activity-pagination.test.ts lib/native/activity-time.test.ts lib/filter-engine/crown-v2-private-live.test.ts"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
