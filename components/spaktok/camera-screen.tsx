@@ -13,7 +13,7 @@ import {
 } from '@/lib/filter-engine/reality-unified-profile'
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
 import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,loadFirstGpuOwnerR2,firstGpuErrorMessage,normalizeFirstGpuCalibration,FIRST_GPU_CALIBRATION_STORAGE_KEY} from '@/lib/filter-engine/spaktok-first-gpu-live'
-import {CROWN_V2_FILTER_ID,verifiedCrownV2Buffer,loadCrownV2OwnerR2,crownV2ArabicError} from '@/lib/filter-engine/crown-v2-private-live'
+import {CROWN_V2_FILTER_ID,verifiedCrownV2Buffer,loadCrownV2OwnerR2,crownV2ArabicError,CROWN_V2_CALIBRATION_STORAGE_KEY,DEFAULT_CROWN_V2_CALIBRATION} from '@/lib/filter-engine/crown-v2-private-live'
 import type {CrownV2ColorPresetId} from '@/lib/filter-engine/crown-v2-draft-colors'
 import {inspectPhotoFacePickerFile,photoFacePickerArabicError} from '@/lib/filter-engine/reality-photo-file-picker'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
@@ -43,7 +43,10 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
    const state=createStudioState()
    const initial=safeInitialCameraFaceFx(initialFaceFxId,privatePreview)
    // Original private assets must pass verification before they can activate.
-   return initial==='none'||initial===CROWN_V2_FILTER_ID||initial===FIRST_GPU_LIVE_FILTER_ID?state:{
+   if(privatePreview&&initial===CROWN_V2_FILTER_ID)return{
+    ...state,face:{...state.face,pilot:DEFAULT_CROWN_V2_CALIBRATION},
+   }
+   return initial==='none'||initial===FIRST_GPU_LIVE_FILTER_ID?state:{
     ...state,face:{...state.face,id:initial,strength:.85},
    }
   })
@@ -127,7 +130,9 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
   const [crownV2Message,setCrownV2Message]=useState('التاج الأصلي V2 جاهز كمسودة خاصة في R2؛ يمكنك تحميله لتجربته على رأسك.')
   useEffect(()=>{
    try{
-    const stored=localStorage.getItem(FIRST_GPU_CALIBRATION_STORAGE_KEY)
+    const key=privatePreview&&initialFaceFxId===CROWN_V2_FILTER_ID
+      ?CROWN_V2_CALIBRATION_STORAGE_KEY:FIRST_GPU_CALIBRATION_STORAGE_KEY
+    const stored=localStorage.getItem(key)
     if(!stored)return
     const calibration=normalizeFirstGpuCalibration(JSON.parse(stored) as unknown)
     setStudio(prev=>({...prev,face:{...prev.face,pilot:calibration}}))
@@ -145,7 +150,8 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
    if(mode==='live'&&face.id!==studio.face.id)setShowFaceTray(false)
    if((face.id!==FIRST_GPU_LIVE_FILTER_ID&&face.id!==CROWN_V2_FILTER_ID)||!face.pilot)return
    try{
-    localStorage.setItem(FIRST_GPU_CALIBRATION_STORAGE_KEY,
+    localStorage.setItem(face.id===CROWN_V2_FILTER_ID
+      ?CROWN_V2_CALIBRATION_STORAGE_KEY:FIRST_GPU_CALIBRATION_STORAGE_KEY,
      JSON.stringify(normalizeFirstGpuCalibration(face.pilot)))
    }catch{/* Device settings are optional. */}
   }
