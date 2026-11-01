@@ -7,14 +7,19 @@ export function shouldRunExtraLiveMesh(
 ):boolean{
  return isLive&&liveMode&&(sculptOptIn||wireframeDebug)
 }
-/** The camera capture stays at its original 720p target; only the internal
- * composite/WebGL surface is downscaled for LIVE on coarse-pointer phones.
- * This does not claim a measured FPS improvement.
+/** Live render resolution follows conservative device tiers rather than
+ * forcing all mobile phones into a soft 720-pixel render target. Actual
+ * camera capture/recording constraints and sustained GPU FPS remain separate.
  */
 export function choosePreviewSurfaceHeight(
  livePreview:boolean,touchDevice:boolean,cores:number,memoryGb?:number,
 ):number{
- if(livePreview&&touchDevice)return 720
- return cores<=4||(Number.isFinite(memoryGb)&&memoryGb!==undefined&&memoryGb<=3)
-  ?960:1280
+ const knownMemory=Number.isFinite(memoryGb)&&memoryGb!==undefined&&memoryGb>0
+ const low=cores<=4||(knownMemory&&memoryGb!<=3)
+ if(livePreview&&touchDevice){
+  if(low)return 720
+  if(cores>=8&&knownMemory&&memoryGb!>=6)return 1080
+  return 900
+ }
+ return low?960:1280
 }
