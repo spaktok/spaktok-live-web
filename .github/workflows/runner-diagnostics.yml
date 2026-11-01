@@ -1,0 +1,33 @@
+name: Spaktok Runner Diagnostics
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/runner-diagnostics.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  github-hosted-runner:
+    name: GitHub runner allocation and basic tools
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Prove runner starts
+        run: |
+          echo "SPAKTOK_RUNNER_STARTED"
+          echo "OS=$RUNNER_OS"
+          python3 --version
+          node --version
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Confirm main branch files are reachable
+        run: |
+          test -f package.json
+          test -f services/forge-gpu/test_verify_gpu_evidence.py
+          echo "SPAKTOK_CHECKOUT_OK"
