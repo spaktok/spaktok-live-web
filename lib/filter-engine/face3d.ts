@@ -17,7 +17,6 @@ import {estimateAmbientLight,adaptiveJewelryLight} from './lighting3d'
 import type {FaceFxId,MakeupOverrides} from './params'
 import {makeupLooks} from './makeup3d'
 import {FaceMakeupLayer} from './makeup3d-render'
-import {makePremiumAccessory} from './face3d-premium'
 import {prepareUploadedCrown} from './crown-uploaded-asset'
 import {getFaceRealityEffect} from './reality-effect-manifest'
 import {RealityEffectRuntime} from './reality-effect-runtime'
@@ -471,13 +470,9 @@ export class FaceMesh3DEngine{
    }
    const runtime=new RealityEffectRuntime<THREE.Object3D>({
     loadAuthoredGLB:async uri=>(await this.loader.loadAsync(uri)).scene,
-    createProceduralPreview:effect=>
-     effect.kind==='face-surface'?new THREE.Group():
-     id===LOCAL_PHOTO_FACE_ID?new THREE.Group():
-     makePremiumAccessory(id) ?? (id==='3d-lux-glasses'?makeGlasses():
-      id==='3d-gold-crown'?makeCrown():
-      id==='3d-space-visor'?makeVisor():
-      id==='3d-expression'?makeExpressionMask():makeCap()),
+    // Face-surface deformation needs an empty tracking group, not an
+    // invented accessory. The runtime rejects all un-authored wearables.
+    createProceduralPreview:()=>new THREE.Group(),
     calibrateAuthored:(node,effect)=>{
      if(effect.asset?.calibration==='owner-crown-v1'){
       prepareUploadedCrown(node)
