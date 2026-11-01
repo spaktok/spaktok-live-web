@@ -108,6 +108,8 @@ def main() -> int:
     parser.add_argument("--out-dir", default="/workspace/spaktok-ladder")
     parser.add_argument("--allow-ultra", action="store_true",
                         help="Permit studio-ultra (1536_cascade, 4K PBR)")
+    parser.add_argument("--commit", help="Exact 40-character Git commit of the GPU code")
+    parser.add_argument("--model-revision", help="Exact deployed TRELLIS.2 weights revision")
     parser.add_argument("--execute", action="store_true",
                         help="Actually load weights and generate (paid GPU)")
     args = parser.parse_args()
@@ -125,6 +127,10 @@ def main() -> int:
         event("dry_run_only", image=source.name, profiles=profiles,
               poly_budget=args.poly_budget, no_gpu_generation=True)
         return 0
+    from verify_gpu_evidence import COMMIT, MODEL_REV
+    if not args.commit or not COMMIT.fullmatch(args.commit) or not args.model_revision or not MODEL_REV.fullmatch(args.model_revision):
+        event("provenance_required", required=["commit", "model_revision"])
+        return 2
     if os.environ.get("CONDA_PREFIX") != "/workspace/trellis2-env":
         event("wrong_conda_environment")
         return 2
@@ -139,6 +145,12 @@ def main() -> int:
                         engine=trellis2_engine, torch_module=torch,
                         inspect=inspect_glb, allow_ultra=args.allow_ultra,
                         poly_budget=args.poly_budget)
+    report["provenance"] = {
+        "git_commit": args.commit,
+        "model_revision": args.model_revision,
+        "source_image_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+        "kind": "operator_declared; independently verify against GPU logs",
+    }
     report_path = Path(args.out_dir) / "ladder-report.json"
     report_path.write_text(json.dumps(report, indent=2))
     event("report_written", path=str(report_path))
