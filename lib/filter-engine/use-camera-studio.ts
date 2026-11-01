@@ -19,6 +19,7 @@ import {buildLiveSculptWarp,hasLiveSculpt,normalizeLiveSculpt,
 import {createDenseFaceTopology,type DenseFaceTopology} from './reality-face-topology'
 import {FIRST_GPU_LIVE_FILTER_ID} from './spaktok-first-gpu-live'
 import {CROWN_V2_FILTER_ID} from './crown-v2-private-live'
+import type {CrownV2ColorPresetId} from './crown-v2-draft-colors'
 import {isPhotorealSurfaceId} from './reality-precision-face-mask'
 
 import {NEUTRAL_PHOTOGRAPHIC_CORRECTION,targetPhotographicCorrection,smoothPhotographicCorrection,applyPhotographicCorrection,estimatePortraitPhotographicLight} from './reality-photographic-meter'
@@ -34,6 +35,7 @@ interface Options {
   localPhotoFaceFile?:File|null
   firstGpuPilotFile?:File|null
   crownV2File?:File|null
+  crownV2Preset?:CrownV2ColorPresetId
   audio?: boolean
   livePreview?: boolean
   /** Opt-in on-device 32x18 camera metering for the shared still/video/live GPU pass. */
@@ -65,7 +67,7 @@ const chooseOutputHeight = (livePreview=false) => {
  * Face mesh and person segmentation run on-device (MediaPipe) so reshape and
  * background effects follow the face frame-by-frame.
  */
-export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotFile=null, crownV2File=null, audio = false, livePreview=false, smartPhoto=false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false, liveSculpt }: Options) {
+export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotFile=null, crownV2File=null, crownV2Preset='royal-rainbow', audio = false, livePreview=false, smartPhoto=false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false, liveSculpt }: Options) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -356,6 +358,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
       let engine=threeEngineRef.current
       if(!engine){engine=new FaceMesh3DEngine(layer,base.width,base.height);threeEngineRef.current=engine}
       engine.setGpuPilotCalibration(stateRef.current.face.pilot)
+      engine.setCrownV2Preset(crownV2Preset)
       const loaded=await engine.setLens(state.face.id,
        state.face.id===FIRST_GPU_LIVE_FILTER_ID?firstGpuPilotFile:
         state.face.id===CROWN_V2_FILTER_ID?crownV2File:null)
@@ -384,6 +387,9 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
   useEffect(()=>{
    threeEngineRef.current?.setGpuPilotCalibration(state.face.pilot)
   },[state.face.pilot])
+  useEffect(()=>{
+   threeEngineRef.current?.setCrownV2Preset(crownV2Preset)
+  },[crownV2Preset])
   useEffect(()=>()=>{threeEngineRef.current?.dispose();threeEngineRef.current=null},[])
 
   useEffect(() => {
