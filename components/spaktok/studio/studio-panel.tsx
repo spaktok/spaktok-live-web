@@ -10,7 +10,6 @@ import {
   createStudioState,
   filterPresets,
   fxList,
-  faceFxCatalog,
   presetCategories,
   type BackgroundMode,
   type FxId,
@@ -18,6 +17,7 @@ import {
   type StudioState,
 } from '@/lib/filter-engine/params'
 import { gradeToState, type Grade } from '@/lib/filter-engine/ai-grade'
+import {PUBLIC_PHOTOGRAPHIC_FACE_FX} from '@/lib/filter-engine/photographic-filter-policy'
 import {DEFAULT_FACE_MORPH,normalizeFaceMorph,FACE_MORPH_FEATURES,type FaceMorphFeature} from '@/lib/filter-engine/reality-face-morph'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
 
@@ -158,11 +158,11 @@ export function StudioPanel({ state, onChange, captureFrame, tabs = ['face', 'fi
           <div className="flex flex-col gap-3" dir="rtl">
             <div className="flex items-center justify-between">
               <div><p className="text-[10px] font-bold tracking-[.16em] text-[#a8beff]">SPAKTOK FACE AR</p>
-              <p className="mt-1 text-xs text-white/65">أقنعة تتحرك مع وجهك أثناء التصوير</p></div>
+              <p className="mt-1 text-xs text-white/65">مكياج متتبع وخامات فعلية دون الملصقات الهندسية التجريبية</p></div>
               <ScanFace className="size-6 text-[#a5baff]" aria-hidden="true"/>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              {faceFxCatalog.filter(effect=>effect.id!=='3d-photo-face').map(effect=>(
+              {PUBLIC_PHOTOGRAPHIC_FACE_FX.map(effect=>(
                 <button type="button" key={effect.id}
                   onClick={()=>onChange({...state,face:{
                    ...state.face,id:effect.id,
