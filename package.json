@@ -17,7 +17,7 @@
     "test:d1": "vitest run --config vitest.config.ts lib/cloudflare/d1-repository.test.ts",
     "test:cloudflare": "vitest run --config vitest.config.ts lib/cloudflare",
     "asset:crown": "node scripts/build-couture-glb.mjs",
-    "test:studio:worker": "node --test cloudflare/workers/spaktok-private-studio-asset.test.mjs",
+    "test:studio:worker": "node --test cloudflare/workers/spaktok-private-studio-asset.test.mjs cloudflare/workers/spaktok-crown-v2-filter.test.mjs",
     "test:cloudflare-only": "node scripts/assert-cloudflare-only.mjs",
     "test:studio:worker:canary": "node scripts/test-private-studio-worker.mjs",
     "test:studio:ai:free:canary": "node scripts/test-director-ai-worker.mjs",
