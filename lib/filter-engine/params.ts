@@ -214,6 +214,30 @@ export const filterPresets: FilterPreset[] = [
   { id: 'mono', name: 'Mono', category: 'mono', color: { saturation: -1, contrast: 0.12 }, swatch: '#8a8a8a' },
   { id: 'noir', name: 'Noir', category: 'mono', color: { saturation: -1, contrast: 0.45, exposure: -0.05, vignette: 0.5, grain: 0.2 }, swatch: '#2b2b2b' },
   { id: 'silver', name: 'Silver', category: 'mono', color: { saturation: -1, contrast: -0.05, exposure: 0.1, fade: 0.15, glow: 0.2 }, swatch: '#c9c9c9' },
+
+  // Spaktok Studio original photo pack 2026: GPU color-grades available immediately
+  // in Photo, Story and local Live camera without any remote model or paid GPU.
+  { id:'spk-natural-portrait',name:'طبيعي نقي',category:'portrait',color:{exposure:.06,contrast:.04,vibrance:.09,highlights:-.16,shadows:.12,sharpen:.08},swatch:'#e3c4b0' },
+  { id:'spk-soft-beauty',name:'جمال ناعم',category:'portrait',color:{exposure:.08,contrast:-.1,fade:.07,temperature:.09,tint:.05,glow:.14,highlights:-.18},swatch:'#ead0c8' },
+  { id:'spk-studio-portrait',name:'استوديو احترافي',category:'portrait',color:{exposure:.09,contrast:.16,shadows:.15,highlights:-.26,clarity:.16,sharpen:.23},swatch:'#b7b8c6' },
+  { id:'spk-warm-skin',name:'بشرة دافئة',category:'portrait',color:{temperature:.2,tint:.06,exposure:.05,contrast:.02,vibrance:.13,highlights:-.13},swatch:'#d9a77c' },
+  { id:'spk-cool-portrait',name:'بورتريه بارد',category:'portrait',color:{temperature:-.2,tint:-.02,contrast:.08,shadows:.11,highlights:-.19,sharpen:.14},swatch:'#90acd0' },
+  { id:'spk-luminous-face',name:'إضاءة الوجه',category:'portrait',color:{exposure:.14,glow:.18,contrast:-.03,shadows:.21,highlights:-.32,fade:.035},swatch:'#f6dcb3' },
+  { id:'spk-clear-detail',name:'تفاصيل واضحة',category:'trending',color:{clarity:.35,sharpen:.34,contrast:.14,highlights:-.22,shadows:.15,vibrance:.17},swatch:'#8cbada' },
+  { id:'spk-golden-lux',name:'ذهبي فاخر',category:'trending',color:{temperature:.29,contrast:.17,vibrance:.12,highlightTint:rgb('#f4c077'),shadowTint:rgb('#5b3c39'),splitAmount:.3,glow:.15},swatch:'#d5a249' },
+  { id:'spk-diamond-light',name:'ضوء الماس',category:'trending',color:{temperature:-.13,clarity:.29,sharpen:.32,highlights:-.28,contrast:.13,glow:.17},swatch:'#a1dcf4' },
+  { id:'spk-night-live',name:'لايف ليلي',category:'scene',color:{exposure:.24,shadows:.3,highlights:-.24,contrast:.07,sharpen:.12,temperature:-.05},swatch:'#334d7d' },
+  { id:'spk-candlelight',name:'ضوء الشموع',category:'scene',color:{temperature:.32,exposure:.1,highlights:-.22,shadows:.19,contrast:-.03,glow:.22},swatch:'#e8a15d' },
+  { id:'spk-blue-hour',name:'الساعة الزرقاء',category:'scene',color:{temperature:-.26,tint:.11,contrast:.12,highlights:-.29,shadows:.22,shadowTint:rgb('#244f85'),splitAmount:.28},swatch:'#4c78bb' },
+  { id:'spk-rainy-cinema',name:'سينما المطر',category:'film',color:{saturation:-.18,temperature:-.19,contrast:.22,shadows:-.09,vignette:.23,grain:.12},swatch:'#617685' },
+  { id:'spk-silk-film',name:'فيلم حريري',category:'film',color:{contrast:-.13,fade:.21,saturation:-.1,temperature:.07,grain:.14,glow:.13},swatch:'#d1b6ac' },
+  { id:'spk-film-noir-pro',name:'نوار سينمائي',category:'mono',color:{saturation:-1,contrast:.46,shadows:-.13,highlights:-.17,grain:.13,vignette:.34},swatch:'#444951' },
+  { id:'spk-matte-mono',name:'أبيض وأسود مطفي',category:'mono',color:{saturation:-1,contrast:-.12,fade:.3,exposure:.08,grain:.12},swatch:'#b2ada7' },
+  { id:'spk-neon-ruby',name:'نيون ياقوت',category:'vibe',color:{contrast:.22,saturation:.21,tint:.23,shadowTint:rgb('#3b1a56'),highlightTint:rgb('#ff6e9e'),splitAmount:.38,glow:.31},swatch:'#ce4988' },
+  { id:'spk-emerald-night',name:'زمرد ليلي',category:'vibe',color:{temperature:-.14,contrast:.24,saturation:.14,shadowTint:rgb('#104b43'),highlightTint:rgb('#9ad5ad'),splitAmount:.36,vignette:.19},swatch:'#31866d' },
+  { id:'spk-sunset-silk',name:'غروب حريري',category:'vibe',color:{temperature:.21,tint:.17,contrast:-.06,fade:.08,highlightTint:rgb('#ffab90'),splitAmount:.24,glow:.29},swatch:'#f18c9c' },
+  { id:'spk-portrait-cinema',name:'بورتريه سينمائي',category:'film',color:{contrast:.19,saturation:-.13,highlights:-.31,shadows:.11,shadowTint:rgb('#27495b'),highlightTint:rgb('#f0bb8b'),splitAmount:.33,vignette:.16},swatch:'#728891' },
+
   // Original SpakTok looks — parameter presets, not CapCut assets or cloned filters.
   { id: 'aurora', name: 'Aurora', category: 'trending', color: { contrast: 0.12, vibrance: 0.26, tint: 0.14, temperature: -0.12, shadowTint: rgb('#243f8e'), highlightTint: rgb('#cb90fc'), splitAmount: 0.36, glow: 0.2 }, swatch: '#8b91f5' },
   { id: 'crystal', name: 'Crystal', category: 'trending', color: { exposure: 0.07, sharpen: 0.35, clarity: 0.27, highlights: -0.19, shadows: 0.2, vibrance: 0.13 }, swatch: '#8bccf0' },
