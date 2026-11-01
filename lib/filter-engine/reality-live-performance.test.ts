@@ -9,8 +9,11 @@ describe('mobile LIVE filter workload budget',()=>{
   expect(shouldRunExtraLiveMesh(true,false,true,true)).toBe(false)
  })
  it('renders live camera to a smaller on-device surface without touching portrait photo or non-LIVE pipelines',()=>{
-  expect(choosePreviewSurfaceHeight(true,true,8,8)).toBe(720)
+  expect(choosePreviewSurfaceHeight(true,true,8,8)).toBe(1080)
   expect(choosePreviewSurfaceHeight(true,true,4,2)).toBe(720)
+  expect(choosePreviewSurfaceHeight(true,true,6,4)).toBe(900)
+  expect(choosePreviewSurfaceHeight(true,true,8,undefined)).toBe(900)
+  expect(choosePreviewSurfaceHeight(true,true,8,2)).toBe(720)
   expect(choosePreviewSurfaceHeight(false,true,8,8)).toBe(1280)
   expect(choosePreviewSurfaceHeight(false,true,4,2)).toBe(960)
   expect(choosePreviewSurfaceHeight(true,false,8,8)).toBe(1280)
