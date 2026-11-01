@@ -1,7 +1,7 @@
 import { NextRequest,NextResponse } from 'next/server'
 import {readLimitedJson} from '@/lib/native/request-security'
 import { getNativeUser } from '@/lib/native/auth'
-import { oneD1,queryD1,validId } from '@/lib/native/d1'
+import { batchD1,oneD1,queryD1,validId } from '@/lib/native/d1'
 import { createHash } from 'node:crypto'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -71,9 +71,13 @@ export async function POST(req:NextRequest){
       const ids=[user.id,b.otherUserId].sort().join(':')
       const h=createHash('sha256').update('spaktok-direct-chat-v1:'+ids).digest('hex').slice(0,32)
       const id=`${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-8${h.slice(17,20)}-${h.slice(20,32)}`
-      await queryD1('INSERT OR IGNORE INTO conversations(id) VALUES (?)',[id])
-      await queryD1('INSERT OR IGNORE INTO conversation_participants(conversation_id,user_id) VALUES (?,?)',[id,user.id])
-      await queryD1('INSERT OR IGNORE INTO conversation_participants(conversation_id,user_id) VALUES (?,?)',[id,b.otherUserId])
+      // A single D1 transaction prevents partially created conversations if
+      // inserting the second participant fails.
+      await batchD1([
+        {sql:'INSERT OR IGNORE INTO conversations(id) VALUES (?)',params:[id]},
+        {sql:'INSERT OR IGNORE INTO conversation_participants(conversation_id,user_id) VALUES (?,?)',params:[id,user.id]},
+        {sql:'INSERT OR IGNORE INTO conversation_participants(conversation_id,user_id) VALUES (?,?)',params:[id,b.otherUserId]},
+      ])
       return json({conversationId:id},201)
     }
     if(b.action==='send'){
