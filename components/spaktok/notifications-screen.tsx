@@ -1,5 +1,5 @@
 'use client'
-import {useEffect,useState} from 'react'
+import {useEffect,useRef,useState} from 'react'
 import {Bell,ChevronRight,Heart,MessageCircle,UserPlus,RefreshCw,Inbox} from 'lucide-react'
 import {relativeActivityTime} from '@/lib/native/activity-time'
 
@@ -13,8 +13,14 @@ export function NotificationsScreen({onBack}:{onBack?:()=>void}){
   const [nextCursor,setNextCursor]=useState<string|null>(null)
   const [loadingMore,setLoadingMore]=useState(false)
   const [moreError,setMoreError]=useState(false)
+  const moreController=useRef<AbortController|null>(null)
   useEffect(()=>{
     const controller=new AbortController()
+    moreController.current?.abort()
+    moreController.current=null
+    setLoadingMore(false)
+    setMoreError(false)
+    setNextCursor(null)
     const load=async()=>{
       setLoading(true);setError(false)
       try{
@@ -26,22 +32,25 @@ export function NotificationsScreen({onBack}:{onBack?:()=>void}){
       finally{if(!controller.signal.aborted)setLoading(false)}
     }
     void load()
-    return ()=>controller.abort()
+    return ()=>{controller.abort();moreController.current?.abort()}
   },[retries])
   const loadMore=async()=>{
     if(!nextCursor||loadingMore)return
+    const controller=new AbortController()
+    moreController.current=controller
     setLoadingMore(true);setMoreError(false)
     try{
-      const r=await fetch('/api/native/notifications?cursor='+encodeURIComponent(nextCursor),{cache:'no-store'})
+      const r=await fetch('/api/native/notifications?cursor='+encodeURIComponent(nextCursor),{cache:'no-store',signal:controller.signal})
       if(!r.ok)throw Error('notifications_unavailable')
       const payload=await r.json() as {items?:Event[];nextCursor?:string|null}
+      if(controller.signal.aborted)return
       setItems(prev=>{
         const existing=new Set(prev.map(x=>x.id))
         return [...prev,...(payload.items||[]).filter(x=>!existing.has(x.id))]
       })
       setNextCursor(payload.nextCursor||null)
-    }catch{setMoreError(true)}
-    finally{setLoadingMore(false)}
+    }catch{if(!controller.signal.aborted)setMoreError(true)}
+    finally{if(moreController.current===controller){moreController.current=null;setLoadingMore(false)}}
   }
   const icon=(type:Event['type'])=>type==='like'?<Heart className="size-4"/>:
     type==='comment'?<MessageCircle className="size-4"/>:<UserPlus className="size-4"/>
