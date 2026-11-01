@@ -118,6 +118,8 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
   const [crownV2File,setCrownV2File]=useState<File|null>(null)
   const [crownV2Preset,setCrownV2Preset]=useState<CrownV2ColorPresetId>('royal-rainbow')
   const [crownV2Busy,setCrownV2Busy]=useState(false)
+  // Reject late private loads after the user selects a different lens.
+  const crownV2OperationRef=useRef(0)
   const [crownV2Message,setCrownV2Message]=useState('التاج الأصلي V2 جاهز كمسودة خاصة في R2؛ يمكنك تحميله لتجربته على رأسك.')
   useEffect(()=>{
    try{
@@ -128,6 +130,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
    }catch{/* No camera failure when device storage is blocked or corrupted. */}
   },[])
   const onFaceChange=(face:FaceFxParams)=>{
+   if(face.id!==CROWN_V2_FILTER_ID)crownV2OperationRef.current++
    setStudio(prev=>({...prev,face}))
    if(mode==='live'&&face.id!==studio.face.id)setShowFaceTray(false)
    if((face.id!==FIRST_GPU_LIVE_FILTER_ID&&face.id!==CROWN_V2_FILTER_ID)||!face.pilot)return
@@ -167,37 +170,43 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
 
   /** Owner-only, on-device Live preview. Not a broadcast or a public filter. */
   const activateCrownV2=async(file:File)=>{
+   const operation=++crownV2OperationRef.current
    setCrownV2Busy(true)
    try{
     await verifiedCrownV2Buffer(file)
+    if(operation!==crownV2OperationRef.current)return
     setCrownV2File(file)
     setStudio(prev=>({...prev,face:{...prev.face,id:CROWN_V2_FILTER_ID,strength:.9}}))
     setCrownV2Message('✓ تاج V2 الأصلي تم التحقق منه وتركيبه كفلتر معاينة محلي.')
     setShowFaceTray(false)
    }catch(error){
+      if(operation!==crownV2OperationRef.current)return
       setCrownV2File(null)
       setStudio(prev=>prev.face.id===CROWN_V2_FILTER_ID?{...prev,face:{...prev.face,id:'none'}}:prev)
       setCrownV2Message(crownV2ArabicError(error))
     }
-   finally{setCrownV2Busy(false)}
+   finally{if(operation===crownV2OperationRef.current)setCrownV2Busy(false)}
   }
   const fetchCrownV2=async()=>{
+   const operation=++crownV2OperationRef.current
    if(crownV2Busy)return
    setCrownV2Busy(true)
    setCrownV2Message('جارٍ طلب تاج V2 الخاص من R2 بحساب المالك…')
    try{
     const file=await loadCrownV2OwnerR2()
     await verifiedCrownV2Buffer(file)
+    if(operation!==crownV2OperationRef.current)return
     setCrownV2File(file)
     setStudio(prev=>({...prev,face:{...prev.face,id:CROWN_V2_FILTER_ID,strength:.9}}))
     setCrownV2Message('✓ حملنا التاج الأصلي V2. المعاينة على هاتفك فقط.')
     setShowFaceTray(false)
    }catch(error){
+      if(operation!==crownV2OperationRef.current)return
       setCrownV2File(null)
       setStudio(prev=>prev.face.id===CROWN_V2_FILTER_ID?{...prev,face:{...prev.face,id:'none'}}:prev)
       setCrownV2Message(crownV2ArabicError(error))
     }
-   finally{setCrownV2Busy(false)}
+   finally{if(operation===crownV2OperationRef.current)setCrownV2Busy(false)}
   }
   const autoCrownStarted=useRef(false)
   useEffect(()=>{
