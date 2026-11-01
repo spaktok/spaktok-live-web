@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers'
 import { queryD1 } from '@/lib/native/d1'
+import {readLimitedJson,trustedVercelClientIp} from '@/lib/native/request-security'
 import {
   COOKIE, createAuthUser, createSession, derivePassword, findAuthUser, getNativeUser,
   nativeAuthReady, parseCredentials, rateLimit, registrationReady, resolveSession,
@@ -29,13 +30,11 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   if (!nativeAuthReady()) return reply({error:'native_auth_not_configured'},503)
   if (!originAllowed(req)) return reply({error:'invalid_origin'},403)
-  if (Number(req.headers.get('content-length')||0)>4096) return reply({error:'invalid_request'},413)
-  let body: Record<string,unknown>
-  try {
-    const value: unknown = await req.json()
-    if (!value || typeof value!=='object' || Array.isArray(value)) return reply({error:'invalid_request'},400)
-    body=value as Record<string,unknown>
-  } catch {return reply({error:'invalid_json'},400)}
+  const payload=await readLimitedJson(req,4096)
+  if(!payload.ok)return reply({error:payload.reason==='too_large'?'invalid_request':'invalid_json'},payload.reason==='too_large'?413:400)
+  if(!payload.value||typeof payload.value!=='object'||Array.isArray(payload.value))
+    return reply({error:'invalid_request'},400)
+  const body=payload.value as Record<string,unknown>
   const action = body.action
   try {
     if (action==='logout') {
@@ -46,7 +45,7 @@ export async function POST(req: NextRequest) {
     if (action==='recover') {
       const parsed = parseRecovery(body)
       if (!parsed) return reply({error:'invalid_recovery'},400)
-      const ip = req.headers.get('x-vercel-forwarded-for') || 'unknown'
+      const ip = trustedVercelClientIp(req.headers)
       if (!await rateLimit('recover-ip:'+ip,8) ||
           !await rateLimit('recover-email:'+parsed.email,5))
         return reply({error:'too_many_attempts'},429)
@@ -60,7 +59,7 @@ export async function POST(req: NextRequest) {
     const credentials=parseCredentials(body)
     if (!credentials) return reply({error:'invalid_credentials'},400)
     const {email,password,username,inviteCode}=credentials
-    const ip=(req.headers.get('x-vercel-forwarded-for')||req.headers.get('x-forwarded-for')||'unknown').split(',')[0].trim()
+    const ip=trustedVercelClientIp(req.headers)
     if (!await rateLimit('auth-ip:'+ip,24) || !await rateLimit('auth-email:'+email,12))
       return reply({error:'too_many_attempts'},429)
     let userId=''
