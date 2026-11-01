@@ -520,8 +520,16 @@ void main() {
   }
 
   if (uSharpen > 0.001) {
-    vec3 n = tex(src + vec2(uTexel.x, 0.0)) + tex(src - vec2(uTexel.x, 0.0)) + tex(src + vec2(0.0, uTexel.y)) + tex(src - vec2(0.0, uTexel.y));
-    color += (color - n * 0.25) * uSharpen * 1.4;
+    vec3 n=tex(src+vec2(uTexel.x,0.0))+tex(src-vec2(uTexel.x,0.0))
+      +tex(src+vec2(0.0,uTexel.y))+tex(src-vec2(0.0,uTexel.y));
+    vec3 detail=color-n*0.25;
+    // Prevent dark/bright halos at lips, eyes, silhouettes and highlights.
+    // A bounded unsharp correction keeps skin texture without amplifying
+    // low-light sensor noise into oversaturated ringing.
+    float contrast=abs(luma(detail));
+    float haloGuard=1.0-smoothstep(0.06,0.20,contrast);
+    color=clamp(color+clamp(detail,vec3(-0.08),vec3(0.08))*
+      min(uSharpen,1.0)*0.8*haloGuard,0.0,1.0);
   }
 
   if (uGlow > 0.001 || abs(uClarity) > 0.001) {
