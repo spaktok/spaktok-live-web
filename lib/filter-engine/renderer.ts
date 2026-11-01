@@ -459,23 +459,41 @@ void main() {
     color = mix(color, blurred, (1.0 - person) * min(1.0, uBgBlur * 1.5));
   }
 
-  if (uSmooth > 0.001) {
-    float skin = skinMask(color) * faceRegion;
-    if (skin > 0.01) {
-      vec3 sum = color;
-      float weight = 1.0;
-      float radius = max(2.0, uResolution.y / 360.0) * (1.5 + uSmooth * 2.5);
-      for (int ring = 1; ring <= 2; ring++) {
-        for (int i = 0; i < 8; i++) {
-          float a = float(i) * 0.785398 + float(ring) * 0.392699;
-          vec3 s = tex(src + vec2(cos(a), sin(a)) * radius * float(ring) * uTexel);
-          float diff = length(s - color);
-          float w = exp(-(diff * diff) / 0.012) / float(ring);
-          sum += s * w;
-          weight += w;
+  if (uSmooth > 0.001 && uHasFace > 0.5) {
+    // Identity and tone-preserving portrait refinement. A fixed YCbCr
+    // skin-color threshold excludes many real skin tones, especially under
+    // dim or mixed illumination. Use the tracked face geometry instead.
+    float leftEyeGuard=1.0-smoothstep(0.06,0.16,
+      length((baseSrc-uLeftEye)*aspectVec())/max(uFaceWidth,0.001));
+    float rightEyeGuard=1.0-smoothstep(0.06,0.16,
+      length((baseSrc-uRightEye)*aspectVec())/max(uFaceWidth,0.001));
+    float lipGuard=1.0-smoothstep(0.08,0.22,
+      length((baseSrc-uMouth)*aspectVec())/max(uFaceWidth,0.001));
+    float safeFace=faceRegion*(1.0-max(max(leftEyeGuard,rightEyeGuard),lipGuard));
+    if(safeFace>0.01){
+      vec3 sum=color;
+      float total=1.0;
+      // Source-video pixel radius: never scale blur with render resolution.
+      // Preserve shadows, pores and expression edges with bilateral weights.
+      float radius=1.0+uSmooth*2.2;
+      float referenceY=luma(color);
+      for(int ring=1;ring<=2;ring++){
+        for(int i=0;i<8;i++){
+          float angle=float(i)*0.785398+float(ring)*0.392699;
+          vec2 offset=vec2(cos(angle),sin(angle))*radius*float(ring)*uTexel;
+          vec3 sampleColor=tex(src+offset);
+          float delta=luma(sampleColor)-referenceY;
+          float weight=exp(-delta*delta/0.0025)/float(ring);
+          sum+=sampleColor*weight;
+          total+=weight;
         }
       }
-      color = mix(color, sum / weight, clamp(uSmooth * skin * 0.95, 0.0, 1.0));
+      vec3 filtered=sum/total;
+      // Limit correction to local luma (not chroma): no invented skin hue.
+      // Retain >=35% of original micro-texture even at maximum slider value.
+      float amount=min(0.65,uSmooth*0.62)*safeFace;
+      float corrected=referenceY+(luma(filtered)-referenceY)*amount;
+      color=clamp(color+vec3(corrected-referenceY),0.0,1.0);
     }
   }
 
