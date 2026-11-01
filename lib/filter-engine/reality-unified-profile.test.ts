@@ -1,5 +1,6 @@
 import {describe,expect,it} from 'vitest'
-import {createStudioState,filterPresets,faceFxCatalog} from './params'
+import {createStudioState,filterPresets} from './params'
+import {PUBLIC_PHOTOGRAPHIC_FACE_FX} from './photographic-filter-policy'
 import {
  DEFAULT_REALITY_UNIFIED_CONFIG,REALITY_SHARED_EFFECT_OPTIONS,
  REALITY_SHARED_FACE_OPTIONS,REALITY_SHARED_GRADE_OPTIONS,
@@ -13,7 +14,7 @@ describe('Shared Reality camera/video/live compatibility',()=>{
   expect(REALITY_SHARED_EFFECT_OPTIONS.length)
    .toBe(REALITY_EFFECTS.length-1)
   expect(REALITY_SHARED_FACE_OPTIONS.length)
-   .toBe(faceFxCatalog.length-2)
+   .toBe(PUBLIC_PHOTOGRAPHIC_FACE_FX.length-1)
   expect(REALITY_SHARED_GRADE_OPTIONS.length).toBe(filterPresets.length)
   for(const mode of ['camera','recorded-video','live-preview'] as const){
    for(const option of REALITY_SHARED_EFFECT_OPTIONS){
