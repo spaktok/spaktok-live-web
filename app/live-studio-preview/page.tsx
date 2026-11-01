@@ -10,22 +10,27 @@ import {SafeLiveCamera} from '@/components/spaktok/safe-live-camera'
  */
 export default function LiveStudioPreviewPage(){
  const [open,setOpen]=useState(false)
- if(open)return <SafeLiveCamera initialMode="live" initialFaceFxId="3d-precision-cyber-mask" onClose={()=>setOpen(false)}/>
+ const [crownV2,setCrownV2]=useState(false)
+ if(open)return <SafeLiveCamera initialMode="live" initialFaceFxId={crownV2?'3d-royal-crown-v2':'3d-precision-cyber-mask'} onClose={()=>setOpen(false)}/>
  return <main dir="rtl" className="min-h-dvh bg-[#070a12] px-5 py-14 text-white">
   <section className="mx-auto max-w-xl space-y-6 rounded-3xl border border-cyan-500/25 bg-[#111a2b] p-6 shadow-2xl sm:p-9">
    <p className="text-sm font-semibold tracking-wider text-cyan-300">SpakTok Reality • Local Live QA</p>
    <h1 className="text-3xl font-bold leading-snug">تجربة فلاتر PBR الواقعية على الوجه مباشرة</h1>
    <p className="text-sm leading-7 text-slate-300">
-    يبدأ الاختبار بقناع التيتانيوم PBR. من زر «فلاتر الوجه 3D» يمكنك التبديل إلى
+    اختبر التاج الملكي V2 مباشرة داخل كاميرا Live المحلية. من زر «فلاتر الوجه 3D» يمكنك التبديل إلى
     قناع السيراميك أو الصورة الأصلية للمقارنة. لا تبدأ الكاميرا إلا بموافقتك.
    </p>
    <div className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-4 text-sm leading-7 text-amber-100">
     <strong>معاينة محلية فقط:</strong> لا يبدأ بث للجمهور، ولا تُرسل صور الوجه أو نقاط التتبع إلى خادم
     من خلال هذه التجربة. لا تعمل كل المزايا الحسابية قبل تهيئة البنية الخلفية.
    </div>
-   <button type="button" onClick={()=>setOpen(true)}
+   <button type="button" onClick={()=>{setCrownV2(true);setOpen(true)}}
+    className="w-full rounded-2xl bg-gradient-to-l from-amber-600 to-yellow-400 px-6 py-4 text-center text-base font-bold text-slate-950">
+    👑 جرّب تاجك الأصلي V2 على الوجه — نسخة التطوير الخاصة
+   </button>
+   <button type="button" onClick={()=>{setCrownV2(false);setOpen(true)}}
     className="w-full rounded-2xl bg-gradient-to-l from-[#3458ff] to-cyan-400 px-6 py-4 text-center text-base font-bold text-white">
-    تشغيل الكاميرا وتجربة أدوات اللايف
+    تشغيل الكاميرا وتجربة بقية أدوات اللايف
    </button>
    <p className="text-xs leading-6 text-slate-400">
     إذا لم يظهر طلب السماح بالكاميرا داخل متصفح التطبيق، افتح هذا الرابط في Chrome،
