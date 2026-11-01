@@ -13,7 +13,7 @@ export function decodeActivityCursor(raw:string|null):ActivityCursor|null|undefi
     const obj=JSON.parse(decoded.toString('utf8')) as Record<string,unknown>
     if(!obj||typeof obj.createdAt!=='string'||typeof obj.id!=='string')return undefined
     if(obj.createdAt.length>40||obj.createdAt.length<10||
-       !/^\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,6})?(?:Z|[+-]\\d{2}:\\d{2})?$/.test(obj.createdAt)||
+       !/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})?$/.test(obj.createdAt)||
        !/^(follow|like|comment):[a-zA-Z0-9:_-]{1,100}$/.test(obj.id))return undefined
     return {createdAt:obj.createdAt,id:obj.id}
   }catch{return undefined}
