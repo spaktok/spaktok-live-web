@@ -1,0 +1,15 @@
+# One-time, private, source-image-locked Royal Crown v2 geometry construction.
+# No public asset serving, no arbitrary model generation or GPU inference.
+name = "spaktok-crown-v2-source-locked-builder"
+main = "cloudflare/workers/spaktok-crown-v2-source-locked-builder.mjs"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[[d1_databases]]
+binding = "CROWN_DB"
+database_name = "spaktok-primary"
+database_id = "e18619f5-76ec-42e5-b601-3e5f06ae7731"
+
+[[r2_buckets]]
+binding = "CROWN_ASSETS"
+bucket_name = "spaktok-private-drafts"
