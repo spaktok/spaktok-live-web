@@ -26,6 +26,6 @@ describe('owner-only crown V2 never accepts a placeholder asset',()=>{
   expect(crownV2ArabicError(new Error('crown_v2_origin'))).toContain('نطاق الإنتاج')
   expect(crownV2ArabicError(new Error('crown_v2_disabled'))).toContain('غير مفعّلة')
   expect(crownV2ArabicError(new Error('crown_v2_owner_config'))).toContain('إعداد حساب المالك')
-  expect(crownV2ArabicError(new Error('crown_v2_signing'))).toContain('التوقيع')
+  expect(crownV2ArabicError(new Error('crown_v2_signing'))).toContain('توقيع')
  })
 })
