@@ -65,7 +65,8 @@ describe('Reality Studio: complete filter family audit',()=>{
   expect(entry('beauty:smooth').checks).toContain('beauty-and-skin-tone')
  })
  it('assigns a photographic upgrade path to every effect without relabeling prototypes as HD',()=>{
-  expect(REALITY_EFFECT_AUDIT).toHaveLength(135)
+  // The registry expands as new original color grades are added; audit all of them.
+  expect(REALITY_EFFECT_AUDIT).toHaveLength(REALITY_EFFECTS.length)
   expect(entry('3d-lux-glasses').visualStage).toBe('geometric-prototype')
   expect(entry('3d-premium-silk-pearl').visualStage).toBe('pbr-approximation')
   expect(entry('3d-precision-cyber-mask').visualStage).toBe('pbr-approximation')
