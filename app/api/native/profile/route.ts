@@ -1,4 +1,5 @@
 import {NextRequest,NextResponse} from 'next/server'
+import {readLimitedJson} from '@/lib/native/request-security'
 import {queryD1,validId} from '@/lib/native/d1'
 import {getNativeUser} from '@/lib/native/auth'
 export const runtime='nodejs'
@@ -39,11 +40,10 @@ export async function GET(req:NextRequest){
 export async function PATCH(req:NextRequest){
   if(req.headers.get('origin')!==req.nextUrl.origin||req.headers.get('sec-fetch-site')==='cross-site')
     return json({error:'invalid_origin'},403)
-  if(Number(req.headers.get('content-length')||0)>2048)return json({error:'invalid_size'},413)
-  let body:unknown
-  try{body=await req.json()}catch{return json({error:'invalid_json'},400)}
-  if(!body||typeof body!=='object'||Array.isArray(body))return json({error:'invalid_request'},400)
-  const b=body as Record<string,unknown>
+  const payload=await readLimitedJson(req,2048)
+  if(!payload.ok)return json({error:payload.reason==='too_large'?'invalid_size':'invalid_json'},payload.reason==='too_large'?413:400)
+  if(!payload.value||typeof payload.value!=='object'||Array.isArray(payload.value))return json({error:'invalid_request'},400)
+  const b=payload.value as Record<string,unknown>
   if(typeof b.displayName!=='string'||typeof b.bio!=='string')return json({error:'invalid_request'},400)
   const displayName=b.displayName.trim(),bio=b.bio.trim()
   if(displayName.length<2||displayName.length>50||bio.length>160||
