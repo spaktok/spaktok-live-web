@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import re
+import struct
 from pathlib import Path
 
 SHA = re.compile(r"^[0-9a-f]{64}$")
@@ -26,6 +27,80 @@ def sha256_file(path: Path) -> str:
             digest.update(chunk)
     return digest.hexdigest()
 
+
+
+def validate_glb_geometry(path: Path, size: int) -> dict:
+    """Bounded structural check: require a binary-backed triangle mesh.
+
+    A valid GLB header and SHA can still describe an EMPTY scene. This check
+    rejects JSON-only, unbacked or malformed mesh data before evidence is accepted.
+    It is NOT a replacement for the full PBR/topology/visual QA suite.
+    """
+    with path.open("rb") as stream:
+        stream.seek(12)
+        header = stream.read(8)
+        if len(header) != 8:
+            raise ValueError("invalid_glb_json_chunk")
+        json_size, kind = struct.unpack("<I4s", header)
+        if kind != b"JSON" or json_size < 16 or json_size % 4 or json_size > 8 * 1024 * 1024:
+            raise ValueError("invalid_glb_json_chunk")
+        json_bytes = stream.read(json_size)
+        if len(json_bytes) != json_size:
+            raise ValueError("invalid_glb_json_chunk")
+        try:
+            obj = json.loads(json_bytes.decode("utf-8"))
+        except (UnicodeError, ValueError, TypeError):
+            raise ValueError("invalid_glb_json")
+        bin_header = stream.read(8)
+        if len(bin_header) != 8:
+            raise ValueError("missing_glb_binary")
+        bin_length, bin_kind = struct.unpack("<I4s", bin_header)
+        if bin_kind != b"BIN\\x00" or bin_length < 36 or 28 + json_size + bin_length != size:
+            raise ValueError("invalid_glb_binary")
+    if not isinstance(obj, dict) or (obj.get("asset") or {}).get("version") != "2.0":
+        raise ValueError("invalid_gltf_version")
+    buffers = obj.get("buffers")
+    views = obj.get("bufferViews")
+    accessors = obj.get("accessors")
+    meshes = obj.get("meshes")
+    if not all(isinstance(x, list) for x in (buffers, views, accessors, meshes)):
+        raise ValueError("missing_mesh_geometry")
+    if len(buffers) != 1 or buffers[0].get("uri") is not None or buffers[0].get("byteLength", 0) > bin_length:
+        raise ValueError("unbacked_glb_buffer")
+    triangles = 0
+    for mesh in meshes:
+        for primitive in mesh.get("primitives", []):
+            if primitive.get("mode", 4) != 4:
+                continue
+            attrs = primitive.get("attributes", {})
+            p = attrs.get("POSITION")
+            if type(p) is not int or p < 0 or p >= len(accessors):
+                continue
+            pos = accessors[p]
+            view_index = pos.get("bufferView")
+            if type(view_index) is not int or not 0 <= view_index < len(views):
+                continue
+            view = views[view_index]
+            offset = view.get("byteOffset", 0)
+            length = view.get("byteLength")
+            if (view.get("buffer") != 0 or type(offset) is not int or type(length) is not int or
+                    offset < 0 or length < 36 or offset + length > bin_length or
+                    pos.get("componentType") != 5126 or pos.get("type") != "VEC3" or
+                    type(pos.get("count")) is not int or pos["count"] < 3 or
+                    pos["count"] * 12 > length):
+                continue
+            indices = primitive.get("indices")
+            if indices is None:
+                count = pos["count"]
+            elif type(indices) is int and 0 <= indices < len(accessors):
+                count = accessors[indices].get("count", 0)
+            else:
+                continue
+            if type(count) is int and count >= 3 and count % 3 == 0:
+                triangles += count // 3
+    if triangles == 0:
+        raise ValueError("no_backed_triangle_mesh")
+    return {"triangles": triangles, "structural_mesh_present": True}
 
 def verify(report_path: Path, source_image: Path, *, expected_commit: str,
            expected_model_revision: str) -> dict:
@@ -89,6 +164,7 @@ def verify(report_path: Path, source_image: Path, *, expected_commit: str,
                 header = handle.read(12)
             if header[:4] != b"glTF" or int.from_bytes(header[4:8], "little") != 2 or int.from_bytes(header[8:12], "little") != size:
                 raise ValueError("invalid_glb_header")
+            geometry = validate_glb_geometry(file_path, size)
             digest = sha256_file(file_path)
             if not SHA.fullmatch(str(row.get("sha256", ""))) or digest != row["sha256"]:
                 raise ValueError("hash_mismatch")
@@ -96,7 +172,7 @@ def verify(report_path: Path, source_image: Path, *, expected_commit: str,
                 raise ValueError("missing_duration")
             if not isinstance(row.get("peak_vram_gib"), (int, float)) or isinstance(row.get("peak_vram_gib"), bool) or row["peak_vram_gib"] < 0:
                 raise ValueError("missing_vram")
-            verified_profiles.append({"profile": profile, "bytes": size, "sha256": digest})
+            verified_profiles.append({"profile": profile, "bytes": size, "sha256": digest, **geometry})
         except (OSError, ValueError) as exc:
             # Error class only; never print local paths or sensitive job data.
             code = str(exc) if isinstance(exc, ValueError) else "file_unavailable"
@@ -107,7 +183,7 @@ def verify(report_path: Path, source_image: Path, *, expected_commit: str,
         "model_revision": expected_model_revision,
         "verified_profiles": verified_profiles,
         "errors": errors,
-        "scope": "local_bytes_and_provenance_only",
+        "scope": "local_bytes_structural_mesh_and_operator_declared_provenance",
         "not_proven": ["real_gpu_identity", "visual_parity", "android_fps", "public_release"],
     }
 
