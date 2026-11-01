@@ -17,6 +17,15 @@ describe('Spaktok local photographic camera metering',()=>{
   expect(result.sharpen).toBe(neutralColor.sharpen)
   expect(neutralColor.exposure).toBe(0)
  })
+ it('does not amplify deep-night camera noise with maximum digital lift',()=>{
+  const night=targetPhotographicCorrection({brightness:.08,warmth:0,side:0})
+  const dim=targetPhotographicCorrection({brightness:.30,warmth:0,side:0})
+  expect(night.exposure).toBeGreaterThan(0)
+  expect(night.exposure).toBeLessThan(.12)
+  expect(night.shadows).toBeLessThan(.10)
+  expect(dim.exposure).toBeGreaterThan(0)
+  expect(night.temperature).toBe(0)
+ })
  it('guards highlights in bright scenes and retains original warmth at neutral light',()=>{
   const bright=targetPhotographicCorrection({brightness:.9,warmth:0,side:0})
   expect(bright.exposure).toBeLessThan(0)
