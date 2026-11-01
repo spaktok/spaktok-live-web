@@ -1,6 +1,7 @@
 import {describe,expect,it} from 'vitest'
 import {
  CROWN_V2_ASSET,CROWN_V2_FILTER_ID,verifiedCrownV2Buffer,crownV2ArabicError,
+ CROWN_V2_CALIBRATION_STORAGE_KEY,DEFAULT_CROWN_V2_CALIBRATION,
 } from './crown-v2-private-live'
 
 describe('owner-only crown V2 never accepts a placeholder asset',()=>{
@@ -8,6 +9,12 @@ describe('owner-only crown V2 never accepts a placeholder asset',()=>{
   expect(CROWN_V2_FILTER_ID).not.toBe('3d-gold-crown')
   expect(CROWN_V2_ASSET.ownerDraftOnly).toBe(true)
   expect(CROWN_V2_ASSET.approvedForPublicLive).toBe(false)
+ })
+ it('never reuses the old procedural or pilot model mounting offsets',()=>{
+  expect(CROWN_V2_CALIBRATION_STORAGE_KEY).toBe('spaktok.crown-v2.calibration.v1')
+  expect(DEFAULT_CROWN_V2_CALIBRATION).toEqual({
+   scale:1,vertical:0,depth:0,rotation:0,
+  })
  })
  it('rejects empty and wrong-sized GLB files before parsing or rendering',async()=>{
   const empty=new File([],'empty.glb',{type:'model/gltf-binary'})
