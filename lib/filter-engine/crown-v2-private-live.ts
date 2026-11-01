@@ -51,8 +51,21 @@ export async function loadCrownV2OwnerR2():Promise<File>{
   method:'POST',credentials:'same-origin',cache:'no-store',
   headers:{'content-type':'application/json'},body:'{}',
  })
- if(!res.ok)throw Error(res.status===401?'crown_v2_login':
-   res.status===403?'crown_v2_owner_only':'crown_v2_route_unavailable')
+ if(!res.ok){
+  // Only recognize server-owned error codes. Never expose arbitrary server
+  // responses, URLs or private asset metadata to the camera.
+  const data:unknown=await res.json().catch(()=>null)
+  const code=data&&typeof data==='object'&&!Array.isArray(data)
+   ?(data as {error?:unknown}).error:null
+  if(res.status===401)throw Error('crown_v2_login')
+  if(res.status===403)throw Error(code==='invalid_origin'?'crown_v2_origin':'crown_v2_owner_only')
+  if(res.status===503){
+   if(code==='draft_not_enabled')throw Error('crown_v2_disabled')
+   if(code==='owner_not_configured')throw Error('crown_v2_owner_config')
+   if(code==='signing_unavailable')throw Error('crown_v2_signing')
+  }
+  throw Error('crown_v2_route_unavailable')
+ }
  const ticket=await res.json() as Ticket
  if(ticket.url!==URL||ticket.private!==true||ticket.draft!==true||
     ticket.livePublished!==false||ticket.bytes!==CROWN_V2_ASSET.bytes||
@@ -71,7 +84,11 @@ export async function loadCrownV2OwnerR2():Promise<File>{
 export function crownV2ArabicError(e:unknown):string{
  const code=e instanceof Error?e.message:''
  if(code==='crown_v2_login')return 'سجّل الدخول بحساب المالك لتجربة تاج V2 الخاص.'
- if(code==='crown_v2_owner_only')return 'تاج V2 التجريبي متاح للمالك فقط.'
+ if(code==='crown_v2_owner_only')return 'الحساب الحالي لا يطابق حساب المالك المخوّل؛ تحقّق من تسجيل الدخول بالحساب الصحيح.'
+ if(code==='crown_v2_origin')return 'افتَح Spaktok من نطاق الإنتاج الرئيسي؛ رابط المعاينة غير مخوّل لتحميل تاج V2.'
+ if(code==='crown_v2_disabled')return 'تجربة تاج V2 غير مفعّلة حاليًا على الخادم.'
+ if(code==='crown_v2_owner_config')return 'إعداد حساب المالك غير مكتمل في بيئة النشر الحالية.'
+ if(code==='crown_v2_signing')return 'خدمة توقيع تصريح تاج V2 غير متاحة؛ تحتاج إلى فحص إعدادات الخادم.'
  if(code==='crown_v2_route_unavailable'||code==='crown_v2_download_unavailable')
   return 'تعذّر الاتصال بالتخزين الخاص؛ يمكن استيراد نسخة GLB من الهاتف.'
  if(code==='crown_v2_wrong_size'||code==='crown_v2_digest_mismatch'||code==='crown_v2_invalid_glb')
