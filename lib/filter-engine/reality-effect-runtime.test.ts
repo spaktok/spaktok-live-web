@@ -36,7 +36,7 @@ describe('authored photographic GLB must never degrade to primitive geometry',()
   expect(calibrated).toHaveBeenCalledOnce()
   expect(preview).not.toHaveBeenCalled()
  })
- it('keeps legacy procedural geometry internal but out of public photographic menus',async()=>{
+ it('rejects even legacy procedural geometry instead of painting it over faces',async()=>{
   const effect=getRealityEffect('3d-lux-glasses')
   if(!effect)throw Error('legacy_manifest_missing')
   const runtime=new RealityEffectRuntime({
@@ -44,8 +44,7 @@ describe('authored photographic GLB must never degrade to primitive geometry',()
    createProceduralPreview:()=>({legacy:true}),
    calibrateAuthored:()=>{},
   })
-  const result=await runtime.instantiate(effect)
-  expect(result.source).toBe('procedural-preview')
-  expect(result.quality).toBe('fallback')
+  await expect(runtime.instantiate(effect)).rejects
+   .toThrow('reality_original_asset_required:3d-lux-glasses')
  })
 })
