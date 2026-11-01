@@ -13,6 +13,7 @@ type Zone=(typeof ZONES)[number]
 type Tintable=THREE.MeshBasicMaterial|THREE.MeshStandardMaterial
 
 const owned=new WeakMap<THREE.Mesh,Tintable>()
+const originalColors=new WeakMap<THREE.Mesh,THREE.Color>()
 function tintable(value:THREE.Material):value is Tintable{
  return value instanceof THREE.MeshBasicMaterial||value instanceof THREE.MeshStandardMaterial
 }
@@ -21,6 +22,7 @@ function materialFor(mesh:THREE.Mesh):Tintable|null{
  if(prev)return prev
  if(Array.isArray(mesh.material)||!tintable(mesh.material))return null
  const clone=mesh.material.clone() as Tintable
+ originalColors.set(mesh,clone.color.clone())
  mesh.material=clone
  owned.set(mesh,clone)
  return clone
@@ -50,9 +52,9 @@ export function applyCrownV2DraftColors(root:THREE.Object3D,id:CrownV2ColorPrese
   const hex=zone==='metal_base'||zone==='gold_backing_headband'?palette.metal:
    zone==='gem_main_center'?palette.main:
    zone==='gem_secondary'?palette.secondary:palette.diamonds
-  const color=id==='royal-rainbow'&&zone!=='gold_backing_headband'
-   ?new THREE.Color('#ffffff')
-   :new THREE.Color('#ffffff').lerp(new THREE.Color(hex),zone==='gold_backing_headband'?1:.56)
+  const base=originalColors.get(o)??new THREE.Color('#ffffff')
+  const color=id==='royal-rainbow'?base.clone():
+   base.clone().lerp(new THREE.Color(hex),zone==='gold_backing_headband'?.64:.56)
   mat.color.copy(color)
   mat.needsUpdate=true
   updated++
