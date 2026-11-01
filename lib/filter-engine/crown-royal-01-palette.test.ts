@@ -52,8 +52,12 @@ describe('Royal Crown 01 material slots',()=>{
   const first=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshStandardMaterial())
   first.name='metal_base'
   root.add(first)
+  const original=first.material
+  const originalColor=(first.material as THREE.MeshStandardMaterial).color.getHex()
   const result=applyRoyalCrown01Palette(root,'ice-queen')
-  expect(result.updatedMeshes).toBe(1)
+  expect(result.updatedMeshes).toBe(0)
   expect(result.missingSlots).toContain('gem_main_center')
+  expect(first.material).toBe(original)
+  expect((first.material as THREE.MeshStandardMaterial).color.getHex()).toBe(originalColor)
  })
 })
