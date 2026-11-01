@@ -134,7 +134,7 @@ export default {async fetch(req,env){
   if(!await allow(token,env.VAST_DB))return json({error:'preview_link_expired_or_unavailable'},403);
   if(what==='live')return new Response(livePage(token),{headers:{...NO_STORE,'content-type':'text/html; charset=utf-8',
     'permissions-policy':'camera=(self), microphone=()',
-    'content-security-policy':"default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; connect-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: blob:; media-src blob:; worker-src blob:; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'; 'wasm-unsafe-eval'"}});
+    'content-security-policy':"default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'unsafe-inline'; connect-src 'self' https://cdn.jsdelivr.net; img-src 'self' data: blob:; media-src blob:; worker-src blob:; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'"}});
   if(what==='view')return new Response(page(token),{headers:{...NO_STORE,'content-type':'text/html; charset=utf-8',
     'content-security-policy':"default-src 'none'; script-src 'unsafe-inline' https://ajax.googleapis.com; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; worker-src blob:; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'none'"}});
   if(what==='model'||what==='download')return serveFile(env,MODEL_KEY,MODEL_SHA,MODEL_BYTES,'model/gltf-binary',what==='download');
