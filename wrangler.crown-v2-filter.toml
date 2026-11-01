@@ -1,0 +1,14 @@
+# Private owner-only Crown V2 draft filter — never a public GLB URL.
+name = "spaktok-crown-v2-filter"
+main = "cloudflare/workers/spaktok-crown-v2-filter.mjs"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[vars]
+SPAKTOK_WEB_ORIGIN = "https://v0-spaktok-elite-app.vercel.app"
+
+[[r2_buckets]]
+binding = "STUDIO_ASSETS"
+bucket_name = "spaktok-private-drafts"
+
+# Secret: SPAKTOK_CROWN_V2_ED25519_PUBLIC_KEY (SPKI DER Base64)
