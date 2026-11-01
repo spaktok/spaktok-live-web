@@ -23,7 +23,7 @@
     "test:studio:ai:free:canary": "node scripts/test-director-ai-worker.mjs",
     "test:hi3d": "node --test lib/server/hi3d-api.test.mjs",
     "hi3d:smoke": "node scripts/hi3d-v3-smoke.mjs",
-    "test:security:api": "vitest run --config vitest.config.ts lib/native/auth.test.ts lib/native/request-security.test.ts lib/native/activity-pagination.test.ts lib/native/activity-time.test.ts lib/filter-engine/crown-v2-private-live.test.ts"
+    "test:security:api": "vitest run --config vitest.config.ts lib/native/auth.test.ts lib/native/auth-response.test.ts lib/native/request-security.test.ts lib/native/activity-pagination.test.ts lib/native/activity-time.test.ts lib/filter-engine/crown-v2-private-live.test.ts"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
