@@ -55,7 +55,7 @@ def validate_glb_geometry(path: Path, size: int) -> dict:
         if len(bin_header) != 8:
             raise ValueError("missing_glb_binary")
         bin_length, bin_kind = struct.unpack("<I4s", bin_header)
-        if bin_kind != b"BIN\\x00" or bin_length < 36 or 28 + json_size + bin_length != size:
+        if bin_kind != b"BIN\x00" or bin_length < 36 or 28 + json_size + bin_length != size:
             raise ValueError("invalid_glb_binary")
     if not isinstance(obj, dict) or (obj.get("asset") or {}).get("version") != "2.0":
         raise ValueError("invalid_gltf_version")
