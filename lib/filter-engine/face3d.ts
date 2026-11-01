@@ -121,94 +121,13 @@ export function trianglesFromConnections(
     if(c>b&&neighbors[b].has(c))triangles.push(a,b,c)
  return triangles
 }
-const GOLD=new THREE.MeshStandardMaterial({color:0xe2b65a,metalness:.75,roughness:.22})
-const CHROME=new THREE.MeshStandardMaterial({color:0x9bdaf4,metalness:.82,roughness:.13})
-const BLACK=new THREE.MeshStandardMaterial({color:0x131824,metalness:.7,roughness:.27})
-const GLASS=new THREE.MeshPhysicalMaterial({color:0x6eaee9,metalness:.1,roughness:.12,
-  transparent:true,opacity:.32,depthWrite:false,side:THREE.DoubleSide})
-function attach(group:THREE.Group,geometry:THREE.BufferGeometry,material:THREE.Material,
- x=0,y=0,z=0,rotationX=0,rotationY=0,rotationZ=0){
- const mesh=new THREE.Mesh(geometry,material)
- mesh.position.set(x,y,z);mesh.rotation.set(rotationX,rotationY,rotationZ)
- group.add(mesh);return mesh
-}
-function makeGlasses():THREE.Group{
- const group=new THREE.Group()
- for(const x of [-.27,.27]){
-  attach(group,new THREE.TorusGeometry(.19,.029,10,36),CHROME,x,0,.24)
-  attach(group,new THREE.CircleGeometry(.184,40),GLASS,x,0,.235)
-  attach(group,new THREE.BoxGeometry(.06,.018,.018),GOLD,x+.19*Math.sign(x),-.01,.23)
- }
- attach(group,new THREE.CylinderGeometry(.017,.017,.15,10),CHROME,0,0,.25,0,0,Math.PI/2)
- for(const s of [-1,1]){
-  attach(group,new THREE.CylinderGeometry(.017,.017,.28,10),CHROME,s*.51,.04,.10,0,.22*s,.50*s)
- }
- return group
-}
-function makeCrown():THREE.Group{
- const group=new THREE.Group()
- const gem=new THREE.MeshStandardMaterial({color:0x51d7f4,metalness:.24,roughness:.12,
-  emissive:0x06243c})
- attach(group,new THREE.CylinderGeometry(.43,.48,.15,32),GOLD,0,-.61,.02)
- for(let i=0;i<7;i++){
-  const x=(i-3)*.135,y=-.78+(i===3?-.18:Math.abs(i-3)===2?-.03:-.09)
-  attach(group,new THREE.ConeGeometry(.108,.38,10),GOLD,x,y,.04)
-  attach(group,new THREE.IcosahedronGeometry(.057,0),gem,x,y-.11,.15)
- }
- attach(group,new THREE.TorusGeometry(.42,.03,8,32),CHROME,0,-.54,.025)
- return group
-}
-function makeVisor():THREE.Group{
- const group=new THREE.Group()
- const glow=new THREE.MeshStandardMaterial({color:0x26e9ff,emissive:0x107b9c,
-  emissiveIntensity:.9,metalness:.38,roughness:.18})
- attach(group,new THREE.SphereGeometry(.61,32,18,0,Math.PI*2,0,Math.PI*.55),BLACK,0,-.06,-.05,Math.PI)
- const shell=attach(group,new THREE.SphereGeometry(.62,32,18,0,Math.PI*2,0,Math.PI*.55),CHROME,0,-.06,-.06,Math.PI)
- shell.scale.z=.85
- const vis=attach(group,new THREE.SphereGeometry(.51,36,20,0,Math.PI,Math.PI*.32,Math.PI*.38),
-    GLASS,0,.09,.22,-.1)
- vis.scale.z=.7
- attach(group,new THREE.TorusGeometry(.54,.032,8,40,Math.PI),glow,0,.11,.2)
- return group
-}
-function makeCap():THREE.Group{
- const group=new THREE.Group()
- const fabric=new THREE.MeshStandardMaterial({color:0x1d2940,metalness:.23,roughness:.47})
- const brim=new THREE.MeshStandardMaterial({color:0x20272f,metalness:.35,roughness:.34})
- attach(group,new THREE.SphereGeometry(.53,32,12,0,Math.PI*2,0,Math.PI/2),fabric,0,-.46,-.1,Math.PI)
- const bill=attach(group,new THREE.CylinderGeometry(.52,.56,.045,32,1,false,0,Math.PI),brim,0,-.47,.29,Math.PI/2)
- bill.scale.z=.55
- const badge=attach(group,new THREE.BoxGeometry(.20,.11,.02),GOLD,0,-.68,.36)
- badge.rotation.x=-.15
- return group
-}
-function makeExpressionMask():THREE.Group{
- const group=new THREE.Group()
- const cobalt=new THREE.MeshStandardMaterial({color:0x6fccef,metalness:.67,roughness:.21,
-   emissive:0x042738})
- const pink=new THREE.MeshStandardMaterial({color:0xe9579b,metalness:.28,roughness:.25,
-   emissive:0x2b0715})
- for(const [index,x] of [[0,-.27],[1,.27]] as const){
-  const ring=attach(group,new THREE.TorusGeometry(.20,.028,10,32),cobalt,x,0,.24)
-  ring.name=index===0?'EyeLeft':'EyeRight'
-  const lens=attach(group,new THREE.SphereGeometry(.095,20,12),pink,x,0,.30)
-  lens.name=index===0?'PupilLeft':'PupilRight'
-  const brow=attach(group,new THREE.BoxGeometry(.36,.04,.045),cobalt,x,-.25,.24)
-  brow.name=index===0?'BrowLeft':'BrowRight'
- }
- const mouth=attach(group,new THREE.TorusGeometry(.12,.023,10,30),pink,0,.53,.30)
- mouth.name='MouthRing'
- const jaw=attach(group,new THREE.CapsuleGeometry(.055,.18,6,14),cobalt,0,.68,.20)
- jaw.name='Jaw'
- return group
-}
 function disposeObject(node:THREE.Object3D){
  node.traverse(child=>{
   if(child instanceof THREE.Mesh){
    child.geometry.dispose()
    // Release imported model textures on lens switch to avoid leaking GPU memory.
    const materials=Array.isArray(child.material)?child.material:[child.material]
-   for(const m of materials)if(![CHROME,GOLD,BLACK,GLASS].includes(m as never)){
+   for(const m of materials){
      for(const key of ['map','normalMap','roughnessMap','metalnessMap','alphaMap','emissiveMap','aoMap'] as const){
        const t=(m as THREE.MeshStandardMaterial)[key]
        if(t instanceof THREE.Texture)t.dispose()
@@ -218,7 +137,7 @@ function disposeObject(node:THREE.Object3D){
   }
  })
 }
-function disposeShared(){ /* fixed shared PBR materials are kept while the module lives */ }
+function disposeShared(){ /* No shared procedural wearable materials remain. */ }
 
 /** Camera pixel convention: X right, Y down. Shared by constructor, resize,
  * and regression tests so a future refactor cannot reintroduce a flipped face. */
