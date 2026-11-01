@@ -18,6 +18,7 @@ import {buildLiveSculptWarp,hasLiveSculpt,normalizeLiveSculpt,
  type LiveSculptControls,type LiveSculptFrame} from './reality-live-sculpt-warp'
 import {createDenseFaceTopology,type DenseFaceTopology} from './reality-face-topology'
 import {FIRST_GPU_LIVE_FILTER_ID} from './spaktok-first-gpu-live'
+import {CROWN_V2_FILTER_ID} from './crown-v2-private-live'
 import {isPhotorealSurfaceId} from './reality-precision-face-mask'
 
 import {NEUTRAL_PHOTOGRAPHIC_CORRECTION,targetPhotographicCorrection,smoothPhotographicCorrection,applyPhotographicCorrection,estimatePortraitPhotographicLight} from './reality-photographic-meter'
@@ -32,6 +33,7 @@ interface Options {
   state: StudioState
   localPhotoFaceFile?:File|null
   firstGpuPilotFile?:File|null
+  crownV2File?:File|null
   audio?: boolean
   livePreview?: boolean
   /** Opt-in on-device 32x18 camera metering for the shared still/video/live GPU pass. */
@@ -63,7 +65,7 @@ const chooseOutputHeight = (livePreview=false) => {
  * Face mesh and person segmentation run on-device (MediaPipe) so reshape and
  * background effects follow the face frame-by-frame.
  */
-export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotFile=null, audio = false, livePreview=false, smartPhoto=false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false, liveSculpt }: Options) {
+export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotFile=null, crownV2File=null, audio = false, livePreview=false, smartPhoto=false, paused = false, aspect = 9 / 16, liveFaceMesh=false, liveMeshDebug=false, liveSculpt }: Options) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const arCanvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -355,7 +357,8 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
       if(!engine){engine=new FaceMesh3DEngine(layer,base.width,base.height);threeEngineRef.current=engine}
       engine.setGpuPilotCalibration(stateRef.current.face.pilot)
       const loaded=await engine.setLens(state.face.id,
-       state.face.id===FIRST_GPU_LIVE_FILTER_ID?firstGpuPilotFile:null)
+       state.face.id===FIRST_GPU_LIVE_FILTER_ID?firstGpuPilotFile:
+        state.face.id===CROWN_V2_FILTER_ID?crownV2File:null)
       if(state.face.id==='3d-photo-face'){
        if(!cancelled){setPhotoFaceStatus(localPhotoFaceFile?'loading':'idle');setPhotoFaceError(null)}
        try{
@@ -376,7 +379,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
       if(!cancelled){setThreeQuality(loaded?engine.modelQuality:'none');setThreeStatus(loaded?'ready':'unavailable')}
     }).catch(()=>{if(!cancelled){setThreeQuality('none');setThreeStatus('unavailable')}})
     return()=>{cancelled=true}
-  },[state.face.id,localPhotoFaceFile,firstGpuPilotFile])
+  },[state.face.id,localPhotoFaceFile,firstGpuPilotFile,crownV2File])
   // Slider events mutate only a cached Three.js transform, never re-read the GLB.
   useEffect(()=>{
    threeEngineRef.current?.setGpuPilotCalibration(state.face.pilot)
@@ -587,7 +590,7 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
         const baseColor=original?neutralColor:resolveColor(current)
         const photographicColor=!original&&smartPhotoRef.current
           ?applyPhotographicCorrection(baseColor,photoCorrectionRef.current):baseColor
-        const pilotHeadProp=current.face.id===FIRST_GPU_LIVE_FILTER_ID
+        const pilotHeadProp=current.face.id===FIRST_GPU_LIVE_FILTER_ID||current.face.id===CROWN_V2_FILTER_ID
          const currentWarp=(!original&&!pilotHeadProp&&liveMeshEnabledRef.current&&
          hasLiveSculpt(liveSculptRef.current)&&
          liveWarpRef.current&&now-liveWarpRef.current.timestamp<=375&&faceRef.current)
