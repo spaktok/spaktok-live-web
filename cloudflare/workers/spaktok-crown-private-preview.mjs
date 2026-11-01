@@ -14,7 +14,7 @@ const json=(v,s=200)=>new Response(JSON.stringify(v),{status:s,headers:{...NO_ST
 const hash=async s=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))).map(x=>x.toString(16).padStart(2,'0')).join('');
 const hashBuffer=async b=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',b))).map(x=>x.toString(16).padStart(2,'0')).join('');
 function constant(a,b){if(a.length!==b.length)return false;let n=0;for(let i=0;i<a.length;i++)n|=a.charCodeAt(i)^b.charCodeAt(i);return n===0;}
-const isToken=s=>s.length===64&&/^[a-f0-9]+$/.test(s);
+const isToken=s=>(s.length===32||s.length===64)&&/^[a-f0-9]+$/.test(s);
 async function allow(token,db){
  if(!isToken(token))return false;
  const th=await hash(token);
@@ -124,14 +124,9 @@ export default {async fetch(req,env){
   const u=new URL(req.url);
   if(req.method==='GET'&&u.pathname==='/health')return json({service:'spaktok-crown-private-preview',publicAccess:false});
   if(req.method!=='GET'||!env.STUDIO_ASSETS||!env.VAST_DB)return json({error:'not_found'},404);
-  // Mobile in-app browsers frequently add utm_source=chatgpt.com or an
-  // innocuous trailing slash. These do not alter the authorization ticket.
-  // Never accept unrecognized query keys, and never downgrade token validation.
-  const allowedTracking=new Set(['utm_source','utm_medium','utm_campaign','utm_content',
-   'utm_term','fbclid','gclid','ref','source','_r']);
-  for(const key of u.searchParams.keys()){
-   if(!allowedTracking.has(key))return json({error:'unsupported_query'},400)
-  }
+  // Query parameters added by Android Custom Tabs are presentation-only.
+  // They never participate in ticket authentication or asset selection.
+  // The ticket remains a 128/256-bit secret in the *path* and is verified in D1.
   const path=u.pathname.endsWith('/')&&u.pathname.length>1?u.pathname.slice(0,-1):u.pathname;
   if(path==='/')return new Response('<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Spaktok Live</title><body style="font:16px system-ui;background:#101524;color:#fff;padding:28px"><h2>👑 Spaktok Live التجريبي</h2><p>الصفحة الرئيسية ليست رابط التجربة الخاص. افتح رابط اللايف كاملًا من المحادثة، بما فيه رمز الوصول بعد /live/.</p><p>يمكنك الضغط مطولًا على الرابط ثم اختيار فتح في Chrome.</p></body></html>',{headers:{...NO_STORE,'content-type':'text/html; charset=utf-8'}});
   const pieces=path.split('/');
