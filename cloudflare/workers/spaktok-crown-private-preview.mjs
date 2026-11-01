@@ -123,8 +123,18 @@ export default {async fetch(req,env){
  try{
   const u=new URL(req.url);
   if(req.method==='GET'&&u.pathname==='/health')return json({service:'spaktok-crown-private-preview',publicAccess:false});
-  if(req.method!=='GET'||u.search||!env.STUDIO_ASSETS||!env.VAST_DB)return json({error:'not_found'},404);
-  const pieces=u.pathname.split('/');
+  if(req.method!=='GET'||!env.STUDIO_ASSETS||!env.VAST_DB)return json({error:'not_found'},404);
+  // Mobile in-app browsers frequently add utm_source=chatgpt.com or an
+  // innocuous trailing slash. These do not alter the authorization ticket.
+  // Never accept unrecognized query keys, and never downgrade token validation.
+  const allowedTracking=new Set(['utm_source','utm_medium','utm_campaign','utm_content',
+   'utm_term','fbclid','gclid','ref','source','_r']);
+  for(const key of u.searchParams.keys()){
+   if(!allowedTracking.has(key))return json({error:'unsupported_query'},400)
+  }
+  const path=u.pathname.replace(/\\/+$/,'')||'/';
+  if(path==='/')return new Response('<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Spaktok Live</title><body style="font:16px system-ui;background:#101524;color:#fff;padding:28px"><h2>👑 Spaktok Live التجريبي</h2><p>الصفحة الرئيسية ليست رابط التجربة الخاص. افتح رابط اللايف كاملًا من المحادثة، بما فيه رمز الوصول بعد /live/.</p><p>يمكنك الضغط مطولًا على الرابط ثم اختيار فتح في Chrome.</p></body></html>',{headers:{...NO_STORE,'content-type':'text/html; charset=utf-8'}});
+  const pieces=path.split('/');
   let token='',what='';
   if(pieces.length===3&&pieces[1]==='view'){what='view';token=pieces[2]}
   else if(pieces.length===3&&pieces[1]==='live'){what='live';token=pieces[2]}
