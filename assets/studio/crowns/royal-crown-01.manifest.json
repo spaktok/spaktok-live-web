@@ -1,7 +1,7 @@
 {
   "assetId": "spaktok-studio/filters/crown/royal-crown-01",
-  "version": "2026-11-01.7",
-  "state": "owner-rejected-first-trellis2-generation-visual-mismatch",
+  "version": "2026-11-01.8",
+  "state": "v1-rejected-v2-source-locked-private-awaiting-owner-visual-review",
   "source": {
     "filename": "crown_reference_original.png",
     "sha256": "883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e",
@@ -167,5 +167,46 @@
     "alternateFrontalArtifactSha256": "88672ff99b9ba59569a156edce89a3fe2e7ce0061fa9506ae6a6695a186d02c0",
     "alternateInCloudflareR2": false,
     "alternateLiveApproved": false
+  },
+  "v2": {
+    "status": "built-and-archived-private",
+    "generationMethod": "deterministic-source-pixel-locked-2.5d, not free-form TRELLIS.2 inference",
+    "inputR2Key": "vast-private/input/royal-crown-01/883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e.png",
+    "sourceSha256": "883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e",
+    "sourcePNGEmbeddedUnchanged": true,
+    "masterR2Key": "studio/private/filters/crown/royal-crown-01/v2-source-locked/master.glb",
+    "qaR2Key": "studio/private/filters/crown/royal-crown-01/v2-source-locked/qa.json",
+    "sourceGlbSha256": "ee5ec583041a9e2b55e31f718e42670ba5526d2cccfa249b549dece4ad81f129",
+    "sourceGlbBytes": 3324548,
+    "triangles": 32256,
+    "materialZones": [
+      "metal_base",
+      "gem_main_center",
+      "gem_secondary",
+      "diamond_small",
+      "sparkle_layer",
+      "gold_backing_headband"
+    ],
+    "provisionalMaterialZoneBoundaries": true,
+    "pbrMaterials": 6,
+    "embeddedImages": 1,
+    "normals": true,
+    "uv": true,
+    "gpuInspection": {
+      "jobId": "dc045b2c-bada-34ca-0f3c-1a1005610e00",
+      "status": "succeeded",
+      "mobileStructuralBudgetPass": true
+    },
+    "gpuMobileFinalization": {
+      "jobId": "e17d8234-04cf-14f1-57cc-76491bd48b10",
+      "status": "failed",
+      "reason": "Existing normal recalculation rejects unused vertices in per-zone primitives; source master remains intact"
+    },
+    "geometryMethod": "front is shallow-curved with exact source PNG; backside and gemstone depth are approximations",
+    "full3dSimilarity100PercentGuaranteed": false,
+    "imageVisualReview": "pending",
+    "colorPresetsValidated": false,
+    "androidLiveFpsTested": false,
+    "liveApproved": false
   }
 }
