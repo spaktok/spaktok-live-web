@@ -57,10 +57,14 @@ export function targetPhotographicCorrection(light:AmbientLightEstimate):Photogr
  const warmth=clamp(light.warmth,-.35,.35)
  const dark=clamp((.44-brightness)/.32,0,1)
  const bright=clamp((brightness-.65)/.25,0,1)
+ // In genuinely dark scenes the source camera is already noise-limited.
+ // Aggressive digital lift magnifies colored sensor grain without revealing
+ // usable facial detail. Retain atmosphere and recommend real light instead.
+ const noiseGuard=.45+.55*clamp((brightness-.10)/.22,0,1)
  return {
-  exposure:clamp(.20*dark-.12*bright,-.12,.20),
+  exposure:clamp(.20*dark*noiseGuard-.12*bright,-.12,.20),
   temperature:clamp(-warmth*.36,-.13,.13),
-  shadows:clamp(.17*dark,0,.17),
+  shadows:clamp(.17*dark*noiseGuard,0,.17),
   highlights:clamp(-.20*bright,-.20,0),
  }
 }
