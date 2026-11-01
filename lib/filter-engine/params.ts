@@ -303,7 +303,11 @@ export const colorSliders: { key: Exclude<keyof ColorParams, 'shadowTint' | 'hig
 
 export const beautySliders: (keyof BeautyParams)[] = ['smooth', 'whiten', 'slim', 'eyes', 'jaw', 'nose', 'lipstick', 'blush']
 
-/** Face geometry is only needed for warps and makeup; skin smoothing works without tracking. */
+/** Face geometry is required for skin-safe portrait refinement too:
+ * only refine the tracked face, never clothing, hair, or the full background.
+ */
 export function needsFaceTracking(beauty: BeautyParams) {
-  return beauty.slim > 0 || beauty.eyes > 0 || beauty.jaw > 0 || beauty.nose > 0 || beauty.lipstick > 0 || beauty.blush > 0
+  return beauty.smooth > 0 || beauty.slim > 0 || beauty.eyes > 0 ||
+    beauty.jaw > 0 || beauty.nose > 0 || beauty.lipstick > 0 ||
+    beauty.blush > 0
 }
