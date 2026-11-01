@@ -163,6 +163,39 @@ async function respond(req,env){
   if(errorCode!==undefined&&(!/^[a-z0-9_]{1,64}$/.test(errorCode)))return json({error:'bad_error_code'},422);
   const summary=JSON.stringify(result);
   if(summary.length>3000)return json({error:'result_too_large'},413);
+  // Exact owner crown: privately archive the *existing* TRELLIS.2 GLB
+  // after an authenticated, SHA-verified CPU inspection. No public URI,
+  // no re-generation, no mobile or visual-fidelity certification.
+  if(state==='succeeded'&&job.action==='inspect_glb'&&
+     job.input_key==='vast-private/input/royal-crown-01/qa-first-run.glb'&&
+     job.input_sha256==='3ce1d543317590c95b386e5f5f6747c048421cf9a93bbf7a37f2a8b39806822b'){
+   const quality=result?.quality;
+   if(!quality||quality.bytes!==4856516||!Number.isInteger(quality.triangles)||
+      quality.triangles<1||quality.triangles>2000000||quality.meshes<1)
+     return json({error:'invalid_crown_qa_metrics'},422);
+   const source=await env.VAST_ASSETS.get('vast-private/output/royal-crown-01/first-run-20261101.glb');
+   if(!source||source.size!==4856516||
+      source.customMetadata?.sha256!=='3ce1d543317590c95b386e5f5f6747c048421cf9a93bbf7a37f2a8b39806822b')
+     return json({error:'crown_private_source_unverified'},409);
+   const bytes=await source.arrayBuffer();
+   if(await sha(bytes)!=='3ce1d543317590c95b386e5f5f6747c048421cf9a93bbf7a37f2a8b39806822b')
+     return json({error:'crown_master_hash_invalid'},409);
+   const master='studio/private/filters/crown/royal-crown-01/master.glb';
+   if(!await env.VAST_ASSETS.head(master))
+    await env.VAST_ASSETS.put(master,bytes,{
+     httpMetadata:{contentType:'model/gltf-binary'},
+     customMetadata:{sha256:'3ce1d543317590c95b386e5f5f6747c048421cf9a93bbf7a37f2a8b39806822b',
+       asset:'royal-crown-01',status:'owner-review-only',visibility:'private'}});
+   const report={assetId:'royal-crown-01',sourceSha256:job.input_sha256,
+    jobId:job.id,quality,visualComparison:'pending',materialSlots:'not-separated',
+    livePublication:false};
+   await env.VAST_ASSETS.put('studio/private/filters/crown/royal-crown-01/qa.json',
+     JSON.stringify(report),{httpMetadata:{contentType:'application/json'},
+       customMetadata:{visibility:'private',asset:'royal-crown-01'}});
+   await env.VAST_DB.prepare(
+    "INSERT OR IGNORE INTO vast_crown_qa_results(asset_id,status,quality_json,completed_at,error_code) VALUES('royal-crown-01','succeeded',?,?,NULL)")
+    .bind(JSON.stringify(quality),clock()).run();
+  }
   const saved=await env.VAST_DB.prepare("UPDATE vast_agent_jobs SET state=?,finished_at=?,result_json=?,error_code=? WHERE id=? AND state='leased'").bind(state,clock(),summary,state==='failed'?errorCode||'gpu_job_failed':null,job.id).run();
   return json({accepted:saved.meta?.changes===1});
  }
