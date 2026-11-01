@@ -38,7 +38,8 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
   const { s } = useStudioStrings()
   const [studio, setStudio] = useState(() => {
    const state=createStudioState()
-   return initialFaceFxId==='none'?state:{
+   // Never select private V2 before its original owner-only GLB is verified.
+    return initialFaceFxId==='none'||initialFaceFxId===CROWN_V2_FILTER_ID?state:{
     ...state,face:{...state.face,id:initialFaceFxId,strength:.85},
    }
   })
@@ -173,7 +174,11 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
     setStudio(prev=>({...prev,face:{...prev.face,id:CROWN_V2_FILTER_ID,strength:.9}}))
     setCrownV2Message('✓ تاج V2 الأصلي تم التحقق منه وتركيبه كفلتر معاينة محلي.')
     setShowFaceTray(false)
-   }catch(error){setCrownV2Message(crownV2ArabicError(error))}
+   }catch(error){
+      setCrownV2File(null)
+      setStudio(prev=>prev.face.id===CROWN_V2_FILTER_ID?{...prev,face:{...prev.face,id:'none'}}:prev)
+      setCrownV2Message(crownV2ArabicError(error))
+    }
    finally{setCrownV2Busy(false)}
   }
   const fetchCrownV2=async()=>{
@@ -187,7 +192,11 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
     setStudio(prev=>({...prev,face:{...prev.face,id:CROWN_V2_FILTER_ID,strength:.9}}))
     setCrownV2Message('✓ حملنا التاج الأصلي V2. المعاينة على هاتفك فقط.')
     setShowFaceTray(false)
-   }catch(error){setCrownV2Message(crownV2ArabicError(error))}
+   }catch(error){
+      setCrownV2File(null)
+      setStudio(prev=>prev.face.id===CROWN_V2_FILTER_ID?{...prev,face:{...prev.face,id:'none'}}:prev)
+      setCrownV2Message(crownV2ArabicError(error))
+    }
    finally{setCrownV2Busy(false)}
   }
   const autoCrownStarted=useRef(false)
@@ -652,7 +661,12 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
             crownV2Message={crownV2Message} crownV2Preset={crownV2Preset}
             onCrownV2PresetChange={setCrownV2Preset} onFetchCrownV2={fetchCrownV2}
             onImportCrownV2={activateCrownV2}/>}
-        {mode==='live'&&studio.face.id===CROWN_V2_FILTER_ID&&
+        {mode==='live'&&initialFaceFxId===CROWN_V2_FILTER_ID&&!crownV2File&&
+          <div dir="rtl" role="status" className="absolute inset-x-4 top-[max(4.75rem,env(safe-area-inset-top))] z-20 rounded-lg bg-black/85 px-3 py-2 text-center text-[11px] text-amber-100">
+           <p>{crownV2Busy?'جارٍ التحقق من تاج V2 الأصلي…':crownV2Message}</p>
+           {!crownV2Busy&&<a href="/" className="mt-1 inline-block font-semibold text-cyan-300 underline">العودة إلى تسجيل الدخول</a>}
+          </div>}
+         {mode==='live'&&studio.face.id===CROWN_V2_FILTER_ID&&
           <p dir="rtl" role="status" className="pointer-events-none absolute inset-x-4 top-[max(4.75rem,env(safe-area-inset-top))] z-20 rounded-lg bg-black/70 px-3 py-2 text-center text-[11px] text-amber-100">
            {camera.threeStatus==='ready'?'✓ تاج V2 على الرأس — فلتر تجريبي محلي':
             camera.threeStatus==='unavailable'?'⚠ تعذّر عرض تاج V2؛ تحقق من الدخول بحساب المالك':
