@@ -29,6 +29,18 @@ describe('tone-neutral photographic portrait GPU pipeline',()=>{
   expect(s).not.toContain('uWhiten')
   expect(s).not.toContain('vec3(1.0)')
  })
+ it('bounds sharpening and suppresses ringing around high-contrast edges',()=>{
+  const shader=realityColorFragmentShader
+  const start=shader.indexOf('  if (uSharpen > 0.001) {')
+  const end=shader.indexOf('  if (uGlow > 0.001',start)
+  expect(start).toBeGreaterThan(0)
+  expect(end).toBeGreaterThan(start)
+  const sharpening=shader.slice(start,end)
+  expect(sharpening).toContain('haloGuard')
+  expect(sharpening).toContain('min(uSharpen,1.0)*0.8*haloGuard')
+  expect(sharpening).toContain('clamp(detail,vec3(-0.08),vec3(0.08))')
+  expect(realityGpuColorFragmentShader).toContain(sharpening)
+ })
  it('uses same refinement in recording and integrated Three camera',()=>{
   const legacy=smoothingBlock(realityColorFragmentShader)
   const gpu=smoothingBlock(realityGpuColorFragmentShader)
