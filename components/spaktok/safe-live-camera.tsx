@@ -64,14 +64,15 @@ class LiveCameraErrorBoundary extends Component<BoundaryProps, BoundaryState> {
   }
 }
 
-export function SafeLiveCamera({ onClose, initialMode = 'live', initialFaceFxId='none' }: {
+export function SafeLiveCamera({ onClose, initialMode = 'live', initialFaceFxId='none',privatePreview=false }: {
   onClose: () => void
   initialMode?: 'photo' | '15s' | '60s' | 'story' | 'live'
   initialFaceFxId?: FaceFxId
+  privatePreview?:boolean
 }) {
   return (
     <LiveCameraErrorBoundary onExit={onClose}>
-      <Camera initialMode={initialMode} initialFaceFxId={initialFaceFxId} onClose={onClose} />
+      <Camera initialMode={initialMode} initialFaceFxId={initialFaceFxId} privatePreview={privatePreview} onClose={onClose} />
     </LiveCameraErrorBoundary>
   )
 }
