@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import {classifyNativeAuthResponse} from '@/lib/native/auth-response'
 export interface NativeUser { id:string; email:string; username:string }
 export interface AuthState {
   session:{user:NativeUser}|null
@@ -14,8 +15,9 @@ export function useAuth(): AuthState & { signOut:()=>Promise<void> } {
     fetch('/api/native/auth',{cache:'no-store',credentials:'same-origin',signal:controller.signal})
       .then(async (res)=>{
         const data=await res.json() as { configured?:boolean;user?:NativeUser|null;error?:string }
-        if(data.configured===false)throw new Error('native_auth_not_configured')
-        if(!res.ok||data.configured!==true)throw new Error('auth_unavailable')
+        const readiness=classifyNativeAuthResponse(res.status,data)
+        if(readiness!=='ready')throw new Error(readiness==='not_configured'
+          ?'native_auth_not_configured':'auth_unavailable')
         if (!controller.signal.aborted) setState({
           session:data.user?{user:data.user}:null,
           user:data.user||null,isLoading:false,error:null,
