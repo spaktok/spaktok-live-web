@@ -23,6 +23,19 @@ export const PUBLIC_PHOTOGRAPHIC_FACE_FX=faceFxCatalog.filter(
  fx=>isPublicPhotographicFaceFx(fx.id)
 )
 
+/** Existing deep links / saved presets may still name retired procedural lenses.
+ * Never auto-enable them in the public camera. Only an explicit owner-preview
+ * entry can request the private original crown or GPU pilot.
+ */
+export function safeInitialCameraFaceFx(
+ id:FaceFxId,
+ ownerPreview:boolean,
+):FaceFxId{
+ if(ownerPreview&&(id==='3d-royal-crown-v2'||id==='3d-first-gpu-pilot'))
+  return id
+ return isPublicPhotographicFaceFx(id)?id:'none'
+}
+
 /** These operate on real camera pixels with the existing graded GPU pipeline.
  * They do not generate synthetic skin texture or change a person's identity.
  */
