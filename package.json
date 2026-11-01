@@ -24,7 +24,7 @@
     "test:hi3d": "node --test lib/server/hi3d-api.test.mjs",
     "hi3d:smoke": "node scripts/hi3d-v3-smoke.mjs",
     "test:security:api": "vitest run --config vitest.config.ts lib/native/auth.test.ts lib/native/auth-response.test.ts lib/native/request-security.test.ts lib/native/activity-pagination.test.ts lib/native/activity-time.test.ts lib/filter-engine/crown-v2-private-live.test.ts",
-    "test:photographic-filters": "vitest run --config vitest.config.ts lib/filter-engine/photographic-filter-policy.test.ts lib/filter-engine/reality-unified-profile.test.ts lib/filter-engine/reality-effect-audit.test.ts lib/filter-engine/reality-effect-runtime.test.ts lib/filter-engine/portrait-shader-quality.test.ts lib/filter-engine/reality-pipeline.test.ts lib/filter-engine/reality-live-performance.test.ts"
+    "test:photographic-filters": "vitest run --config vitest.config.ts lib/filter-engine/photographic-filter-policy.test.ts lib/filter-engine/reality-unified-profile.test.ts lib/filter-engine/reality-effect-audit.test.ts lib/filter-engine/reality-effect-runtime.test.ts lib/filter-engine/portrait-shader-quality.test.ts lib/filter-engine/reality-pipeline.test.ts lib/filter-engine/reality-live-performance.test.ts lib/filter-engine/reality-photographic-meter.test.ts"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
