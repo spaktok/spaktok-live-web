@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Camera, Download, Radio, RefreshCw, Send, SlidersHorizontal, Timer, X, Zap, Eye } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createStudioState,faceFxCatalog,type FaceFxId,type FaceFxParams } from '@/lib/filter-engine/params'
+import {safeInitialCameraFaceFx,isPublicPhotographicFaceFx} from '@/lib/filter-engine/photographic-filter-policy'
 import {shouldRunExtraLiveMesh} from '@/lib/filter-engine/reality-live-performance'
 import {NEUTRAL_LIVE_SCULPT,type LiveSculptControls} from '@/lib/filter-engine/reality-live-sculpt-warp'
 import {
@@ -26,6 +27,8 @@ interface CameraScreenProps {
   initialMode?: CaptureMode
   /** Only special QA entry opts into an initial 3D lens. */
   initialFaceFxId?: FaceFxId
+  /** Only the explicitly opened local Studio QA route can offer private drafts. */
+  privatePreview?:boolean
 }
 
 type CaptureMode = 'photo' | '15s' | '60s' | 'story' | 'live'
@@ -34,13 +37,14 @@ const durations: Partial<Record<CaptureMode, number>> = { '15s': 15, '60s': 60, 
 
 type Captured = { kind: 'photo'; url: string } | { kind: 'video'; url: string; blob: Blob }
 
-export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='none' }: CameraScreenProps) {
+export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='none',privatePreview=false }: CameraScreenProps) {
   const { s } = useStudioStrings()
   const [studio, setStudio] = useState(() => {
    const state=createStudioState()
-   // Never select private V2 before its original owner-only GLB is verified.
-    return initialFaceFxId==='none'||initialFaceFxId===CROWN_V2_FILTER_ID?state:{
-    ...state,face:{...state.face,id:initialFaceFxId,strength:.85},
+   const initial=safeInitialCameraFaceFx(initialFaceFxId,privatePreview)
+   // Original private assets must pass verification before they can activate.
+   return initial==='none'||initial===CROWN_V2_FILTER_ID||initial===FIRST_GPU_LIVE_FILTER_ID?state:{
+    ...state,face:{...state.face,id:initial,strength:.85},
    }
   })
   const [mode, setMode] = useState<CaptureMode>(initialMode)
@@ -130,6 +134,9 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
    }catch{/* No camera failure when device storage is blocked or corrupted. */}
   },[])
   const onFaceChange=(face:FaceFxParams)=>{
+   if(!isPublicPhotographicFaceFx(face.id)&&
+      !(privatePreview&&(face.id===CROWN_V2_FILTER_ID||face.id===FIRST_GPU_LIVE_FILTER_ID)))
+     return
    if(face.id!==CROWN_V2_FILTER_ID){
     crownV2OperationRef.current++
     setCrownV2Busy(false)
@@ -213,7 +220,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
   }
   const autoCrownStarted=useRef(false)
   useEffect(()=>{
-   if(initialFaceFxId!==CROWN_V2_FILTER_ID||autoCrownStarted.current)return
+   if(!privatePreview||initialFaceFxId!==CROWN_V2_FILTER_ID||autoCrownStarted.current)return
    autoCrownStarted.current=true
    void fetchCrownV2()
    // One-off owner preview when opening the camera with this lens.
@@ -665,7 +672,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
         {!camera.recording && !captured && !showPanel &&
           <FaceMaskTray value={studio.face} onChange={onFaceChange}
             visible={showFaceTray} onToggle={()=>setShowFaceTray(v=>!v)}
-            liveMode={mode==='live'} activeLive={isLive}
+            liveMode={mode==='live'} activeLive={isLive} privatePreview={privatePreview}
             firstGpuReady={Boolean(firstGpuPilotFile)}
             firstGpuBusy={firstGpuBusy} firstGpuMessage={firstGpuMessage}
             onImportFirstGpu={activateFirstGpu} onFetchFirstGpu={fetchFirstGpu}
@@ -674,7 +681,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
             photoPresetId={studio.presetId} onPhotoPresetChange={id=>setStudio(prev=>({...prev,presetId:id,intensity:1}))}
             onCrownV2PresetChange={setCrownV2Preset} onFetchCrownV2={fetchCrownV2}
             onImportCrownV2={activateCrownV2}/>}
-        {mode==='live'&&initialFaceFxId===CROWN_V2_FILTER_ID&&!crownV2File&&
+        {mode==='live'&&privatePreview&&initialFaceFxId===CROWN_V2_FILTER_ID&&!crownV2File&&
           <div dir="rtl" role="status" className="absolute inset-x-4 top-[max(4.75rem,env(safe-area-inset-top))] z-20 rounded-lg bg-black/85 px-3 py-2 text-center text-[11px] text-amber-100">
            <p>{crownV2Busy?'جارٍ التحقق من تاج V2 الأصلي…':crownV2Message}</p>
            {!crownV2Busy&&<a href="/" className="mt-1 inline-block font-semibold text-cyan-300 underline">العودة إلى تسجيل الدخول</a>}
