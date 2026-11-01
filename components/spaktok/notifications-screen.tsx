@@ -1,7 +1,7 @@
 'use client'
 import {useEffect,useState} from 'react'
 import {Bell,ChevronRight,Heart,MessageCircle,UserPlus,RefreshCw,Inbox} from 'lucide-react'
-import {cn} from '@/lib/utils'
+import {relativeActivityTime} from '@/lib/native/activity-time'
 
 type Event={id:string;type:'follow'|'like'|'comment';createdAt:string;content:string;videoId:string|null;
   user:{id:string;username:string;displayName:string;avatar:string}}
@@ -46,14 +46,6 @@ export function NotificationsScreen({onBack}:{onBack?:()=>void}){
   const icon=(type:Event['type'])=>type==='like'?<Heart className="size-4"/>:
     type==='comment'?<MessageCircle className="size-4"/>:<UserPlus className="size-4"/>
   const label=(event:Event)=>event.type==='like'?'أعجب بفيديوك':event.type==='comment'?'علّق على فيديوك':'بدأ بمتابعتك'
-  const relative=(iso:string)=>{
-    const seconds=Math.max(0,Math.floor((Date.now()-new Date(iso+'Z'.replace('ZZ','Z')).getTime())/1000))
-    if(!Number.isFinite(seconds))return ''
-    if(seconds<60)return 'الآن'
-    if(seconds<3600)return 'قبل '+Math.floor(seconds/60)+' د'
-    if(seconds<86400)return 'قبل '+Math.floor(seconds/3600)+' س'
-    return new Date(iso).toLocaleDateString('ar')
-  }
   return(
     <div className="spak-discover min-h-dvh pb-24 text-white" dir="rtl">
       <header className="sticky top-0 z-20 border-b border-white/10 bg-[#090e1e]/90 px-5 pb-5 pt-[max(1.25rem,env(safe-area-inset-top))] backdrop-blur-2xl">
@@ -81,7 +73,7 @@ export function NotificationsScreen({onBack}:{onBack?:()=>void}){
                 <span className="text-xs text-white/60">{label(event)}</span>
               </div>
               {event.type==='comment'&&<p className="mt-2 line-clamp-2 rounded-lg bg-white/[.05] px-3 py-2 text-xs text-white/70">{event.content}</p>}
-              <p className="mt-2 text-[11px] text-white/35">{relative(event.createdAt)}</p>
+              <p className="mt-2 text-[11px] text-white/35">{relativeActivityTime(event.createdAt)}</p>
             </div>
           </article>
         ))}
