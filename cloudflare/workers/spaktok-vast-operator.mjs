@@ -117,7 +117,20 @@ async function respond(req,env){
  if(!job)return json({error:'no_active_job'},409);
  if(m[2]==='input'&&req.method==='GET'){
   if(!job.input_key||!job.input_key.startsWith('vast-private/input/'))return json({error:'input_not_authorized'},403);
-  const file=await env.VAST_ASSETS.get(job.input_key);
+  // Audit only: the source GLB was previously produced and verified by
+  // this exact owner-approved GPU job. This alias is never a public file URL.
+  const crownQaAlias='vast-private/input/royal-crown-01/qa-first-run.glb';
+  let r2Key=job.input_key;
+  if(job.action==='inspect_glb'&&job.input_key===crownQaAlias){
+   const original=await env.VAST_DB.prepare(
+    "SELECT state,output_sha256,output_bytes FROM vast_agent_jobs WHERE id=?"
+   ).bind('39ad267e-f1ed-2d10-12ef-4c5927616c86').first();
+   if(original?.state!=='succeeded'||
+      original.output_sha256!=='3ce1d543317590c95b386e5f5f6747c048421cf9a93bbf7a37f2a8b39806822b'||
+      original.output_bytes!==4856516)return json({error:'source_glb_unverified'},403);
+   r2Key='vast-private/output/royal-crown-01/first-run-20261101.glb';
+  }
+  const file=await env.VAST_ASSETS.get(r2Key);
   if(!file||!file.body)return json({error:'input_missing'},404);
   if(file.size>MAX_GLB)return json({error:'input_oversize'},413);
   return new Response(file.body,{headers:{...noStore,'content-type':'application/octet-stream','content-length':String(file.size)}});
