@@ -13,8 +13,9 @@ export function useAuth(): AuthState & { signOut:()=>Promise<void> } {
     const controller=new AbortController()
     fetch('/api/native/auth',{cache:'no-store',credentials:'same-origin',signal:controller.signal})
       .then(async (res)=>{
-        const data=await res.json() as { configured?:boolean;user?:NativeUser|null }
-        if (!res.ok || !data.configured) throw new Error('native_auth_not_configured')
+        const data=await res.json() as { configured?:boolean;user?:NativeUser|null;error?:string }
+        if(data.configured===false)throw new Error('native_auth_not_configured')
+        if(!res.ok||data.configured!==true)throw new Error('auth_unavailable')
         if (!controller.signal.aborted) setState({
           session:data.user?{user:data.user}:null,
           user:data.user||null,isLoading:false,error:null,
