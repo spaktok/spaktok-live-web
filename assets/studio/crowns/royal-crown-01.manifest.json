@@ -1,7 +1,7 @@
 {
   "assetId": "spaktok-studio/filters/crown/royal-crown-01",
-  "version": "2026-11-01.5",
-  "state": "gpu-generated-private-structural-qa-passed-visual-and-palette-qa-pending",
+  "version": "2026-11-01.6",
+  "state": "private-master-archived-structural-qa-passed-visual-and-material-segmentation-pending",
   "source": {
     "filename": "crown_reference_original.png",
     "sha256": "883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e",
@@ -122,7 +122,13 @@
     "outputSha256": "3ce1d543317590c95b386e5f5f6747c048421cf9a93bbf7a37f2a8b39806822b",
     "published": false,
     "inspectionJobState": "succeeded",
-    "inspectionJobId": "ab27177b-f923-e340-a429-dcb3bb7bdb21"
+    "inspectionJobId": "ab27177b-f923-e340-a429-dcb3bb7bdb21",
+    "privateMasterR2Key": "studio/private/filters/crown/royal-crown-01/master.glb",
+    "privateQaR2Key": "studio/private/filters/crown/royal-crown-01/qa.json",
+    "privateMasterSha256": "3ce1d543317590c95b386e5f5f6747c048421cf9a93bbf7a37f2a8b39806822b",
+    "privateMasterCopiedFromOriginalGpuOutput": true,
+    "privateMasterVerifiedInR2": true,
+    "privateMasterAuditJobId": "2fe3c1a8-2bf3-2a80-5c95-94755d23a5d7"
   },
   "quality": {
     "structuralAudit": "passed",
@@ -143,5 +149,12 @@
     "materialsSlotCountVerified": false,
     "requiresMaterialZoneSeparation": true,
     "limitation": "The 3D GLB has one PBR material; its gold and gems cannot be independently recolored as named material slots until masks/part segmentation are built and audited. Mobile tracking and visual similarity remain unverified."
+  },
+  "colorSystem": {
+    "presetsDefined": 8,
+    "activePreset": "royal-rainbow",
+    "independentColorChangesEnabled": false,
+    "reason": "The generated GLB contains one PBR material; 5 named metal/gem material slots are not present. Palette code fails closed until separate, visually audited zones exist.",
+    "sourceGemTexturePreserved": true
   }
 }
