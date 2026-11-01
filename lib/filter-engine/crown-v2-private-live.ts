@@ -1,5 +1,13 @@
 /** Owner-only *draft* crown AR effect. Never a public Live or Story filter. */
 export const CROWN_V2_FILTER_ID='3d-royal-crown-v2' as const
+/** V2's placement is independent of calibration saved for the OLD GPU pilot.
+ * The old model's -0.18 vertical bias must never displace a new V2 crown.
+ */
+export const CROWN_V2_CALIBRATION_STORAGE_KEY='spaktok.crown-v2.calibration.v1' as const
+export const DEFAULT_CROWN_V2_CALIBRATION=Object.freeze({
+ scale:1,vertical:0,depth:0,rotation:0,
+})
+
 export const CROWN_V2_ASSET=Object.freeze({
  fileName:'spaktok-royal-crown-v2-draft.glb',
  bytes:3324548,
