@@ -12,10 +12,24 @@ COMMIT = "a" * 40
 MODEL = "trellis2-rev-20261031"
 
 
-def make_glb() -> bytes:
-    raw = json.dumps({"asset": {"version": "2.0"}}).encode()
+def make_glb(*, empty=False) -> bytes:
+    geometry = b"\\x00" * 36
+    document = {"asset": {"version": "2.0"}}
+    if not empty:
+        document.update({
+            "buffers": [{"byteLength": len(geometry)}],
+            "bufferViews": [{"buffer": 0, "byteOffset": 0, "byteLength": len(geometry)}],
+            "accessors": [{"bufferView": 0, "componentType": 5126,
+                           "count": 3, "type": "VEC3"}],
+            "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "mode": 4}]}],
+        })
+    raw = json.dumps(document).encode()
     raw += b" " * ((-len(raw)) % 4)
-    return struct.pack("<4sII", b"glTF", 2, 20 + len(raw)) + struct.pack("<I4s", len(raw), b"JSON") + raw
+    if empty:
+        return struct.pack("<4sII", b"glTF", 2, 20 + len(raw)) + struct.pack("<I4s", len(raw), b"JSON") + raw
+    return (struct.pack("<4sII", b"glTF", 2, 28 + len(raw) + len(geometry)) +
+            struct.pack("<I4s", len(raw), b"JSON") + raw +
+            struct.pack("<I4s", len(geometry), b"BIN\\x00") + geometry)
 
 
 class EvidenceTests(unittest.TestCase):
@@ -51,6 +65,18 @@ class EvidenceTests(unittest.TestCase):
         result = self.check()
         self.assertTrue(result["verified"])
         self.assertIn("visual_parity", result["not_proven"])
+
+    def test_empty_scene_with_correct_hash_is_rejected(self):
+        self.glb.write_bytes(make_glb(empty=True))
+        self.payload["results"][0]["bytes"] = self.glb.stat().st_size
+        self.payload["results"][0]["sha256"] = hashlib.sha256(self.glb.read_bytes()).hexdigest()
+        self.assertFalse(self.check()["verified"])
+
+    def test_bogus_geometry_buffer_is_rejected(self):
+        raw = make_glb()
+        self.glb.write_bytes(raw.replace(b"BIN\\x00", b"NOPE"))
+        self.payload["results"][0]["sha256"] = hashlib.sha256(self.glb.read_bytes()).hexdigest()
+        self.assertFalse(self.check()["verified"])
 
     def test_changed_glb_rejected(self):
         self.glb.write_bytes(self.glb.read_bytes() + b"evil")
