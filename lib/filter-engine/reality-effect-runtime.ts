@@ -47,9 +47,9 @@ export class RealityEffectRuntime<Node> {
         throw Error('reality_authored_asset_unavailable:'+effect.id)
       }
     }
-    if(effect.quality!=='procedural-preview')
-      throw Error('reality_nonphotographic_fallback_forbidden:'+effect.id)
-    return {node:this.loader.createProceduralPreview(effect),quality:'fallback',
-      source:'procedural-preview',definition:effect}
+    // Never draw a procedural wearable as a replacement for a missing
+    // photographic/owner-authored GLB. This is intentionally fail-closed,
+    // including legacy glasses, caps, synthetic crowns and visor meshes.
+    throw Error('reality_original_asset_required:'+effect.id)
   }
 }
