@@ -1,7 +1,7 @@
 {
   "assetId": "spaktok-studio/filters/crown/royal-crown-01",
-  "version": "2026-11-01.8",
-  "state": "v1-rejected-v2-source-locked-private-awaiting-owner-visual-review",
+  "version": "2026-11-01.9",
+  "state": "v2-owner-only-draft-filter-wired-main-pending-vercel-release",
   "source": {
     "filename": "crown_reference_original.png",
     "sha256": "883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e",
@@ -207,6 +207,34 @@
     "imageVisualReview": "pending",
     "colorPresetsValidated": false,
     "androidLiveFpsTested": false,
-    "liveApproved": false
+    "liveApproved": false,
+    "studioFilter": {
+      "id": "3d-royal-crown-v2",
+      "catalogGroup": "3d",
+      "status": "implementation-on-main-awaiting-production-deployment-validation",
+      "applicationEntryPoints": [
+        "/spaktok-studio",
+        "/live-studio-preview"
+      ],
+      "camera": "local-live-preview-only",
+      "tracking": "existing-face-6dof-head-top",
+      "privateDeliveryWorker": "spaktok-crown-v2-filter",
+      "privateSourceR2Key": "studio/private/filters/crown/royal-crown-01/v2-source-locked/master.glb",
+      "privateServerTicket": "/api/spaktok-studio/crown-v2-ticket",
+      "signedTicketTTLSeconds": 60,
+      "privateGLBSha256": "ee5ec583041a9e2b55e31f718e42670ba5526d2cccfa249b549dece4ad81f129",
+      "ownerOnly": true,
+      "eightPreviewColorPresets": true,
+      "calibrationControls": [
+        "scale",
+        "vertical",
+        "depth",
+        "rotation"
+      ],
+      "sourcePngMapImmutable": true,
+      "productionDeploymentVerified": false,
+      "deviceTrackingQA": false,
+      "audiencePublishingEnabled": false
+    }
   }
 }
