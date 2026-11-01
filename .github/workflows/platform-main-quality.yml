@@ -31,8 +31,8 @@ jobs:
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # pinned v2
         with:
           bun-version: 1.3.14
-      - name: Install locked dependencies
-        run: bun install --frozen-lockfile
+      - name: Install locked dependencies with pnpm (avoid broken Bun lock)
+        run: npm exec --yes --package=pnpm@10.18.3 -- pnpm install --frozen-lockfile
       - name: Confirm Cloudflare-only runtime dependency policy
         run: bun run test:cloudflare-only
       - name: Run full web, API and Studio unit test suite
