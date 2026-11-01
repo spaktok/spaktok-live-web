@@ -22,7 +22,7 @@ const vertices=(COLS+1)*(ROWS+1);
 function mat4(a){const d=Math.hypot(...a);return a.map(x=>x/d);}
 function zone(u,v){
  // Semantic zones are initial review masks, not gem segmentation ground truth.
- if(ad(u-.5,v-.52,.12,.285)<1.0&&v>.31&&v<.75)return 1;
+ if((Math.abs(u-.5)/.12+Math.abs(v-.52)/.285)<1.0&&v>.31&&v<.75)return 1;
  if((u>.46&&u<.54&&v>.03&&v<.32)||
     ((u<.26||u>.74)&&v>.16&&v<.68&&Math.sin(u*31+v*18)>.28))return 2;
  if(v>.715&&v<.855&&u>.015&&u<.985)return 3;
