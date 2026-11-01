@@ -193,6 +193,19 @@ async function build(env){
  ).bind(error?'failed':'succeeded',JSON.stringify(result),error,Math.floor(Date.now()/1000)).run();
 }
 export default {
- async fetch(req){const u=new URL(req.url);if(u.pathname==='/health'&&req.method==='GET')return j({service:'crown-v2-private-builder',publicGeneration:false});return j({error:'not_found'},404)},
+ async fetch(req,env,ctx){
+  const u=new URL(req.url);
+  if(u.pathname==='/health'&&req.method==='GET')return j({service:'crown-v2-private-builder',publicGeneration:false});
+  const match=u.pathname.match(/^\/v1\/operator\/rebuild\/([a-f0-9]{64})$/);
+  if(req.method!=='GET'||!match||u.search)return j({error:'not_found'},404);
+  const tokenSha=await digest(encoder.encode(match[1]));
+  const now=Math.floor(Date.now()/1000);
+  const granted=await env.CROWN_DB.prepare(
+   'UPDATE studio_crown_v2_tickets SET used_at=? WHERE token_sha256=? AND used_at IS NULL AND expires_at>=? RETURNING token_sha256'
+  ).bind(now,tokenSha,now).first();
+  if(!granted)return j({error:'invalid_or_expired_operator_ticket'},403);
+  ctx.waitUntil(build(env));
+  return j({accepted:true,job:'royal-crown-01-v2',public:false},202);
+ },
  async scheduled(event,env,ctx){ctx.waitUntil(build(env))}
 };
