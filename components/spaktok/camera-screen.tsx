@@ -130,7 +130,10 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
    }catch{/* No camera failure when device storage is blocked or corrupted. */}
   },[])
   const onFaceChange=(face:FaceFxParams)=>{
-   if(face.id!==CROWN_V2_FILTER_ID)crownV2OperationRef.current++
+   if(face.id!==CROWN_V2_FILTER_ID){
+    crownV2OperationRef.current++
+    setCrownV2Busy(false)
+   }
    setStudio(prev=>({...prev,face}))
    if(mode==='live'&&face.id!==studio.face.id)setShowFaceTray(false)
    if((face.id!==FIRST_GPU_LIVE_FILTER_ID&&face.id!==CROWN_V2_FILTER_ID)||!face.pilot)return
@@ -188,8 +191,8 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
    finally{if(operation===crownV2OperationRef.current)setCrownV2Busy(false)}
   }
   const fetchCrownV2=async()=>{
-   const operation=++crownV2OperationRef.current
    if(crownV2Busy)return
+   const operation=++crownV2OperationRef.current
    setCrownV2Busy(true)
    setCrownV2Message('جارٍ طلب تاج V2 الخاص من R2 بحساب المالك…')
    try{
