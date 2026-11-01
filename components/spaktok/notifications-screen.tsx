@@ -10,7 +10,9 @@ export function NotificationsScreen({onBack}:{onBack?:()=>void}){
   const [loading,setLoading]=useState(true)
   const [error,setError]=useState(false)
   const [retries,setRetries]=useState(0)
-  const [filter,setFilter]=useState<'all'|'mentions'>('all')
+  const [nextCursor,setNextCursor]=useState<string|null>(null)
+  const [loadingMore,setLoadingMore]=useState(false)
+  const [moreError,setMoreError]=useState(false)
   useEffect(()=>{
     const controller=new AbortController()
     const load=async()=>{
@@ -18,14 +20,29 @@ export function NotificationsScreen({onBack}:{onBack?:()=>void}){
       try{
         const r=await fetch('/api/native/notifications',{cache:'no-store',signal:controller.signal})
         if(!r.ok)throw Error('notifications_unavailable')
-        const payload=await r.json() as {items?:Event[]}
-        if(!controller.signal.aborted)setItems(payload.items||[])
+        const payload=await r.json() as {items?:Event[];nextCursor?:string|null}
+        if(!controller.signal.aborted){setItems(payload.items||[]);setNextCursor(payload.nextCursor||null)}
       }catch{if(!controller.signal.aborted)setError(true)}
       finally{if(!controller.signal.aborted)setLoading(false)}
     }
     void load()
     return ()=>controller.abort()
   },[retries])
+  const loadMore=async()=>{
+    if(!nextCursor||loadingMore)return
+    setLoadingMore(true);setMoreError(false)
+    try{
+      const r=await fetch('/api/native/notifications?cursor='+encodeURIComponent(nextCursor),{cache:'no-store'})
+      if(!r.ok)throw Error('notifications_unavailable')
+      const payload=await r.json() as {items?:Event[];nextCursor?:string|null}
+      setItems(prev=>{
+        const existing=new Set(prev.map(x=>x.id))
+        return [...prev,...(payload.items||[]).filter(x=>!existing.has(x.id))]
+      })
+      setNextCursor(payload.nextCursor||null)
+    }catch{setMoreError(true)}
+    finally{setLoadingMore(false)}
+  }
   const icon=(type:Event['type'])=>type==='like'?<Heart className="size-4"/>:
     type==='comment'?<MessageCircle className="size-4"/>:<UserPlus className="size-4"/>
   const label=(event:Event)=>event.type==='like'?'أعجب بفيديوك':event.type==='comment'?'علّق على فيديوك':'بدأ بمتابعتك'
@@ -67,7 +84,13 @@ export function NotificationsScreen({onBack}:{onBack?:()=>void}){
               <p className="mt-2 text-[11px] text-white/35">{relative(event.createdAt)}</p>
             </div>
           </article>
-        ))}</div>}
+        ))}
+          {moreError&&<p role="alert" className="text-center text-sm text-red-200">تعذّر تحميل المزيد من الإشعارات</p>}
+          {nextCursor&&<button onClick={()=>void loadMore()} disabled={loadingMore}
+             className="spak-primary-button mx-auto mt-5 block disabled:opacity-50">
+             {loadingMore?'جارٍ تحميل المزيد...':'عرض إشعارات أقدم'}
+          </button>}
+        </div>}
       </main>
     </div>
   )
