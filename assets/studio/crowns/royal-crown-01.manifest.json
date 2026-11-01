@@ -1,7 +1,7 @@
 {
   "assetId": "spaktok-studio/filters/crown/royal-crown-01",
-  "version": "2026-11-01.4",
-  "state": "gpu-generated-private-pending-geometry-and-visual-qa",
+  "version": "2026-11-01.5",
+  "state": "gpu-generated-private-structural-qa-passed-visual-and-palette-qa-pending",
   "source": {
     "filename": "crown_reference_original.png",
     "sha256": "883e3a1b5e00046f658ae81ffa1cb3c644a6e5ba334b9aacf5d5a370bff5992e",
@@ -111,7 +111,7 @@
     "gpuServiceLaunched": true,
     "privateInputR2Stored": true,
     "firstGlbCreated": true,
-    "description": "Reference+color-palette implementation only. GPU agent still needs a reviewed git pull and verified input upload.",
+    "description": "First image-derived TRELLIS.2 GLB generated and verified in R2. CPU-only structural GLB inspection succeeded. Actual source-image similarity, independent PBR color slot mapping and Live tracking remain unverified.",
     "privateInputR2MetadataChecked": true,
     "firstGlbVerifiedInPrivateR2": true,
     "gpuJobId": "39ad267e-f1ed-2d10-12ef-4c5927616c86",
@@ -120,13 +120,28 @@
     "outputR2Key": "vast-private/output/royal-crown-01/first-run-20261101.glb",
     "outputBytes": 4856516,
     "outputSha256": "3ce1d543317590c95b386e5f5f6747c048421cf9a93bbf7a37f2a8b39806822b",
-    "published": false
+    "published": false,
+    "inspectionJobState": "succeeded",
+    "inspectionJobId": "ab27177b-f923-e340-a429-dcb3bb7bdb21"
   },
   "quality": {
-    "structuralAudit": "not-executed",
+    "structuralAudit": "passed",
+    "structuralAuditSource": "vast_agent_jobs.inspect_glb",
+    "structuralAuditJobId": "ab27177b-f923-e340-a429-dcb3bb7bdb21",
+    "bytes": 4856516,
+    "meshes": 1,
+    "trianglePrimitives": 1,
+    "triangles": 117788,
+    "hasUV": true,
+    "hasNormals": true,
+    "pbrMaterials": 1,
+    "embeddedImages": 2,
+    "mobileBudgetPass": true,
+    "mobileBudgetKind": "static-geometry-and-textures-only",
     "visualSourceComparison": "not-executed",
-    "mobileLODAudit": "not-executed",
     "referenceImageExactness": "unverified",
-    "materialsSlotCountVerified": false
+    "materialsSlotCountVerified": false,
+    "requiresMaterialZoneSeparation": true,
+    "limitation": "The 3D GLB has one PBR material; its gold and gems cannot be independently recolored as named material slots until masks/part segmentation are built and audited. Mobile tracking and visual similarity remain unverified."
   }
 }
