@@ -5,6 +5,7 @@ import {faceFxCatalog,type FaceFxParams,type FaceFxId} from '@/lib/filter-engine
 import {cn} from '@/lib/utils'
 import {FIRST_GPU_LIVE_FILTER_ID,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION} from '@/lib/filter-engine/spaktok-first-gpu-live'
 import {CROWN_V2_FILTER_ID} from '@/lib/filter-engine/crown-v2-private-live'
+import {CROWN_V2_COLOR_PRESETS,type CrownV2ColorPresetId} from '@/lib/filter-engine/crown-v2-draft-colors'
 import {SPAKTOK_ORIGINAL_PACK_INFO} from '@/lib/filter-engine/spaktok-original-face-filters'
 import {REALITY_EFFECT_AUDIT,type RealityVisualStage} from '@/lib/filter-engine/reality-effect-audit'
 import {getMakeupPalette,type MakeupLookId} from '@/lib/filter-engine/makeup3d'
@@ -96,6 +97,7 @@ export function FaceMaskTray({
  firstGpuReady=false,firstGpuBusy=false,firstGpuMessage='',
  onImportFirstGpu,onFetchFirstGpu,
  crownV2Ready=false,crownV2Busy=false,crownV2Message='',onFetchCrownV2,onImportCrownV2,
+ crownV2Preset='royal-rainbow',onCrownV2PresetChange,
 }:{
  value:FaceFxParams
  onChange:(value:FaceFxParams)=>void
@@ -113,6 +115,8 @@ export function FaceMaskTray({
  crownV2Message?:string
  onFetchCrownV2?:()=>void|Promise<void>
  onImportCrownV2?:(file:File)=>void|Promise<void>
+ crownV2Preset?:CrownV2ColorPresetId
+ onCrownV2PresetChange?:(preset:CrownV2ColorPresetId)=>void
 }){
  const [tab,setTab]=useState<Category>(liveMode?'3d':'makeup')
  const [search,setSearch]=useState('')
@@ -304,6 +308,25 @@ export function FaceMaskTray({
          المعايرة تُحفظ على هذا الجهاز فقط، ولا تعدّل ملف GLB الأصلي.
         </p>
        </section>}
+      {liveMode&&value.id===CROWN_V2_FILTER_ID&&crownV2Ready&&(
+       <section aria-label="ألوان تاج V2 التجريبية" className="mt-2 space-y-2 border-t border-white/15 pt-2">
+        <strong className="text-[11px] text-amber-100">ألوان تاج V2 • معاينة تجريبية</strong>
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide" role="group" aria-label="اختيار لون تاج V2">
+         {(Object.keys(CROWN_V2_COLOR_PRESETS) as CrownV2ColorPresetId[]).map(id=>{
+          const preset=CROWN_V2_COLOR_PRESETS[id]
+          return <button type="button" key={id} aria-pressed={id===crownV2Preset}
+           onClick={()=>onCrownV2PresetChange?.(id)}
+           className={cn('shrink-0 rounded-xl border px-2 py-1.5 text-[10px] text-white',
+            id===crownV2Preset?'border-amber-300 bg-amber-600/50':'border-white/15 bg-white/5')}>
+           <span className="mb-1 block size-6 rounded-full border border-white/30"
+            style={{background: `linear-gradient(135deg, ${preset.metal}, ${preset.main})`}}/>
+           {preset.title}
+          </button>
+         })}
+        </div>
+        <p className="text-[10px] leading-4 text-white/55">الألوان تغيّر معاينة خامات المناطق فقط؛ فصل الأحجار الدقيق ما زال قيد التطوير.</p>
+       </section>
+      )}
       {value.id.startsWith('3d-makeup-')&&
         <label className="mt-2 flex items-center gap-2 border-t border-white/10 pt-2 text-[11px] text-white/75">
           <span className="shrink-0 font-semibold">قوة المكياج</span>
