@@ -1,0 +1,14 @@
+# Owner-private visual QA — Royal Crown 01
+name = "spaktok-crown-private-preview"
+main = "cloudflare/workers/spaktok-crown-private-preview.mjs"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[[d1_databases]]
+binding = "VAST_DB"
+database_name = "spaktok-primary"
+database_id = "e18619f5-76ec-42e5-b601-3e5f06ae7731"
+
+[[r2_buckets]]
+binding = "STUDIO_ASSETS"
+bucket_name = "spaktok-private-drafts"
