@@ -9,14 +9,16 @@ import {photographicStage} from './reality-effect-audit'
  */
 export function isPublicPhotographicFaceFx(id:FaceFxId):boolean{
  if(id==='none')return true
- if(id==='3d-photo-face'||id==='3d-first-gpu-pilot'||id==='3d-royal-crown-v2')
-  return false // private owner previews or prohibited legacy photo substitution
+ if(id==='3d-photo-face'||id==='3d-first-gpu-pilot'||
+    id==='3d-royal-crown-v2'||id==='3d-gold-crown')
+  return false // Never substitute old crown for the private V2 asset
  const definition=getFaceRealityEffect(id)
  if(!definition)return false
  const stage=photographicStage(definition)
- return stage==='tracked-cosmetic'||stage==='pbr-approximation'||
-   stage==='tracked-deformation'||
-   (stage==='authored-3d'&&Boolean(definition.asset))
+ // The public camera contains only true tracked cosmetics / deformation.
+ // Generated procedural "PBR-looking" masks and old authored accessories
+ // are not proof of photographic realism; keep them out of public selection.
+ return stage==='tracked-cosmetic'||stage==='tracked-deformation'
 }
 
 export const PUBLIC_PHOTOGRAPHIC_FACE_FX=faceFxCatalog.filter(
