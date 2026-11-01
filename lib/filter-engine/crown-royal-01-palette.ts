@@ -38,6 +38,10 @@ function findSlot(mesh:THREE.Mesh):RoyalCrown01Slot|null{
  return null
 }
 
+function materialForInspection(mesh:THREE.Mesh):boolean{
+ return !Array.isArray(mesh.material)&&mesh.material instanceof THREE.MeshStandardMaterial
+}
+
 function materialFor(mesh:THREE.Mesh):THREE.MeshStandardMaterial|null{
  const earlier=ownedMaterial.get(mesh)
  if(earlier)return earlier
@@ -85,6 +89,18 @@ export function applyRoyalCrown01Palette(root:THREE.Object3D,
    }{
  const preset=ROYAL_CROWN_01_PRESETS[presetId]
  if(!preset)throw Error('unknown_royal_crown_01_preset')
+ // Do not partially recolor a one-material TRELLIS.2 mesh.
+ // The owner's first crown GLB currently has ONE PBR material; all five
+ // distinct metal/gem material zones must pass QA before colors can vary.
+ const verifiedZones=new Set<RoyalCrown01Slot>()
+ root.traverse(o=>{
+  if(!(o instanceof THREE.Mesh))return
+  const zone=findSlot(o)
+  if(zone&&materialForInspection(o))verifiedZones.add(zone)
+ })
+ const missing=ROYAL_CROWN_01_SLOTS.filter(zone=>!verifiedZones.has(zone))
+ if(missing.length)return {preset:presetId,updatedMeshes:0,
+  slotsFound:[...verifiedZones],missingSlots:missing}
  const found=new Set<RoyalCrown01Slot>()
  let updated=0
  root.traverse(o=>{
