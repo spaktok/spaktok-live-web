@@ -24,6 +24,10 @@ export default function LiveStudioPreviewPage(){
     <strong>معاينة محلية فقط:</strong> لا يبدأ بث للجمهور، ولا تُرسل صور الوجه أو نقاط التتبع إلى خادم
     من خلال هذه التجربة. لا تعمل كل المزايا الحسابية قبل تهيئة البنية الخلفية.
    </div>
+   <div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-4 text-sm leading-7 text-amber-100" role="note">
+    <strong>مهم بخصوص تاج V2 الخاص:</strong> لا يكفي فتح رابط المعاينة التجريبية. يجب تسجيل الدخول أولًا بحساب المالك على نطاق الإنتاج الذي أُعدّت عليه خدمات الحسابات. لن يمنح تسجيل الدخول للحساب العادي إذن الوصول إلى تاج المالك الخاص.
+    <a href="https://v0-spaktok-elite-app.vercel.app/" className="mt-2 block font-bold text-cyan-200 underline">فتح تطبيق Spaktok الرئيسي لتسجيل الدخول</a>
+   </div>
    <button type="button" onClick={()=>{setCrownV2(true);setOpen(true)}}
     className="w-full rounded-2xl bg-gradient-to-l from-amber-600 to-yellow-400 px-6 py-4 text-center text-base font-bold text-slate-950">
     👑 جرّب تاجك الأصلي V2 على الوجه — نسخة التطوير الخاصة
