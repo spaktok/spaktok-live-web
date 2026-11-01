@@ -105,6 +105,7 @@ export const faceFxCatalog = [
   { id: 'lightning-bolt', name: 'برق الوجه', icon: '⚡', group: 'fun' },
   { id: '3d-lux-glasses', name: 'نظارات ثلاثية', icon: '🥽', group: '3d' },
   { id: '3d-gold-crown', name: 'تاج ثلاثي', icon: '👑', group: '3d' },
+  { id: '3d-royal-crown-v2', name: 'تاجك الأصلي V2 • تجريبي', icon: '👑', group: '3d' },
   { id: '3d-space-visor', name: 'خوذة فضاء', icon: '🪐', group: '3d' },
   { id: '3d-metal-cap', name: 'قبعة معدنية', icon: '🧢', group: '3d' },
   { id: '3d-crystal', name: 'جوهرة ثلاثية', icon: '💎', group: '3d' },
