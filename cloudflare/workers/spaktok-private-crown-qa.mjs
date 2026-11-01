@@ -69,5 +69,35 @@ async function main(req,env){
   await env.VAST_ASSETS.put(INPUT,bytes,{httpMetadata:{contentType:'model/gltf-binary'},customMetadata:{sha256:EXPECT_SHA,visibility:'private'}});
  return new Response(bytes,{status:200,headers:{...NO_STORE,'content-type':'model/gltf-binary','content-length':String(bytes.byteLength),'content-disposition':'attachment; filename="spaktok-royal-crown-01-master.glb"'}});
 }
-export default {async fetch(req,env){try{return await main(req,env)}catch{return respond({error:'private_review_unavailable'},500)}}};
+async function internalAudit(env){
+ const q=await env.VAST_DB.prepare("SELECT status FROM vast_crown_qa_results WHERE asset_id='royal-crown-01'").first();
+ if(q)return;
+ let result=null,errorCode=null;
+ try{
+  const job=await env.VAST_DB.prepare('SELECT state,output_sha256,output_bytes FROM vast_agent_jobs WHERE id=?').bind(JOB).first();
+  if(job?.state!=='succeeded'||job.output_sha256!==EXPECT_SHA||job.output_bytes!==EXPECT_SIZE)
+   throw Error('unverified_generation_job');
+  const obj=await env.VAST_ASSETS.get(KEY);
+  if(!obj||obj.size!==EXPECT_SIZE||obj.customMetadata?.sha256!==EXPECT_SHA)
+   throw Error('private_glb_missing_or_mismatch');
+  const bytes=await obj.arrayBuffer();
+  if(await sha(bytes)!==EXPECT_SHA)throw Error('private_glb_hash_mismatch');
+  result=auditGlb(bytes);
+  if(!(await env.VAST_ASSETS.head(INPUT))){
+   await env.VAST_ASSETS.put(INPUT,bytes,{httpMetadata:{contentType:'model/gltf-binary'},
+     customMetadata:{sha256:EXPECT_SHA,asset:'royal-crown-01',visibility:'private'}});
+  }
+  await env.VAST_ASSETS.put(AUDIT,JSON.stringify(result),
+   {httpMetadata:{contentType:'application/json'},customMetadata:{asset:'royal-crown-01',visibility:'private'}});
+ }catch(error){
+  const code=error instanceof Error?error.message:'internal_error';
+  errorCode=/^[a-z0-9_]{1,60}$/.test(code)?code:'internal_error';
+ }
+ await env.VAST_DB.prepare("INSERT OR IGNORE INTO vast_crown_qa_results(asset_id,status,quality_json,completed_at,error_code) VALUES('royal-crown-01',?,?,?,?)")
+  .bind(result?'succeeded':'failed',JSON.stringify(result||{}),now(),errorCode).run();
+}
+export default {
+ async fetch(req,env){try{return await main(req,env)}catch{return respond({error:'private_review_unavailable'},500)}},
+ async scheduled(event,env,ctx){ctx.waitUntil(internalAudit(env))}
+};
 export {auditGlb};
