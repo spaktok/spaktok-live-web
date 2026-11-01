@@ -671,6 +671,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
             onImportFirstGpu={activateFirstGpu} onFetchFirstGpu={fetchFirstGpu}
             crownV2Ready={Boolean(crownV2File)} crownV2Busy={crownV2Busy}
             crownV2Message={crownV2Message} crownV2Preset={crownV2Preset}
+            photoPresetId={studio.presetId} onPhotoPresetChange={id=>setStudio(prev=>({...prev,presetId:id,intensity:1}))}
             onCrownV2PresetChange={setCrownV2Preset} onFetchCrownV2={fetchCrownV2}
             onImportCrownV2={activateCrownV2}/>}
         {mode==='live'&&initialFaceFxId===CROWN_V2_FILTER_ID&&!crownV2File&&
