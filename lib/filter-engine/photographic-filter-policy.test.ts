@@ -5,7 +5,7 @@ import {photographicStage} from './reality-effect-audit'
 import {
  PUBLIC_PHOTOGRAPHIC_FACE_FX,
  PHOTOGRAPHIC_CAMERA_LOOKS,
- isPublicPhotographicFaceFx,
+ isPublicPhotographicFaceFx,safeInitialCameraFaceFx,
 } from './photographic-filter-policy'
 
 describe('camera photographic filter catalogue',()=>{
@@ -32,6 +32,15 @@ describe('camera photographic filter catalogue',()=>{
   expect(isPublicPhotographicFaceFx('3d-makeup-soft')).toBe(true)
   expect(isPublicPhotographicFaceFx('face-morph')).toBe(true)
   expect(PUBLIC_PHOTOGRAPHIC_FACE_FX.length).toBeLessThan(faceFxCatalog.length)
+ })
+ it('blocks stale geometric deep links but preserves explicit private QA',()=>{
+  expect(safeInitialCameraFaceFx('cat-ears',false)).toBe('none')
+  expect(safeInitialCameraFaceFx('3d-metal-cap',false)).toBe('none')
+  expect(safeInitialCameraFaceFx('3d-royal-crown-v2',false)).toBe('none')
+  expect(safeInitialCameraFaceFx('3d-royal-crown-v2',true)).toBe('3d-royal-crown-v2')
+  expect(safeInitialCameraFaceFx('3d-first-gpu-pilot',false)).toBe('none')
+  expect(safeInitialCameraFaceFx('3d-first-gpu-pilot',true)).toBe('3d-first-gpu-pilot')
+  expect(safeInitialCameraFaceFx('3d-makeup-soft',false)).toBe('3d-makeup-soft')
  })
  it('offers a small unique and real-pixel photographic preset set',()=>{
   expect(PHOTOGRAPHIC_CAMERA_LOOKS.length).toBeGreaterThanOrEqual(8)
