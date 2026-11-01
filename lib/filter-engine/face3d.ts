@@ -515,9 +515,13 @@ export class FaceMesh3DEngine{
   this.photoFace=loaded
   return true
  }
- /** Reuse the existing 32x18 ambient camera-light sampler in legacy preview. */
+ /** Sample actual local camera illumination for authored crowns too.
+  * Without this the GLB is permanently lit like a bright showroom even
+  * in a dim selfie, making it look pasted over the user's hair.
+  */
  updatePhotorealLight(video:HTMLVideoElement,seconds:number){
-  if(this.current&&isPhotorealSurfaceId(this.current))
+  if(this.current&&(isPhotorealSurfaceId(this.current)||
+    this.current==='3d-gold-crown'||this.current===CROWN_V2_FILTER_ID))
    this.adaptLight(video,seconds)
  }
  private adaptLight(source:RenderInput['source'],at:number){
