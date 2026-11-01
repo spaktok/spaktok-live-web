@@ -193,18 +193,48 @@ async function build(env){
   "INSERT OR IGNORE INTO studio_crown_v2_build(id,status,result_json,error_code,completed_at) VALUES('royal-crown-01',?,?,?,?)"
  ).bind(error?'failed':'succeeded',JSON.stringify(result),error,Math.floor(Date.now()/1000)).run();
 }
+async function archiveReviewedV2(env){
+ const build=await env.CROWN_DB.prepare("SELECT status,result_json FROM studio_crown_v2_build WHERE id='royal-crown-01'").first();
+ if(build?.status!=='succeeded')throw Error('v2_source_build_not_successful');
+ const result=JSON.parse(build.result_json);
+ if(result.sourceSha256!==SOURCE_SHA||result.key!==DEST_KEY||
+    !/^[a-f0-9]{64}$/.test(result.sha256)||result.bytes<100000)throw Error('v2_build_receipt_mismatch');
+ const source=await env.CROWN_ASSETS.get(DEST_KEY);
+ if(!source||source.size!==result.bytes||source.customMetadata?.sha256!==result.sha256)
+  throw Error('v2_source_not_verified');
+ const bytes=await source.arrayBuffer();
+ if(await digest(bytes)!==result.sha256)throw Error('v2_source_sha_mismatch');
+ const target='studio/private/filters/crown/royal-crown-01/v2-source-locked/master.glb';
+ if(!await env.CROWN_ASSETS.head(target))
+  await env.CROWN_ASSETS.put(target,bytes,{httpMetadata:{contentType:'model/gltf-binary'},
+    customMetadata:{sha256:result.sha256,sourceSha256:SOURCE_SHA,visibility:'private',asset:'royal-crown-01-v2',
+      status:'frontal-source-locked-not-live-approved'}});
+ const report={...result,reviewState:'pending-owner-visual-approval',mobileFinalizer:'failed-unreferenced-vertices',
+  originalSourceImageInGlb:true,pbrMaterialZones:'six-provisional-zones',
+  exact100Percent3DReconstruction:false,liveApproved:false};
+ const qa='studio/private/filters/crown/royal-crown-01/v2-source-locked/qa.json';
+ await env.CROWN_ASSETS.put(qa,JSON.stringify(report),{httpMetadata:{contentType:'application/json'},
+  customMetadata:{visibility:'private',asset:'royal-crown-01-v2'}});
+ return {archived:true,master:target,quality:qa,bytes:result.bytes,sha256:result.sha256,
+  provisionalMaterialZones:result.materials?.length,visualReviewPending:true,published:false};
+}
+
 export default {
  async fetch(req,env,ctx){
   const u=new URL(req.url);
   if(u.pathname==='/health'&&req.method==='GET')return j({service:'crown-v2-private-builder',publicGeneration:false});
-  const match=u.pathname.match(/^\/v1\/operator\/rebuild\/([a-f0-9]{64})$/);
+  const match=u.pathname.match(/^\/v1\/operator\/(rebuild|archive)\/([a-f0-9]{64})$/);
   if(req.method!=='GET'||!match||u.search)return j({error:'not_found'},404);
-  const tokenSha=await digest(encoder.encode(match[1]));
+  const tokenSha=await digest(encoder.encode(match[2]));
   const now=Math.floor(Date.now()/1000);
   const granted=await env.CROWN_DB.prepare(
    'UPDATE studio_crown_v2_tickets SET used_at=? WHERE token_sha256=? AND used_at IS NULL AND expires_at>=? RETURNING token_sha256'
   ).bind(now,tokenSha,now).first();
   if(!granted)return j({error:'invalid_or_expired_operator_ticket'},403);
+  if(match[1]==='archive'){
+   try{return j(await archiveReviewedV2(env),200)}
+   catch(ex){return j({error:ex instanceof Error&&/^[a-z0-9_]{1,60}$/.test(ex.message)?ex.message:'archive_failed'},500)}
+  }
   ctx.waitUntil(build(env));
   return j({accepted:true,job:'royal-crown-01-v2',public:false},202);
  },
