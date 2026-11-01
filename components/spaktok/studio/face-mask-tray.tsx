@@ -82,7 +82,7 @@ export function FaceMaskTray({
  photoPresetId?:string
  onPhotoPresetChange?:(presetId:string)=>void
 }){
- const [tab,setTab]=useState<Category>(liveMode?'3d':'makeup')
+ const [tab,setTab]=useState<Category>(privatePreview&&liveMode?'3d':'makeup')
  const [search,setSearch]=useState('')
  const [showSearch,setShowSearch]=useState(false)
  const [showCustomMakeup,setShowCustomMakeup]=useState(false)
@@ -152,7 +152,7 @@ export function FaceMaskTray({
         </label>
       )}
       <div className="mb-2 flex gap-1.5 overflow-x-auto whitespace-nowrap scrollbar-hide" role="tablist" aria-label="تصنيفات مؤثرات الوجه">
-        {tabs.map(item=><button key={item.id} type="button" role="tab" aria-selected={tab===item.id} onClick={()=>setTab(item.id)}
+        {tabs.filter(item=>privatePreview||['beauty','makeup','all','saved'].includes(item.id)).map(item=><button key={item.id} type="button" role="tab" aria-selected={tab===item.id} onClick={()=>setTab(item.id)}
           className={cn('shrink-0 rounded-full border px-3 py-1.5 text-[11px] transition-colors',
             tab===item.id?'border-[#a6bcff]/60 bg-[#8b9fff]/25 font-bold text-white':'border-white/[.07] bg-white/[.04] text-white/65')}>
           {item.label}
