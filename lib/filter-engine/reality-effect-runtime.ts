@@ -41,11 +41,14 @@ export class RealityEffectRuntime<Node> {
         this.loader.calibrateAuthored(loaded,effect)
         return {node:loaded,quality:'hd',source:'authored-glb',definition:effect}
       }catch{
-        // Free partially loaded assets if calibration rejects the GLB;
-        // never leave GPU allocations behind when falling back.
+        // A photographic/authored lens must not silently become a geometric
+        // approximation when the original GLB is unavailable or invalid.
         if(loaded!==undefined)this.loader.disposeFailedAuthored?.(loaded)
+        throw Error('reality_authored_asset_unavailable:'+effect.id)
       }
     }
+    if(effect.quality!=='procedural-preview')
+      throw Error('reality_nonphotographic_fallback_forbidden:'+effect.id)
     return {node:this.loader.createProceduralPreview(effect),quality:'fallback',
       source:'procedural-preview',definition:effect}
   }
