@@ -59,6 +59,7 @@ const threeConfigs: Readonly<Record<string, ThreeConfig>> = {
       localAnchor:[0,-.55,0],calibration:'owner-crown-v1'},
   },
   '3d-first-gpu-pilot': {anchor:'head_top'},
+  '3d-royal-crown-v2': {anchor:'head_top'},
   '3d-precision-cyber-mask': {anchor:'eyes_center'},
   '3d-photoreal-porcelain-mask': {anchor:'eyes_center'},
   ...Object.fromEntries(SPAKTOK_ORIGINAL_FACE_FINISHES.map(({id})=>[
@@ -87,7 +88,7 @@ const faceManifests=faceFxCatalog.filter(x=>x.id!=='none').map((fx):RealityEffec
   return {
     schemaVersion:REALITY_MANIFEST_VERSION,id,name:fx.name,
     kind:id==='face-morph'?'face-deform':surface?'face-surface':three?conf.kind??'wearable-3d':'face-overlay',
-    quality:surface?'tracked-mesh':three?(conf.asset?'authored-glb':'procedural-preview'):'shader-only',
+    quality:surface?'tracked-mesh':three?(conf.asset||id==='3d-royal-crown-v2'?'authored-glb':'procedural-preview'):'shader-only',
     anchor:surface?null:three?conf.anchor:null,
     occlusion:surface?'surface-depth':three?'face-depth':'none',
     asset:conf?.asset??null,
