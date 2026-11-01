@@ -31,3 +31,15 @@ jobs:
           test -f package.json
           test -f services/forge-gpu/test_verify_gpu_evidence.py
           echo "SPAKTOK_CHECKOUT_OK"
+
+  windows-runner:
+    name: Independent Windows runner allocation
+    runs-on: windows-latest
+    timeout-minutes: 3
+    steps:
+      - name: Prove Windows runner starts
+        shell: pwsh
+        run: |
+          Write-Output "SPAKTOK_WINDOWS_RUNNER_STARTED"
+          Write-Output "OS=$env:RUNNER_OS"
+          node --version
