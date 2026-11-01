@@ -1,4 +1,5 @@
 import { NextRequest,NextResponse } from 'next/server'
+import {readLimitedJson} from '@/lib/native/request-security'
 import { getNativeUser } from '@/lib/native/auth'
 import { oneD1,queryD1,validId } from '@/lib/native/d1'
 import { createHash } from 'node:crypto'
@@ -55,9 +56,10 @@ export async function GET(req:NextRequest){
 }
 export async function POST(req:NextRequest){
   if(req.headers.get('origin')!==req.nextUrl.origin)return json({error:'invalid_origin'},403)
-  let body:unknown;try{body=await req.json()}catch{return json({error:'invalid_json'},400)}
-  const b=body as {action?:unknown;otherUserId?:unknown;conversationId?:unknown;content?:unknown}|null
-  if(!b)return json({error:'invalid_request'},400)
+  const payload=await readLimitedJson(req,4096)
+  if(!payload.ok)return json({error:payload.reason==='too_large'?'invalid_size':'invalid_json'},payload.reason==='too_large'?413:400)
+  if(!payload.value||typeof payload.value!=='object'||Array.isArray(payload.value))return json({error:'invalid_request'},400)
+  const b=payload.value as {action?:unknown;otherUserId?:unknown;conversationId?:unknown;content?:unknown}
   try{
     const user=await getNativeUser()
     if(!user)return json({error:'unauthorized'},401)
