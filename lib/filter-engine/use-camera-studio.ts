@@ -20,7 +20,6 @@ import {createDenseFaceTopology,type DenseFaceTopology} from './reality-face-top
 import {FIRST_GPU_LIVE_FILTER_ID} from './spaktok-first-gpu-live'
 import {CROWN_V2_FILTER_ID} from './crown-v2-private-live'
 import type {CrownV2ColorPresetId} from './crown-v2-draft-colors'
-import {isPhotorealSurfaceId} from './reality-precision-face-mask'
 
 import {NEUTRAL_PHOTOGRAPHIC_CORRECTION,targetPhotographicCorrection,smoothPhotographicCorrection,applyPhotographicCorrection,estimatePortraitPhotographicLight} from './reality-photographic-meter'
 import {createLiveFaceMeshTemplate,updateLiveFaceMesh,chooseLiveMeshLevel,
@@ -648,8 +647,9 @@ export function useCameraStudio({ state, localPhotoFaceFile=null, firstGpuPilotF
             const tracked=face3DRef.current
             const fresh=tracked&&hasFreshFace(tracked.timestamp,now,trackingFreshnessMs(inferenceMsRef.current))?tracked:null
             const candidate=shouldUseRealityGpu2(gpu2RequestedRef.current,true,current)
-            // Sample actual camera brightness on legacy WebGL too, only at 2 Hz.
-            if(!candidate&&isPhotorealSurfaceId(current.face.id))
+            // Keep authored jewel/crown light consistent with the live selfie
+            // even in the legacy composited camera path (2 Hz maximum).
+            if(!candidate)
               threeEngineRef.current.updatePhotorealLight(video,now/1000)
             const cameraInput:RenderInput|undefined=candidate?{
               source:video,
