@@ -36,6 +36,7 @@ import {RealityLivePhotoFace,LOCAL_PHOTO_FACE_ID} from './reality-live-photo-fac
 import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,normalizeFirstGpuCalibration,DEFAULT_FIRST_GPU_CALIBRATION,type FirstGpuPilotCalibration} from './spaktok-first-gpu-live'
 import {centeredPreviewTransform} from './spaktok-glb-preview-transform'
 import {CROWN_V2_FILTER_ID,verifiedCrownV2Buffer} from './crown-v2-private-live'
+import {applyCrownV2DraftColors,type CrownV2ColorPresetId} from './crown-v2-draft-colors'
 import {PRECISION_FACE_MASK_ID,PORCELAIN_FACE_MASK_ID,PrecisionFaceSurfaceMask,isPhotorealSurfaceId} from './reality-precision-face-mask'
 import {SPAKTOK_ORIGINAL_FACE_FINISHES} from './spaktok-original-face-filters'
 
@@ -278,6 +279,12 @@ export class FaceMesh3DEngine{
  private model:THREE.Object3D|null=null
  private pilotFile:File|null=null
  private pilotCalibration:FirstGpuPilotCalibration=DEFAULT_FIRST_GPU_CALIBRATION
+ private crownV2Preset:CrownV2ColorPresetId='royal-rainbow'
+ setCrownV2Preset(id:CrownV2ColorPresetId){
+  this.crownV2Preset=id
+  if(this.current===CROWN_V2_FILTER_ID&&this.model)
+   applyCrownV2DraftColors(this.model,id)
+ }
  /** Apply a local head-prop transform; other 3D effects remain unchanged. */
  setGpuPilotCalibration(input:unknown){
   const p=normalizeFirstGpuCalibration(input)
@@ -446,10 +453,11 @@ export class FaceMesh3DEngine{
     const buffer=await (crown?verifiedCrownV2Buffer(pilotFile):verifiedFirstGpuBuffer(pilotFile))
     const gltf=await this.loader.parseAsync(buffer,'')
     const model=gltf.scene
+    if(crown)applyCrownV2DraftColors(model,this.crownV2Preset)
     const bbox=new THREE.Box3().setFromObject(model)
     if(bbox.isEmpty())throw Error('private_glb_empty_mesh')
     const fit=centeredPreviewTransform(
-     bbox.getCenter(new THREE.Vector3()),bbox.getSize(new THREE.Vector3()),crown?.84:.58)
+     bbox.getCenter(new THREE.Vector3()),bbox.getSize(new THREE.Vector3()),crown ? .84 : .58)
     const wrapper=new THREE.Group()
     wrapper.name=crown?'SpaktokCrownV2DraftHeadProp':'SpaktokFirstGpuPrivateHeadProp'
     model.scale.setScalar(fit.scale)
