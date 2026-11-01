@@ -1,6 +1,6 @@
 import { NextRequest,NextResponse } from 'next/server'
 import {readLimitedJson} from '@/lib/native/request-security'
-import { getNativeUser } from '@/lib/native/auth'
+import { getNativeUser,rateLimit } from '@/lib/native/auth'
 import { batchD1,oneD1,queryD1,validId } from '@/lib/native/d1'
 import { createHash } from 'node:crypto'
 export const runtime='nodejs'
@@ -55,7 +55,7 @@ export async function GET(req:NextRequest){
   }catch{return json({error:'chat_unavailable'},503)}
 }
 export async function POST(req:NextRequest){
-  if(req.headers.get('origin')!==req.nextUrl.origin)return json({error:'invalid_origin'},403)
+  if(req.headers.get('origin')!==req.nextUrl.origin||req.headers.get('sec-fetch-site')==='cross-site')return json({error:'invalid_origin'},403)
   const payload=await readLimitedJson(req,4096)
   if(!payload.ok)return json({error:payload.reason==='too_large'?'invalid_size':'invalid_json'},payload.reason==='too_large'?413:400)
   if(!payload.value||typeof payload.value!=='object'||Array.isArray(payload.value))return json({error:'invalid_request'},400)
@@ -65,6 +65,7 @@ export async function POST(req:NextRequest){
     if(!user)return json({error:'unauthorized'},401)
     if(b.action==='start'){
       if(!validId(b.otherUserId)||b.otherUserId===user.id)return json({error:'invalid_user'},400)
+      if(!await rateLimit('chat-start:'+user.id,60))return json({error:'too_many_requests'},429)
       const other=await oneD1<{id:string}>('SELECT id FROM profiles WHERE id=?',[b.otherUserId])
       if(!other)return json({error:'not_found'},404)
       // Stable UUID derived from both participants; prevents duplicate direct chats.
@@ -84,6 +85,7 @@ export async function POST(req:NextRequest){
       if(!validId(b.conversationId)||typeof b.content!=='string'||!b.content.trim()||b.content.trim().length>2000)
         return json({error:'invalid_message'},400)
       if(!await authorized(b.conversationId,user.id))return json({error:'forbidden'},403)
+      if(!await rateLimit('chat-send:'+user.id,300))return json({error:'too_many_requests'},429)
       const id=crypto.randomUUID()
       await queryD1(`INSERT INTO messages(id,conversation_id,sender_id,content)
         SELECT ?,?,?,? WHERE EXISTS(
