@@ -12,6 +12,7 @@ import {
 } from '@/lib/filter-engine/reality-unified-profile'
 import { useCameraStudio } from '@/lib/filter-engine/use-camera-studio'
 import {FIRST_GPU_LIVE_FILTER_ID,verifiedFirstGpuBuffer,loadFirstGpuOwnerR2,firstGpuErrorMessage,normalizeFirstGpuCalibration,FIRST_GPU_CALIBRATION_STORAGE_KEY} from '@/lib/filter-engine/spaktok-first-gpu-live'
+import {CROWN_V2_FILTER_ID,verifiedCrownV2Buffer,loadCrownV2OwnerR2,crownV2ArabicError} from '@/lib/filter-engine/crown-v2-private-live'
 import {inspectPhotoFacePickerFile,photoFacePickerArabicError} from '@/lib/filter-engine/reality-photo-file-picker'
 import { useStudioStrings } from '@/lib/filter-engine/strings'
 import { StudioPanel } from './studio/studio-panel'
@@ -112,6 +113,9 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
   const [liveSeconds, setLiveSeconds] = useState(0)
   const [liveTitle, setLiveTitle] = useState('')
   const [firstGpuPilotFile,setFirstGpuPilotFile]=useState<File|null>(null)
+  const [crownV2File,setCrownV2File]=useState<File|null>(null)
+  const [crownV2Busy,setCrownV2Busy]=useState(false)
+  const [crownV2Message,setCrownV2Message]=useState('التاج الأصلي V2 جاهز كمسودة خاصة في R2؛ يمكنك تحميله لتجربته على رأسك.')
   useEffect(()=>{
    try{
     const stored=localStorage.getItem(FIRST_GPU_CALIBRATION_STORAGE_KEY)
@@ -123,7 +127,7 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
   const onFaceChange=(face:FaceFxParams)=>{
    setStudio(prev=>({...prev,face}))
    if(mode==='live'&&face.id!==studio.face.id)setShowFaceTray(false)
-   if(face.id!==FIRST_GPU_LIVE_FILTER_ID||!face.pilot)return
+   if((face.id!==FIRST_GPU_LIVE_FILTER_ID&&face.id!==CROWN_V2_FILTER_ID)||!face.pilot)return
    try{
     localStorage.setItem(FIRST_GPU_CALIBRATION_STORAGE_KEY,
      JSON.stringify(normalizeFirstGpuCalibration(face.pilot)))
@@ -158,8 +162,43 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
   }
 
 
+  /** Owner-only, on-device Live preview. Not a broadcast or a public filter. */
+  const activateCrownV2=async(file:File)=>{
+   setCrownV2Busy(true)
+   try{
+    await verifiedCrownV2Buffer(file)
+    setCrownV2File(file)
+    setStudio(prev=>({...prev,face:{...prev.face,id:CROWN_V2_FILTER_ID,strength:.9}}))
+    setCrownV2Message('✓ تاج V2 الأصلي تم التحقق منه وتركيبه كفلتر معاينة محلي.')
+    setShowFaceTray(false)
+   }catch(error){setCrownV2Message(crownV2ArabicError(error))}
+   finally{setCrownV2Busy(false)}
+  }
+  const fetchCrownV2=async()=>{
+   if(crownV2Busy)return
+   setCrownV2Busy(true)
+   setCrownV2Message('جارٍ طلب تاج V2 الخاص من R2 بحساب المالك…')
+   try{
+    const file=await loadCrownV2OwnerR2()
+    await verifiedCrownV2Buffer(file)
+    setCrownV2File(file)
+    setStudio(prev=>({...prev,face:{...prev.face,id:CROWN_V2_FILTER_ID,strength:.9}}))
+    setCrownV2Message('✓ حملنا التاج الأصلي V2. المعاينة على هاتفك فقط.')
+    setShowFaceTray(false)
+   }catch(error){setCrownV2Message(crownV2ArabicError(error))}
+   finally{setCrownV2Busy(false)}
+  }
+  const autoCrownStarted=useRef(false)
+  useEffect(()=>{
+   if(initialFaceFxId!==CROWN_V2_FILTER_ID||autoCrownStarted.current)return
+   autoCrownStarted.current=true
+   void fetchCrownV2()
+   // One-off owner preview when opening the camera with this lens.
+   // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[initialFaceFxId])
+
   const camera = useCameraStudio({
-   state:studio,localPhotoFaceFile,firstGpuPilotFile,audio:mode!=='photo'&&mode!=='live',livePreview:mode==='live',
+   state:studio,localPhotoFaceFile,firstGpuPilotFile,crownV2File,audio:mode!=='photo'&&mode!=='live',livePreview:mode==='live',
    paused:Boolean(captured),smartPhoto,
    // Existing 3D AR already tracks the 478-point face. A second
    // subdivided mesh runs only for optional sculpt / QA wireframes.
@@ -606,7 +645,16 @@ export function CameraScreen({ onClose, initialMode = 'photo', initialFaceFxId='
             liveMode={mode==='live'} activeLive={isLive}
             firstGpuReady={Boolean(firstGpuPilotFile)}
             firstGpuBusy={firstGpuBusy} firstGpuMessage={firstGpuMessage}
-            onImportFirstGpu={activateFirstGpu} onFetchFirstGpu={fetchFirstGpu}/>}
+            onImportFirstGpu={activateFirstGpu} onFetchFirstGpu={fetchFirstGpu}
+            crownV2Ready={Boolean(crownV2File)} crownV2Busy={crownV2Busy}
+            crownV2Message={crownV2Message} onFetchCrownV2={fetchCrownV2}
+            onImportCrownV2={activateCrownV2}/>}
+        {mode==='live'&&studio.face.id===CROWN_V2_FILTER_ID&&
+          <p dir="rtl" role="status" className="pointer-events-none absolute inset-x-4 top-[max(4.75rem,env(safe-area-inset-top))] z-20 rounded-lg bg-black/70 px-3 py-2 text-center text-[11px] text-amber-100">
+           {camera.threeStatus==='ready'?'✓ تاج V2 على الرأس — فلتر تجريبي محلي':
+            camera.threeStatus==='unavailable'?'⚠ تعذّر عرض تاج V2؛ تحقق من الدخول بحساب المالك':
+            'جارٍ تحميل تاج V2…'}
+          </p>}
         {mode==='live'&&studio.face.id===FIRST_GPU_LIVE_FILTER_ID&&
           <p dir="rtl" role="status" className="pointer-events-none absolute inset-x-4 top-[max(4.75rem,env(safe-area-inset-top))] z-20 rounded-lg bg-black/70 px-3 py-2 text-center text-[11px] text-cyan-100">
            {camera.threeStatus==='ready'?'✓ مجسم GPU الخاص مثبت بالرأس':
