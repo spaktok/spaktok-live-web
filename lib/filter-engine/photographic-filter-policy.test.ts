@@ -25,7 +25,9 @@ describe('camera photographic filter catalogue',()=>{
  it('keeps owner-only crowns out of the public face catalogue',()=>{
   expect(isPublicPhotographicFaceFx('3d-royal-crown-v2')).toBe(false)
   expect(isPublicPhotographicFaceFx('3d-first-gpu-pilot')).toBe(false)
-  expect(isPublicPhotographicFaceFx('3d-gold-crown')).toBe(true)
+  expect(isPublicPhotographicFaceFx('3d-gold-crown')).toBe(false)
+  expect(isPublicPhotographicFaceFx('3d-crystal')).toBe(false)
+  expect(isPublicPhotographicFaceFx('3d-precision-cyber-mask')).toBe(false)
  })
  it('preserves authentic face tracking, cosmetics and an original no-effect mode',()=>{
   expect(isPublicPhotographicFaceFx('none')).toBe(true)
@@ -36,6 +38,7 @@ describe('camera photographic filter catalogue',()=>{
  it('blocks stale geometric deep links but preserves explicit private QA',()=>{
   expect(safeInitialCameraFaceFx('cat-ears',false)).toBe('none')
   expect(safeInitialCameraFaceFx('3d-metal-cap',false)).toBe('none')
+  expect(safeInitialCameraFaceFx('3d-gold-crown',false)).toBe('none')
   expect(safeInitialCameraFaceFx('3d-royal-crown-v2',false)).toBe('none')
   expect(safeInitialCameraFaceFx('3d-royal-crown-v2',true)).toBe('3d-royal-crown-v2')
   expect(safeInitialCameraFaceFx('3d-first-gpu-pilot',false)).toBe('none')
