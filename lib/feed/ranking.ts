@@ -3,6 +3,8 @@
  * tested and reasoned about without a database. The candidate window and the
  * scoring instant (`now`) are supplied by the caller, which is what keeps
  * cursor pagination stable while new videos keep arriving. */
+import { interestMultiplier, type InterestProfile } from './interests'
+
 export interface RankCandidate {
   id: string
   userId: string
@@ -13,6 +15,8 @@ export interface RankCandidate {
   views: number
   isFollowing: boolean
   isVerified: boolean
+  /** Hashtags of the video, used for interest affinity. */
+  tags?: string[]
 }
 
 export interface RankCursor { score: number; id: string; at: number }
@@ -51,7 +55,11 @@ function explorationMultiplier(ageHours: number): number {
   return 1
 }
 
-export function scoreCandidate(candidate: RankCandidate, now: number): number {
+export function scoreCandidate(
+  candidate: RankCandidate,
+  now: number,
+  interests?: InterestProfile | null,
+): number {
   const created = Date.parse(candidate.createdAt)
   const ageHours = Number.isFinite(created) ? Math.max(0, (now - created) / HOUR) : FRESH_EXPLORATION_HOURS
   const recency = Math.pow(0.5, ageHours / RECENCY_HALF_LIFE_HOURS)
@@ -62,7 +70,8 @@ export function scoreCandidate(candidate: RankCandidate, now: number): number {
     (0.35 + 0.65 * recency) *
     qualityMultiplier(candidate) *
     explorationMultiplier(ageHours) *
-    social
+    social *
+    interestMultiplier(candidate.tags, interests)
   if (!Number.isFinite(score)) return 0
   return Math.min(MAX_RANK_SCORE, Math.max(0, Math.round(score)))
 }
@@ -96,8 +105,9 @@ export function diversifyByAuthor<T extends { userId: string }>(ordered: T[]): T
 export function rankCandidates<T extends RankCandidate>(
   candidates: T[],
   now: number,
+  interests?: InterestProfile | null,
 ): Array<T & { score: number }> {
-  const scored = candidates.map(candidate => ({ ...candidate, score: scoreCandidate(candidate, now) }))
+  const scored = candidates.map(candidate => ({ ...candidate, score: scoreCandidate(candidate, now, interests) }))
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score
     const createdDelta = Date.parse(b.createdAt) - Date.parse(a.createdAt)

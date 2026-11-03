@@ -4,6 +4,7 @@ import { queryD1, validId } from '@/lib/native/d1'
 import { decodeFeedKey, encodeFeedKey } from '@/lib/feed/cursor'
 import { decodeRankCursor, encodeRankCursor } from '@/lib/feed/rank-cursor'
 import { rankCandidates, selectRankedPage, type RankCandidate } from '@/lib/feed/ranking'
+import { buildInterestProfile, type InterestProfile } from '@/lib/feed/interests'
 import { extractHashtags } from '@/lib/feed/hashtags'
 export const runtime='nodejs'
 export const dynamic='force-dynamic'
@@ -33,7 +34,18 @@ function toVideo(r:Row){
 }
 const toCandidate=(r:Row):RankCandidate=>({id:r.id,userId:r.user_id,createdAt:r.created_at,
   likes:r.like_count,comments:r.comment_count,shares:r.share_count,views:r.view_count,
-  isFollowing:Boolean(r.followed),isVerified:Boolean(r.is_verified)})
+  isFollowing:Boolean(r.followed),isVerified:Boolean(r.is_verified),tags:extractHashtags(r.description)})
+/** Personalisation is best-effort: a failed interest read must never break the
+ * feed, so the ranking simply falls back to non-personalised order. */
+async function loadInterests(viewer:string,now:number):Promise<InterestProfile|null>{
+  if(!viewer)return null
+  try{
+    const {rows}=await queryD1<{description:string|null;at:string}>(
+      `SELECT v.description,l.created_at AS at FROM likes l JOIN videos v ON v.id=l.video_id
+       WHERE l.user_id=? ORDER BY l.created_at DESC LIMIT 40`,[viewer])
+    return buildInterestProfile(rows,now)
+  }catch{return null}
+}
 export async function GET(req:NextRequest){
   const source=req.nextUrl.searchParams.get('source')||'forYou'
   const featuredId=req.nextUrl.searchParams.get('videoId')
@@ -72,10 +84,11 @@ export async function GET(req:NextRequest){
     if(rawCursor){try{cursor=decodeRankCursor(rawCursor)}catch{return json({error:'invalid_cursor'},400)}}
     const now=cursor?.at??Date.now()
     const lookback=new Date(now-RANK_LOOKBACK_DAYS*86_400_000).toISOString()
+    const interests=await loadInterests(viewer,now)
     const {rows}=await queryD1<Row>(`SELECT ${COLUMNS} FROM videos v JOIN profiles p ON p.id=v.user_id
       WHERE v.status='published' AND v.created_at>=?
       ORDER BY v.created_at DESC,v.id DESC LIMIT ?`,[viewer,viewer,viewer,lookback,RANK_CANDIDATE_CAP])
-    const ranked=rankCandidates(rows.map(toCandidate),now)
+    const ranked=rankCandidates(rows.map(toCandidate),now,interests)
     const {page,nextCursor}=selectRankedPage(ranked,cursor,limit,now)
     const byId=new Map(rows.map(row=>[row.id,row]))
     return json({videos:page.flatMap(item=>{const row=byId.get(item.id);return row?[toVideo(row)]:[]}),

@@ -7,6 +7,7 @@ import {
   type RankCandidate,
   type RankCursor,
 } from './ranking'
+import { buildInterestProfile } from './interests'
 
 const NOW = Date.parse('2026-11-03T12:00:00.000Z')
 const HOUR = 3_600_000
@@ -24,6 +25,7 @@ function candidate(overrides: Partial<RankCandidate> & { id?: string; userId?: s
     views: overrides.views ?? 0,
     isFollowing: overrides.isFollowing ?? false,
     isVerified: overrides.isVerified ?? false,
+    tags: overrides.tags,
   }
 }
 
@@ -61,6 +63,14 @@ describe('for-you scoring', () => {
     const followed = candidate({ isFollowing: true, likes: 120, views: 2_000 })
     const stranger = candidate({ likes: 120, views: 2_000 })
     expect(scoreCandidate(followed, NOW)).toBeGreaterThan(scoreCandidate(stranger, NOW))
+  })
+
+  it('lifts content that matches the viewer interests', () => {
+    const interests = buildInterestProfile([{ description: '#رقص', at: new Date(NOW).toISOString() }], NOW)
+    const matching = candidate({ tags: ['رقص'], likes: 100, views: 2_000 })
+    const unrelated = candidate({ tags: ['طبخ'], likes: 100, views: 2_000 })
+    expect(scoreCandidate(matching, NOW, interests)).toBeGreaterThan(scoreCandidate(unrelated, NOW, interests))
+    expect(scoreCandidate(matching, NOW)).toBe(scoreCandidate(unrelated, NOW))
   })
 
   it('prefers a strong like-rate over a padded view count', () => {
